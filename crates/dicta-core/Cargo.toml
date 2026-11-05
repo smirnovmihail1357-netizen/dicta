@@ -14,9 +14,16 @@ toml.workspace = true
 dirs.workspace = true
 whisper-rs.workspace = true
 whisper-rs-sys.workspace = true
+atspi = { version = "0.22", optional = true, default-features = false, features = ["proxies", "async-std"] }
+futures = { version = "0.3", optional = true }
+zbus = { version = "4.2", optional = true }
 
 [features]
 default = ["vulkan"]
 # Vulkan (ggml-vulkan, RX 7900 XTX / iGPU). Требует glslangValidator при сборке.
 # Снимается так: cargo build --release --no-default-features  (чистый CPU)
 vulkan = ["whisper-rs/vulkan", "whisper-rs-sys/vulkan"]
+# Вставка через AT-SPI2 (без буфера обмена и без синтезированных клавиш).
+# Экспериментально: работает там, где приложение отдаёт интерфейс EditableText
+# (Firefox/GTK да; часть Qt-виджетов и Electron — нет).
+atspi = ["dep:atspi", "dep:futures", "dep:zbus"]

@@ -7,8 +7,8 @@ use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::Duration;
 
-use anyhow::Result;
 use ab_glyph::{point, Font, FontRef, GlyphId, PxScale};
+use anyhow::Result;
 use serde::Deserialize;
 use smithay_client_toolkit::{
     compositor::{CompositorHandler, CompositorState, FrameCallbackData},
@@ -16,8 +16,8 @@ use smithay_client_toolkit::{
     output::{OutputHandler, OutputState},
     registry::{ProvidesRegistryState, RegistryState},
     registry_handlers,
-    seat::{Capability, SeatHandler, SeatState},
     seat::pointer::{PointerEvent, PointerEventKind, PointerHandler},
+    seat::{Capability, SeatHandler, SeatState},
     shell::{
         wlr_layer::{
             Anchor, KeyboardInteractivity, Layer, LayerShell, LayerShellHandler, LayerSurface,
@@ -103,7 +103,10 @@ impl Dispatch<wl_registry::WlRegistry, ()> for Probe {
         _: &Connection,
         _: &QueueHandle<Self>,
     ) {
-        if let wl_registry::Event::Global { name, interface, .. } = event {
+        if let wl_registry::Event::Global {
+            name, interface, ..
+        } = event
+        {
             if interface == "zwlr_layer_shell_v1" {
                 state.found.set(true);
                 println!("layer shell есть (global #{name}) — оверлей будет работать");
@@ -119,7 +122,9 @@ fn probe() -> Result<()> {
     let qh = queue.handle();
     display.get_registry(&qh, ());
 
-    let mut state = Probe { found: std::cell::Cell::new(false) };
+    let mut state = Probe {
+        found: std::cell::Cell::new(false),
+    };
     // Реестр присылает список global'ов одним пакетом; пара раундов хватает.
     for _ in 0..3 {
         queue.blocking_dispatch(&mut state)?;
@@ -155,7 +160,10 @@ fn run() -> Result<()> {
         thread::spawn(move || loop {
             if let Ok(next) = ask_status(&socket) {
                 if debug_on() && next.state != last_state {
-                    eprintln!("status: {} level={:.2} sec={:.1}", next.state, next.level, next.seconds);
+                    eprintln!(
+                        "status: {} level={:.2} sec={:.1}",
+                        next.state, next.level, next.seconds
+                    );
                     last_state = next.state.clone();
                 }
                 if let Ok(mut cur) = status.lock() {
@@ -293,7 +301,13 @@ impl OutputHandler for Ui {
     }
     fn new_output(&mut self, _c: &Connection, _q: &QueueHandle<Self>, _o: wl_output::WlOutput) {}
     fn update_output(&mut self, _c: &Connection, _q: &QueueHandle<Self>, _o: wl_output::WlOutput) {}
-    fn output_destroyed(&mut self, _c: &Connection, _q: &QueueHandle<Self>, _o: wl_output::WlOutput) {}
+    fn output_destroyed(
+        &mut self,
+        _c: &Connection,
+        _q: &QueueHandle<Self>,
+        _o: wl_output::WlOutput,
+    ) {
+    }
 }
 
 impl SeatHandler for Ui {
@@ -452,11 +466,7 @@ impl Ui {
         let (width, height) = (self.width, self.height);
         let stride: i32 = (width * 4) as i32;
 
-        let status = self
-            .status
-            .lock()
-            .map(|s| s.clone())
-            .unwrap_or_default();
+        let status = self.status.lock().map(|s| s.clone()).unwrap_or_default();
 
         // idle -> полностью прозрачный кадр: оверлея как будто нет.
         //
@@ -465,7 +475,12 @@ impl Ui {
         // раньше), композитор никогда не пришлёт frame callback -> draw() больше не
         // вызывается -> при старте записи оверлей не появляется вообще.
         if status.state == "idle" && !always_draw() {
-            match self.pool.create_buffer(width as i32, height as i32, stride, wl_shm::Format::Argb8888) {
+            match self.pool.create_buffer(
+                width as i32,
+                height as i32,
+                stride,
+                wl_shm::Format::Argb8888,
+            ) {
                 Ok((buffer, mut mem)) => {
                     let empty: &mut [u8] = &mut mem;
                     empty.fill(0);
@@ -521,7 +536,11 @@ impl Ui {
                 // «сканер» при распознавании: яркая голова со шлейфом
                 let period = 14;
                 let step = (self.frame / 2) % period;
-                let head = if step < period / 2 { step } else { period - step };
+                let head = if step < period / 2 {
+                    step
+                } else {
+                    period - step
+                };
                 for i in 0..period {
                     let d = (i as i32 - head as i32).abs();
                     let color = if d < 3 {
@@ -535,10 +554,21 @@ impl Ui {
 
             let scale = PxScale::from(17.0);
             let mut x = 32.0f32;
-            x = self.text(&mut c, if recording { "REC" } else { "… " }, x, 11.0, scale, argb(0xFF, 0xE5, 0x4B, 0x4B));
+            x = self.text(
+                &mut c,
+                if recording { "REC" } else { "… " },
+                x,
+                11.0,
+                scale,
+                argb(0xFF, 0xE5, 0x4B, 0x4B),
+            );
             let _ = self.text(
                 &mut c,
-                &format!("{:01}:{:02}", (status.seconds as u32) / 60, (status.seconds as u32) % 60),
+                &format!(
+                    "{:01}:{:02}",
+                    (status.seconds as u32) / 60,
+                    (status.seconds as u32) % 60
+                ),
                 x + 4.0,
                 11.0,
                 scale,
@@ -565,7 +595,13 @@ impl Ui {
                 } else {
                     argb(0xFF, 0x3C, 0x55, 0x77)
                 };
-                c.rect((x0 + (i as u32 * (bw + gap)) as f32) as u32, height - 6 - h, bw, h, shade);
+                c.rect(
+                    (x0 + (i as u32 * (bw + gap)) as f32) as u32,
+                    height - 6 - h,
+                    bw,
+                    h,
+                    shade,
+                );
             }
 
             let hint = if recording {
@@ -573,10 +609,22 @@ impl Ui {
             } else {
                 "распознаю…"
             };
-            self.text_right(&mut c, hint, (width as f32) - 12.0, 11.0, PxScale::from(15.0), argb(0xFF, 0x9A, 0xA0, 0xA8));
+            self.text_right(
+                &mut c,
+                hint,
+                (width as f32) - 12.0,
+                11.0,
+                PxScale::from(15.0),
+                argb(0xFF, 0x9A, 0xA0, 0xA8),
+            );
         }
 
-        let (buffer, canvas) = match self.pool.create_buffer(width as i32, height as i32, stride, wl_shm::Format::Argb8888) {
+        let (buffer, canvas) = match self.pool.create_buffer(
+            width as i32,
+            height as i32,
+            stride,
+            wl_shm::Format::Argb8888,
+        ) {
             Ok(pair) => pair,
             Err(err) => {
                 if debug_on() {
@@ -586,7 +634,10 @@ impl Ui {
             }
         };
         if debug_on() && self.frame % 30 == 0 {
-            eprintln!("draw #{} state={} level={:.2}", self.frame, status.state, status.level);
+            eprintln!(
+                "draw #{} state={} level={:.2}",
+                self.frame, status.state, status.level
+            );
         }
         c.write_into(canvas);
 
@@ -601,15 +652,7 @@ impl Ui {
         self.frame = self.frame.wrapping_add(1);
     }
 
-    fn text(
-        &self,
-        c: &mut Canvas,
-        s: &str,
-        mut x: f32,
-        y: f32,
-        scale: PxScale,
-        color: u32,
-    ) -> f32 {
+    fn text(&self, c: &mut Canvas, s: &str, mut x: f32, y: f32, scale: PxScale, color: u32) -> f32 {
         let Some(font) = &self.font else { return x };
         for ch in s.chars() {
             let id: GlyphId = font.glyph_id(ch);
@@ -634,15 +677,7 @@ impl Ui {
         x
     }
 
-    fn text_right(
-        &self,
-        c: &mut Canvas,
-        s: &str,
-        right: f32,
-        y: f32,
-        scale: PxScale,
-        color: u32,
-    ) {
+    fn text_right(&self, c: &mut Canvas, s: &str, right: f32, y: f32, scale: PxScale, color: u32) {
         let Some(font) = &self.font else { return };
         let width: f32 = s
             .chars()
@@ -696,4 +731,3 @@ impl ProvidesRegistryState for Ui {
     }
     registry_handlers![OutputState, SeatState];
 }
-

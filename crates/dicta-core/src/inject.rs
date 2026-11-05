@@ -82,7 +82,12 @@ impl Combo {
             alt: false,
             key: 0,
         };
-        for part in s.to_lowercase().split('+').map(str::trim).filter(|p| !p.is_empty()) {
+        for part in s
+            .to_lowercase()
+            .split('+')
+            .map(str::trim)
+            .filter(|p| !p.is_empty())
+        {
             match part {
                 "ctrl" | "control" => combo.ctrl = true,
                 "shift" => combo.shift = true,
@@ -116,7 +121,9 @@ static KEYBOARD: std::sync::Mutex<Option<Keyboard>> = std::sync::Mutex::new(None
 
 /// Прогреть девайс при старте демона, чтобы KWin зарегистрировал его заранее.
 pub fn warm_up_keyboard() -> Result<()> {
-    let mut slot = KEYBOARD.lock().map_err(|_| anyhow::anyhow!("KEYBOARD отравлен"))?;
+    let mut slot = KEYBOARD
+        .lock()
+        .map_err(|_| anyhow::anyhow!("KEYBOARD отравлен"))?;
     if slot.is_none() {
         slot.replace(Keyboard::new()?);
     }
@@ -127,7 +134,9 @@ fn with_keyboard<F, R>(f: F) -> Result<R>
 where
     F: Fn(&mut Keyboard) -> Result<R>,
 {
-    let mut slot = KEYBOARD.lock().map_err(|_| anyhow::anyhow!("KEYBOARD отравлен"))?;
+    let mut slot = KEYBOARD
+        .lock()
+        .map_err(|_| anyhow::anyhow!("KEYBOARD отравлен"))?;
     if slot.is_none() {
         slot.replace(Keyboard::new()?);
     }
@@ -180,7 +189,8 @@ impl Keyboard {
             KEY_INSERT,
             KEY_ENTER,
         ] {
-            ok &= unsafe { libc::ioctl(fd, UI_SET_KEYBIT as libc::c_ulong, code as libc::c_int) } >= 0;
+            ok &= unsafe { libc::ioctl(fd, UI_SET_KEYBIT as libc::c_ulong, code as libc::c_int) }
+                >= 0;
         }
         if !ok {
             unsafe { libc::close(fd) };
@@ -349,6 +359,8 @@ pub fn insert_text(
     combo: Combo,
     restore_after: Duration,
     delay_before_keys: Duration,
+    atspi_allow_any_role: bool,
+    atspi_app_hint: Option<&str>,
 ) -> Result<()> {
     match mode {
         "clipboard" => {
@@ -358,6 +370,13 @@ pub fn insert_text(
         "stdout" => {
             println!("{text}");
             Ok(())
+        }
+        "atspi" => {
+            // Без буфера обмена и без синтезированных клавиш: пишем прямо в
+            // фокусный редактируемый объект через AT-SPI2.
+            crate::atspi::insert_text_with(text, atspi_app_hint, atspi_allow_any_role).map(|dst| {
+                eprintln!("dicta: atspi вставка в {dst}");
+            })
         }
         _ => paste_text(text, combo, restore_after, delay_before_keys),
     }

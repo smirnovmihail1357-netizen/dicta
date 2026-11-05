@@ -52,8 +52,7 @@ pub fn focus_from_cache() -> Option<String> {
 /// точки (`firefox.desktop` -> `firefox`, `org.kde.konsole` -> `konsole`).
 pub fn normalize(app: &str) -> String {
     let base = app.strip_suffix(".desktop").unwrap_or(app);
-    base
-        .rsplit('.')
+    base.rsplit('.')
         .next()
         .unwrap_or(base)
         .to_ascii_lowercase()
@@ -64,12 +63,10 @@ pub fn normalize(app: &str) -> String {
 pub fn active_app(hint: Option<&str>) -> Option<String> {
     match hint {
         Some(hint) if !hint.trim().is_empty() => Some(hint.trim().to_string()),
-        _ => {
-            std::env::var("DICTA_APP")
-                .ok()
-                .filter(|v| !v.trim().is_empty())
-                .or_else(focus_from_cache)
-        }
+        _ => std::env::var("DICTA_APP")
+            .ok()
+            .filter(|v| !v.trim().is_empty())
+            .or_else(focus_from_cache),
     }
 }
 

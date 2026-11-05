@@ -77,6 +77,9 @@ struct Handler {
     recorder: Option<Recorder>,
     last_text: Option<String>,
     last_error: Option<String>,
+    /// Какое окно считаем фокусным: подсказку адаптера запоминаем, чтобы авто-остановка
+    /// вставляла в то же окно, где запись начиналась.
+    last_app: Option<String>,
     paste_combo: Combo,
 }
 
@@ -117,6 +120,7 @@ fn main() -> Result<()> {
         recorder: None,
         last_text: None,
         last_error: None,
+        last_app: None,
         paste_combo,
     }));
     let state = Arc::new(AtomicUsize::new(State::Idle.to_index()));
@@ -127,39 +131,86 @@ fn main() -> Result<()> {
     {
         let handler = handler.clone();
         let cfg = cfg.clone();
-        thread::spawn(move || {
-            match Engine::load(&cfg) {
-                Ok(engine) => {
-                    if let Ok(mut h) = handler.lock() {
-                        h.engine = Some(engine);
-                    }
+        thread::spawn(move || match Engine::load(&cfg) {
+            Ok(engine) => {
+                if let Ok(mut h) = handler.lock() {
+                    h.engine = Some(engine);
                 }
-                Err(err) => {
-                    eprintln!("dictad: модель не загрузилась: {err}");
-                    if let Ok(mut h) = handler.lock() {
-                        h.last_error = Some(err.to_string());
-                    }
+            }
+            Err(err) => {
+                eprintln!("dictad: модель не загрузилась: {err}");
+                if let Ok(mut h) = handler.lock() {
+                    h.last_error = Some(err.to_string());
                 }
             }
         });
     }
 
-    // Индикатор уровня для UI (80 мс, как в opencode-плагине).
+    // Индикатор уровня для UI (80 мс) + watchdog авто-остановки по тишине.
+    //
+    // Диктовка не должна висеть открытой, если ты передумал: N мс подряд тишины ->
+    // демон закрывает запись сам, вторая клавиша не нужна. Речь при этом не обрывается:
+    // речевой уровень (0.9-1.0) далеко от порога тишины (0.22).
     {
         let handler = handler.clone();
         let state = state.clone();
         let level = level.clone();
-        thread::spawn(move || loop {
-            if State::from_index(state.load(Ordering::Relaxed)) == State::Recording {
-                if let Ok(h) = handler.try_lock() {
-                    if let Some(rec) = &h.recorder {
-                        level.store(f32_to_bits(rec.level()), Ordering::Relaxed);
+        let started_at = started_at.clone();
+        let auto_cfg = cfg.clone();
+        const TICK_MS: u64 = 80;
+        thread::spawn(move || {
+            let mut levels: Vec<f32> = Vec::new();
+            loop {
+                let recording =
+                    State::from_index(state.load(Ordering::Relaxed)) == State::Recording;
+                if recording {
+                    if let Ok(h) = handler.try_lock() {
+                        let decision = if let Some(rec) = &h.recorder {
+                            let l = rec.level();
+                            level.store(f32_to_bits(l), Ordering::Relaxed);
+                            levels.insert(0, l);
+                            levels.truncate(2048);
+                            let elapsed_ms = (rec.elapsed().as_secs_f64() * 1000.0) as u64;
+                            let quiet_ms = dicta_core::silence_streak_ms(
+                                &levels,
+                                auto_cfg.auto_stop_level,
+                                TICK_MS,
+                            );
+                            let reason = if elapsed_ms >= auto_cfg.max_record_ms {
+                                Some("жёсткий потолок длины записи")
+                            } else if auto_cfg.auto_stop
+                                && elapsed_ms >= auto_cfg.auto_stop_grace_ms
+                                && quiet_ms >= auto_cfg.auto_stop_after_ms
+                            {
+                                Some("тишина")
+                            } else {
+                                None
+                            };
+                            (reason, h.last_app.clone())
+                        } else {
+                            level.store(0, Ordering::Relaxed);
+                            levels.clear();
+                            (None, None)
+                        };
+                        drop(h);
+
+                        if let Some(reason) = decision.0 {
+                            if let Ok(mut h) = handler.lock() {
+                                eprintln!("dictad: авто-остановка записи: {reason}");
+                                if let Err(err) =
+                                    run_stop(&mut h, &state, &started_at, decision.1.as_deref())
+                                {
+                                    eprintln!("dictad: {err}");
+                                }
+                            }
+                        }
                     }
+                } else {
+                    level.store(0, Ordering::Relaxed);
+                    levels.clear();
                 }
-            } else {
-                level.store(0, Ordering::Relaxed);
+                thread::sleep(Duration::from_millis(TICK_MS));
             }
-            thread::sleep(Duration::from_millis(80));
         });
     }
 
@@ -283,7 +334,12 @@ fn serve_conn(
             },
             "inject" => {
                 let text = req.text.clone().unwrap_or_default();
-                let mut h = handler.lock().map_err(|_| anyhow::anyhow!("handler отравлен"))?;
+                let mut h = handler
+                    .lock()
+                    .map_err(|_| anyhow::anyhow!("handler отравлен"))?;
+                if let Some(app) = req.app.clone() {
+                    h.last_app = Some(app);
+                }
                 if text.is_empty() || text.chars().count() > 5000 {
                     Res {
                         state: State::Idle.as_str(),
@@ -307,8 +363,9 @@ fn serve_conn(
                         combo,
                         Duration::from_millis(h.cfg.clipboard_restore_ms),
                         Duration::from_millis(h.cfg.paste_delay_ms),
-                    )
-                    {
+                        h.cfg.atspi_allow_any_role,
+                        app.as_deref(),
+                    ) {
                         Ok(()) => {
                             eprintln!("dictad: inject {keys} в {app:?}: {text:?}");
                             h.last_error = None;
@@ -334,7 +391,9 @@ fn serve_conn(
                 }
             }
             "start" | "stop" | "toggle" | "cancel" => {
-                let mut h = handler.lock().map_err(|_| anyhow::anyhow!("handler отравлен"))?;
+                let mut h = handler
+                    .lock()
+                    .map_err(|_| anyhow::anyhow!("handler отравлен"))?;
                 let cmd = req.cmd.clone();
                 if cmd == "cancel" {
                     h.recorder = None;
@@ -342,16 +401,16 @@ fn serve_conn(
                     state.store(State::Idle.to_index(), Ordering::Relaxed);
                     h.last_error = Some("запись отменена".into());
                 } else {
-                let want_start = match cmd.as_str() {
-                    "start" => true,
-                    "stop" => false,
-                    _ => State::from_index(state.load(Ordering::Relaxed)) != State::Recording,
-                };
-                if want_start {
-                    run_start(&mut h, &state, &started_at)?;
-                } else {
-                    run_stop(&mut h, &state, &started_at, req.app.as_deref())?;
-                }
+                    let want_start = match cmd.as_str() {
+                        "start" => true,
+                        "stop" => false,
+                        _ => State::from_index(state.load(Ordering::Relaxed)) != State::Recording,
+                    };
+                    if want_start {
+                        run_start(&mut h, &state, &started_at)?;
+                    } else {
+                        run_stop(&mut h, &state, &started_at, req.app.as_deref())?;
+                    }
                 }
                 let seconds = h
                     .recorder
@@ -494,6 +553,8 @@ fn run_stop(
         combo.clone(),
         Duration::from_millis(h.cfg.clipboard_restore_ms),
         Duration::from_millis(h.cfg.paste_delay_ms),
+        h.cfg.atspi_allow_any_role,
+        app.as_deref(),
     ) {
         h.last_error = Some(format!("вставка не удалась: {err}"));
     }
@@ -512,7 +573,9 @@ fn do_toggle(
     state: &Arc<AtomicUsize>,
     started_at: &Arc<AtomicU64>,
 ) -> Result<()> {
-    let mut h = handler.lock().map_err(|_| anyhow::anyhow!("handler отравлен"))?;
+    let mut h = handler
+        .lock()
+        .map_err(|_| anyhow::anyhow!("handler отравлен"))?;
     let want_start = State::from_index(state.load(Ordering::Relaxed)) != State::Recording;
     if want_start {
         run_start(&mut h, state, started_at)
@@ -548,7 +611,9 @@ fn spawn_ui() {
 }
 
 fn home_dir() -> PathBuf {
-    std::env::var_os("HOME").map(PathBuf::from).unwrap_or_default()
+    std::env::var_os("HOME")
+        .map(PathBuf::from)
+        .unwrap_or_default()
 }
 
 /// Autostart-запись + подсказка про одноразовое разрешение на /dev/input.
@@ -561,7 +626,11 @@ fn install_autostart() -> Result<()> {
 
     let bin = {
         let local = home_dir().join(".local/bin/dictad");
-        if local.exists() { local } else { std::env::current_exe()? }
+        if local.exists() {
+            local
+        } else {
+            std::env::current_exe()?
+        }
     };
     let entry = format!(
         "[Desktop Entry]\nName=Dicta (голосовой ввод)\nComment=Диктовка в любое окно\nType=Application\nExec={} --ui\nTerminal=false\nX-GNOME-Autostart-enabled=true\nX-KDE-autostart-after=login\n",
@@ -573,7 +642,9 @@ fn install_autostart() -> Result<()> {
 
     println!();
     println!("Один раз (нужен root), чтобы демон сам слушал клавишу:");
-    println!(r#"  printf 'KERNEL=="event*", SUBSYSTEM=="input", MODE="0660", GROUP="input"\n' > /etc/udev/rules.d/99-dicta-input.rules"#);
+    println!(
+        r#"  printf 'KERNEL=="event*", SUBSYSTEM=="input", MODE="0660", GROUP="input"\n' > /etc/udev/rules.d/99-dicta-input.rules"#
+    );
     println!("  sudo udevadm control --reload-rules && sudo udevadm trigger");
     println!("либо: sudo usermod -aG input $USER и перелогин.");
     println!("Без этого диктовка запускается клавишей, назначенной в DE.");

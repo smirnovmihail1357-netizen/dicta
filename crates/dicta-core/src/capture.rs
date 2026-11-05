@@ -29,14 +29,7 @@ impl Recorder {
         if let Some(mic) = &cfg.mic {
             cmd.args(["--target", mic]);
         }
-        cmd.args([
-            "--rate",
-            "16000",
-            "--channels",
-            "1",
-            "--format",
-            "s16",
-        ]);
+        cmd.args(["--rate", "16000", "--channels", "1", "--format", "s16"]);
         cmd.arg(&file);
         cmd.stdin(Stdio::null());
         cmd.stdout(Stdio::null());

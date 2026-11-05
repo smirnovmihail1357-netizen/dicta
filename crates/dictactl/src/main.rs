@@ -6,7 +6,10 @@ use clap::{Parser, Subcommand};
 use dicta_core::{capture, load_wav, resample_to_16k, Config, Engine};
 
 #[derive(Parser)]
-#[command(name = "dictactl", about = "dicta: системный голосовой ввод (диагностика и управление)")]
+#[command(
+    name = "dictactl",
+    about = "dicta: системный голосовой ввод (диагностика и управление)"
+)]
 struct Cli {
     /// Путь к конфигу (по умолчанию ~/.config/dicta/config.toml)
     #[arg(long, global = true)]
@@ -61,11 +64,19 @@ enum Command {
     /// Состояние демона
     Status,
     /// Проверить, что uinput-клавиши доходят до приложений
-    TestKeys {
-        combo: String,
-    },
+    TestKeys { combo: String },
     /// Какое окно демон считает фокусным и какие клавиши вставки он выберет
     PasteKeys,
+    /// Дерево доступности: какие приложения отдают AT-SPI и где у них фокус
+    AtspiDump {
+        #[arg(long, default_value_t = 8)]
+        depth: usize,
+        /// Печатать само дерево объектов (шумно; видно, где обход упирается в лимит)
+        #[arg(long)]
+        tree: bool,
+    },
+    /// Проверка AT-SPI-вставки напрямую, без демона: пишет в фокусный объект окна
+    AtspiInsert { text: String },
     /// Вставить текст в активное окно (проверка вставки без записи и распознавания)
     Inject {
         text: String,
@@ -199,6 +210,21 @@ fn main() -> Result<()> {
         Command::Toggle => println!("{}", ask(&cfg.socket, "toggle", cli.app.as_deref())?),
         Command::Cancel => println!("{}", ask(&cfg.socket, "cancel", cli.app.as_deref())?),
         Command::Status => println!("{}", ask(&cfg.socket, "status", None)?),
+        Command::AtspiDump { depth, tree } => {
+            println!(
+                "{}",
+                dicta_core::atspi::dump(cli.app.as_deref(), depth, tree)?
+            );
+        }
+        Command::AtspiInsert { text } => {
+            let text = text.replace(['"', '\\'], "");
+            let dst = dicta_core::atspi::insert_text_with(
+                &text,
+                cli.app.as_deref(),
+                cfg.atspi_allow_any_role,
+            )?;
+            println!("вставлено в {dst}");
+        }
         Command::Inject { text, keys } => {
             let text = text.replace(['"', '\\'], "");
             let app = cli
@@ -220,9 +246,7 @@ fn main() -> Result<()> {
             );
         }
         Command::Calibrate { secs } => {
-            println!(
-                "говори все {secs} с (считай это тренировкой диктовки), потом ~2 с помолчи"
-            );
+            println!("говори все {secs} с (считай это тренировкой диктовки), потом ~2 с помолчи");
             let samples = capture::record_samples(&cfg, secs)?;
             let peak = dicta_core::speech_level(&samples);
             let mean = dicta_core::normalized_rms(&samples);

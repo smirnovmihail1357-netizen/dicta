@@ -48,12 +48,7 @@ fn patterns() -> &'static [Regex] {
     CACHE.get_or_init(|| {
         HALLUCINATIONS
             .iter()
-            .filter_map(|p| {
-                RegexBuilder::new(p)
-                    .case_insensitive(true)
-                    .build()
-                    .ok()
-            })
+            .filter_map(|p| RegexBuilder::new(p).case_insensitive(true).build().ok())
             .collect::<Vec<Regex>>()
             .into_boxed_slice()
     })
@@ -104,6 +99,8 @@ mod tests {
         assert!(looks_repetitive(
             "спасибо за просмотр спасибо за просмотр спасибо за просмотр"
         ));
-        assert!(!looks_repetitive("надо перезапустить демон и проверить вставку"));
+        assert!(!looks_repetitive(
+            "надо перезапустить демон и проверить вставку"
+        ));
     }
 }

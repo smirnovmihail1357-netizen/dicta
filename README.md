@@ -76,6 +76,8 @@ dictactl calibrate --secs 8           # speak for 8 s: prints speech peak / mean
 dictactl inject "insertion test"      # inject text without a microphone
 dictactl inject --app konsole "..."   # force the konsole key combo
 dictactl paste-keys --app org.kde.konsole
+dictactl atspi-dump --depth 8               # AT-SPI: apps, roles, focused objects, stage timings
+dictactl atspi-insert "text"                # AT-SPI insertion probe (bypasses the daemon)
 dictactl infer --timing speech.wav    # recognition only, no injection
 ./tools/insert-test.sh                # end-to-end injection test into a dedicated window
 ```
@@ -83,12 +85,42 @@ dictactl infer --timing speech.wav    # recognition only, no injection
 If dictation keeps being skipped, tune `min_level` (0.35 default): 0.25 = more sensitive,
 0.6 = stricter. The gate uses the loudest 300 ms window, not the average.
 
+Recording stops itself when the microphone goes quiet (`auto_stop = true`, default): the
+level monitor doubles as a watchdog and closes the recording after `auto_stop_after_ms`
+of silence, with a `auto_stop_grace_ms` grace period at the start and a `max_record_ms`
+hard ceiling.
+
+## Injection without a clipboard (`inject_mode = "atspi"`)
+
+`paste` mode writes the clipboard and presses keys. `atspi` mode writes straight into the
+focused widget through AT-SPI2 (`org.a11y.atspi.EditableText`) — no clipboard touched, no
+synthesised keystrokes. Build it with the feature:
+
+```bash
+cargo build --release --features dictad/atspi,dictactl/atspi
+```
+
+Check whether the window you dictate into supports it, without inserting anything:
+
+```bash
+dictactl atspi-dump --depth 8          # apps, roles, focused objects, stage timings
+dictactl atspi-dump --app firefox --tree
+```
+
+Only objects that report role `entry`, `password text`, `combo box` or `text` are written
+to. That matters: Firefox marks its `document web` node as focused (and it does implement
+`EditableText`), so writing there is not "the focused field" — set
+`atspi_allow_any_role = true` only while diagnosing such an app. Note that AT-SPI support
+per toolkit differs: Gecko/GTK yes, Qt needs `QT_ACCESSIBILITY=1`, Chromium/Electron needs
+`--force-renderer-accessibility`.
+
 ## Configuration
 
 `~/.config/dicta/config.toml` (see [`config.example.toml`](config.example.toml)). Every key is
 optional. Key ones: `model`, `language`, `use_gpu`, `gpu_device`, `mic`, `socket`,
-`inject_mode` (`paste|clipboard|stdout`), `paste_keys`, `paste_keys_by_app`, `hotkey`,
-`min_level`, `clipboard_restore_ms`, `paste_delay_ms`.
+`inject_mode` (`paste|clipboard|stdout|atspi`), `paste_keys`, `paste_keys_by_app`, `hotkey`,
+`min_level`, `clipboard_restore_ms`, `paste_delay_ms`, `auto_stop`, `auto_stop_level`,
+`auto_stop_after_ms`, `auto_stop_grace_ms`, `max_record_ms`.
 
 Environment: `DICTA_CONFIG`, `DICTA_UI`, `DICTA_HOTKEY`, `DICTA_APP`, and overlay knobs
 `DICTA_LAYER`, `DICTA_EXCLUSIVE`, `DICTA_DEBUG`, `DICTA_ALWAYS_DRAW`.
@@ -105,12 +137,14 @@ Environment: `DICTA_CONFIG`, `DICTA_UI`, `DICTA_HOTKEY`, `DICTA_APP`, and overla
 
 ## Status
 
-Working today: capture, recognition (Vulkan and CPU), silence gate, hallucination filter,
-clipboard+uinput injection with per-app key combos, layer-shell overlay, KWin/hotkey chain,
+Working today: capture, recognition (Vulkan and CPU), silence gate, silence-based auto-stop
+(VAD), hallucination filter, clipboard+uinput injection with per-app key combos, AT-SPI2
+injection (no clipboard, no synthesised keystrokes), layer-shell overlay, KWin/hotkey chain,
 systemd units, container image.
 
-Not done: silence-based auto-stop (VAD), AT-SPI2 injection as an alternative to
-clipboard+keystrokes, packaged releases for other distros, macOS/Windows.
+Not done: an end-to-end AT-SPI insertion check against a real focused input field (on the
+development machine Firefox reports `focused` on its document node, not on a field), Qt
+windows without `QT_ACCESSIBILITY=1`, packaged releases for other distros, macOS/Windows.
 
 ## Contribute / release
 

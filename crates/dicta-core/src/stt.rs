@@ -57,7 +57,10 @@ impl Engine {
         let ctx = WhisperContext::new_with_params(&cfg.model, params)
             .with_context(|| format!("whisper не смог загрузить {}", cfg.model.display()))?;
 
-        Ok(Self { ctx, cfg: cfg.clone() })
+        Ok(Self {
+            ctx,
+            cfg: cfg.clone(),
+        })
     }
 
     /// i16-сэмплы 16 kHz -> распознаванный текст.

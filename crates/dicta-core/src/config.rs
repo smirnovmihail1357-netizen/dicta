@@ -30,6 +30,11 @@ pub struct Config {
     /// Как вставлять: "paste" (буфер + клавиши), "clipboard" (только буфер),
     /// "stdout" (напечатать в терминал — для проверки без влияния на окна).
     pub inject_mode: String,
+    /// Для `inject_mode = "atspi"`: писать и в нестандартные редактируемые узлы.
+    /// По умолчанию false: разрешены только роли поля ввода (entry, password text,
+    /// combo box, text). Некоторые приложения помечают `focused` не поле, а документ
+    /// (Firefox — `document web`); в такой документ демону писать нельзя.
+    pub atspi_allow_any_role: bool,
     /// Минимальный уровень записи в той же шкале 0..1, что и индикатор в UI
     /// (`audio::normalized_rms`: -55 дБ -> 0.0, -15 дБ -> 1.0). Ниже порога
     /// распознавание не запускается: whisper на фоновом шуме уверенно сочиняет
@@ -51,6 +56,17 @@ pub struct Config {
     pub clipboard_restore_ms: u64,
     /// Пауза между wl-copy и нажатием клавиш вставки.
     pub paste_delay_ms: u64,
+
+    /// Автоматически заканчивать запись, когда долго тихо (VAD-остановка).
+    pub auto_stop: bool,
+    /// Уровень ниже этого значения считается тишиной (шкала как в `speech_level`).
+    pub auto_stop_level: f32,
+    /// Сколько миллисекунд подряд должна быть тишина, чтобы остановить запись.
+    pub auto_stop_after_ms: u64,
+    /// Первые миллисекунды записи авто-остановка спит: дал старт -> начал говорить.
+    pub auto_stop_grace_ms: u64,
+    /// Жёсткий потолок длины записи.
+    pub max_record_ms: u64,
 }
 
 impl Default for Config {
@@ -68,11 +84,17 @@ impl Default for Config {
             socket: default_socket_path(),
             paste_keys: "ctrl+v".into(),
             inject_mode: "paste".into(),
+            atspi_allow_any_role: false,
             hotkey: "off".into(),
             min_level: 0.35,
             paste_keys_by_app: default_paste_keys_by_app(),
             clipboard_restore_ms: 2500,
             paste_delay_ms: 150,
+            auto_stop: true,
+            auto_stop_level: 0.22,
+            auto_stop_after_ms: 1500,
+            auto_stop_grace_ms: 1200,
+            max_record_ms: 60_000,
         }
     }
 }
@@ -151,7 +173,8 @@ impl Config {
         let from_env = || std::env::var_os("DICTA_CONFIG").map(std::path::PathBuf::from);
         let path = match explicit {
             Some(p) => Some(p.to_path_buf()),
-            None => from_env().or_else(|| dirs::config_dir().map(|d| d.join("dicta").join("config.toml"))),
+            None => from_env()
+                .or_else(|| dirs::config_dir().map(|d| d.join("dicta").join("config.toml"))),
         };
 
         let Some(path) = path else {

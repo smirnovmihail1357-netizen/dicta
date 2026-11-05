@@ -97,7 +97,9 @@ fn is_mod_held(code: u16, held: &HashMap<u16, i32>) -> bool {
         125 | 126 => &[125, 126],
         _ => &[code],
     };
-    partners.iter().any(|p| held.get(p).copied().unwrap_or(0) > 0)
+    partners
+        .iter()
+        .any(|p| held.get(p).copied().unwrap_or(0) > 0)
 }
 
 /// Открыть все устройства ввода, которые реально можно читать.
@@ -128,7 +130,10 @@ fn open_devices() -> Vec<(RawFd, String)> {
 /// Блокирующий цикл: слушать combo, вызывать on_press при полном совпадении.
 pub fn listen(spec: &str, mut on_press: impl FnMut()) -> std::io::Result<()> {
     let combo = parse_combo(spec).ok_or_else(|| {
-        std::io::Error::new(std::io::ErrorKind::InvalidInput, format!("не клавиша: {spec}"))
+        std::io::Error::new(
+            std::io::ErrorKind::InvalidInput,
+            format!("не клавиша: {spec}"),
+        )
     })?;
     let devices = open_devices();
     if devices.is_empty() {
@@ -169,13 +174,8 @@ pub fn listen(spec: &str, mut on_press: impl FnMut()) -> std::io::Result<()> {
             }
             pf.revents = 0;
             let mut buf = [0u8; 24 * 16];
-            let got = unsafe {
-                libc::read(
-                    pf.fd,
-                    buf.as_mut_ptr() as *mut libc::c_void,
-                    buf.len(),
-                )
-            };
+            let got =
+                unsafe { libc::read(pf.fd, buf.as_mut_ptr() as *mut libc::c_void, buf.len()) };
             if got <= 0 {
                 continue;
             }

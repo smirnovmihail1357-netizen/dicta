@@ -12,3 +12,4 @@ dicta-core = { path = "../dicta-core", default-features = false, features = ["vu
 [features]
 default = ["vulkan"]
 vulkan = ["dicta-core/vulkan"]
+atspi = ["dicta-core/atspi"]

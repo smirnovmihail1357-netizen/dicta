@@ -118,12 +118,30 @@ pub fn speech_level(samples: &[i16]) -> f32 {
     best
 }
 
+/// Сколько миллисекунд подряд последние замеры уровня держатся ниже `threshold`.
+///
+/// `levels` — уровни от новых к старым (как их собирает watchdog демона), `tick_ms` —
+/// интервал между замерами. Используется авто-остановкой записи по тишине.
+pub fn silence_streak_ms(levels: &[f32], threshold: f32, tick_ms: u64) -> u64 {
+    let mut n = 0usize;
+    for l in levels {
+        if *l < threshold {
+            n += 1;
+        } else {
+            break;
+        }
+    }
+    (n as u64) * tick_ms
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
     fn noise(amp: i16, n: usize) -> Vec<i16> {
-        (0..n).map(|i| if i % 2 == 0 { amp } else { -amp }).collect()
+        (0..n)
+            .map(|i| if i % 2 == 0 { amp } else { -amp })
+            .collect()
     }
 
     #[test]
@@ -133,7 +151,22 @@ mod tests {
         samples.splice(16000..16000 + 4800, noise(8000, 4800));
         let level = speech_level(&samples);
         assert!(level > 0.7, "всплеск не замечен: {level}");
-        assert!(normalized_rms(&samples) < level, "среднее не должно быть строже пика");
+        assert!(
+            normalized_rms(&samples) < level,
+            "среднее не должно быть строже пика"
+        );
+    }
+
+    #[test]
+    fn silence_streak_counts_only_the_tail() {
+        // уровни от новых к старым: 3 тихих замера по 100 мс
+        assert_eq!(
+            silence_streak_ms(&[0.10, 0.12, 0.09, 0.80, 0.90], 0.22, 100),
+            300
+        );
+        // свежий громкий замер обнуляет очередь тишины
+        assert_eq!(silence_streak_ms(&[0.80, 0.10, 0.10], 0.22, 100), 0);
+        assert_eq!(silence_streak_ms(&[], 0.22, 100), 0);
     }
 
     #[test]
