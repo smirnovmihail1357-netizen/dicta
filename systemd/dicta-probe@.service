@@ -1,4 +1,6 @@
 [Unit]
+# клавишу жмут часто: не считать это «повторными сбоями»
+StartLimitIntervalSec=0
 Description=Dicta: проверка цепочки «клавиша -> systemd -> демон» (окно %i)
 
 [Service]
