@@ -19,7 +19,8 @@ jobs:
           apt-get update
           apt-get install -y --no-install-recommends \
             build-essential pkg-config cmake clang libclang-dev \
-            libvulkan-dev glslang-tools glslc pipewire wl-clipboard
+            libvulkan-dev glslang-tools glslc libxkbcommon-dev \
+            pipewire wl-clipboard
           rm -rf /var/lib/apt/lists/*
 
       - name: Build (Vulkan, default)
