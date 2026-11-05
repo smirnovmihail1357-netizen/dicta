@@ -62,18 +62,22 @@ dёргает `KWin.reconfigure`; надёжнее всего это работ�
 Вариант без скрипта: System Settings → Keyboard → Custom Shortcuts → New → Global →
 Command/URL = `systemctl --user start dicta-toggle.service`, ключ `Alt+V`.
 
-Смена клавиши: `DICTA_KEY='...' ./install.sh`, затем перелогин — KWin не перечитывает скрипт
-на лету, а старая привязка остаётся в `~/.config/kglobalshortcutsrc` (строки `dicta-toggle=...`;
-`./uninstall.sh` их чистит).
+Смена клавиши: `DICTA_KEY='...' ./install.sh`, затем **перелогин** — на лету KWin скрипт не
+перезагружается (`loadScript` в живой сессии не регистрирует клавишу заново), а старая
+привязка живёт в `~/.config/kglobalshortcutsrc` (строки `dicta-toggle=...`; `./uninstall.sh` их
+чистит). До перелогинов в этой сессии диктовку можно запускать руками:
+`dictactl toggle` или `systemctl --user start dicta-toggle.service`.
 
 Откат живой клавиши, не дожидаясь перелогинов (проверено — Plasma 6 сразу возвращает себе
 Meta+V и историю буфера обмена):
 
 ```bash
+# именно unregister (две строки), а не unRegister(array) — второй вариант KWin игнорирует
 for a in dicta-toggle dicta-cancel; do
     dbus-send --session --dest=org.kde.kglobalaccel /kglobalaccel \
-        org.kde.KGlobalAccel.unRegister array:string:kwin,$a
+        org.kde.KGlobalAccel.unregister string:kwin string:$a
 done
+grep -v '^dicta-' ~/.config/kglobalshortcutsrc > /tmp/k.new && mv /tmp/k.new ~/.config/kglobalshortcutsrc
 # посмотреть, кто держит клавишу:
 busctl --user --json=short call org.kde.kglobalaccel /component/kwin \
     org.kde.kglobalaccel.Component allShortcutInfos |
