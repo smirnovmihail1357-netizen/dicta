@@ -368,7 +368,8 @@ fn run_stop(
 
     // Гейтер тишины: whisper на фоновом шуме сочиняет правдоподобные фразы,
     // и они вставятся в фокусное окно. Не запускаем распознавание на шуме.
-    let level = dicta_core::normalized_rms(&samples);
+    let level = dicta_core::speech_level(&samples);
+    let overall = dicta_core::normalized_rms(&samples);
     if level < h.cfg.min_level {
         h.last_error = Some(format!(
             "слишком тихо (уровень {:.3} < {:.2}) — распознавание пропущено",
@@ -376,8 +377,8 @@ fn run_stop(
         ));
         state.store(State::Idle.to_index(), Ordering::Relaxed);
         eprintln!(
-            "dictad: пропуск: записано {:?}, уровень {:.3} тише порога {:.2}",
-            spoken, level, h.cfg.min_level
+            "dictad: пропуск: записано {:?}, речь {:.3} (в среднем {:.3}) ниже порога {:.2}",
+            spoken, level, overall, h.cfg.min_level
         );
         return Ok(());
     }

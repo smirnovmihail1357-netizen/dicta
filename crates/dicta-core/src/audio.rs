@@ -94,3 +94,51 @@ pub fn normalized_rms(samples: &[i16]) -> f32 {
     let db = (20.0 * (sum / samples.len() as f64).max(1e-9).sqrt().log10()) as f32;
     ((db + 55.0) / 40.0).clamp(0.0, 1.0)
 }
+
+/// Уровень речи: максимум индикатора по окнам 300 мс.
+/// Речь — это всплески, поэтому средний RMS по всей записи недооценивает короткую
+/// и тихую диктовку и переоценивает ровный фоновый шум. Замеры на этой машине:
+/// фон в комнате 0.34-0.35, русская речь 0.9-1.0 (по среднему: 0.45..0.95).
+pub fn speech_level(samples: &[i16]) -> f32 {
+    const WIN: usize = 4800; // 300 мс при 16 кГц
+    const STEP: usize = 1600; // 100 мс
+    if samples.is_empty() {
+        return 0.0;
+    }
+    if samples.len() <= WIN {
+        return normalized_rms(samples);
+    }
+    let mut best = 0.0f32;
+    let mut i = 0;
+    while i < samples.len() {
+        let end = (i + WIN).min(samples.len());
+        best = best.max(normalized_rms(&samples[i..end]));
+        i += STEP;
+    }
+    best
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn noise(amp: i16, n: usize) -> Vec<i16> {
+        (0..n).map(|i| if i % 2 == 0 { amp } else { -amp }).collect()
+    }
+
+    #[test]
+    fn speech_level_uses_loudest_window() {
+        // 2 с фона + 0.3 с «речи» в середине
+        let mut samples = noise(100, 16000 * 2);
+        samples.splice(16000..16000 + 4800, noise(8000, 4800));
+        let level = speech_level(&samples);
+        assert!(level > 0.7, "всплеск не замечен: {level}");
+        assert!(normalized_rms(&samples) < level, "среднее не должно быть строже пика");
+    }
+
+    #[test]
+    fn speech_level_rejects_flat_noise() {
+        let level = speech_level(&noise(100, 16000 * 3));
+        assert!(level < 0.2, "ровный шум прошёл гейтер: {level}");
+    }
+}

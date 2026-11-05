@@ -205,6 +205,7 @@ fn run() -> Result<()> {
         pointer: None,
         status: status.clone(),
         socket,
+        levels: Vec::new(),
         font: load_font(),
         frame: 0,
     };
@@ -233,6 +234,8 @@ struct Ui {
     pointer: Option<wl_pointer::WlPointer>,
     status: Arc<Mutex<Status>>,
     socket: std::path::PathBuf,
+    /// история уровня за последние ~1.8 с: волна рисуется по ней, а не «дрожанием»
+    levels: Vec<f32>,
     font: Option<FontRef<'static>>,
     frame: u32,
 }
@@ -468,8 +471,20 @@ impl Ui {
             }
         }
 
-        let mut c = Canvas::new(width, height);
         let recording = status.state == "recording";
+        if recording {
+            // статус приходит ~10 раз в секунду, кадры — 60: сдвигаем раз в 6 кадров
+            if self.frame % 6 == 0 {
+                self.levels.push(status.level);
+                if self.levels.len() > 18 {
+                    self.levels.remove(0);
+                }
+            }
+        } else if !self.levels.is_empty() {
+            self.levels.clear();
+        }
+
+        let mut c = Canvas::new(width, height);
         let transcribing = status.state == "transcribing";
 
         if recording || transcribing || always_draw() {
@@ -483,8 +498,8 @@ impl Ui {
             c.rect(0, 0, width, 2, argb(0x00, 0, 0, 0));
             // индикатор
             if recording {
-                let blink = (self.frame / 8) % 2 == 0;
-                c.circle(18, height / 2, 5, argb(0xFF, if blink { 0xE5 } else { 0x70 }, 0x4B, 0x4B));
+                // без мигания: оно выглядело как «рябь»; пульс даёт сама волна истории
+                c.circle(18, height / 2, 5, argb(0xFF, 0xE5, 0x4B, 0x4B));
             } else {
                 // «сканер» при распознавании: яркая голова со шлейфом
                 let period = 14;
@@ -518,11 +533,12 @@ impl Ui {
             let bw = 7u32;
             let gap = 2u32;
             let x0 = 12.0 + (width as f32 - (bars * (bw + gap)) as f32) / 2.0 + 40.0;
-            for i in 0..bars {
-                let jitter = if i == bars - 1 {
-                    status.level
+            for i in 0..bars as usize {
+                // newest справа; если истории ещё нет — колонка пустая
+                let jitter = if self.levels.len() > i {
+                    self.levels[self.levels.len() - 1 - i]
                 } else {
-                    status.level * (0.55 + 0.45 * ((self.frame as f32 * 0.6 + i as f32).sin()).abs())
+                    0.0
                 };
                 let h = ((jitter * 22.0).round() as u32).max(2);
                 let shade = if jitter > 0.6 {
@@ -532,7 +548,7 @@ impl Ui {
                 } else {
                     argb(0xFF, 0x3C, 0x55, 0x77)
                 };
-                c.rect((x0 + (i * (bw + gap)) as f32) as u32, height - 6 - h, bw, h, shade);
+                c.rect((x0 + (i as u32 * (bw + gap)) as f32) as u32, height - 6 - h, bw, h, shade);
             }
 
             let hint = if recording {
