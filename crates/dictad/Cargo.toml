@@ -8,4 +8,8 @@ license.workspace = true
 anyhow.workspace = true
 serde.workspace = true
 serde_json.workspace = true
-dicta-core = { path = "../dicta-core" }
+dicta-core = { path = "../dicta-core", default-features = false, features = ["vulkan"] }
+
+[features]
+default = ["vulkan"]
+vulkan = ["dicta-core/vulkan"]

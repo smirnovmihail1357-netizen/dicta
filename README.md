@@ -1,131 +1,121 @@
 # dicta
 
-Системный голосовой ввод для Wayland/Linux: один демон вместо отдельной интеграции в каждое приложение.
+System-wide voice dictation for Linux/Wayland: one daemon instead of a separate integration in
+every app. Press a hotkey, speak, press it again — the text lands where your cursor is:
+Kate, Konsole, Firefox, Discord, a browser chat, a terminal prompt.
 
-`Alt+V` (или `dictactl toggle`) -> говоришь -> `Alt+V` ещё раз -> текст появляется там, где курсор:
-Kate, Konsole, Firefox, Discord, чат в браузере, промпт pi/opencode.
+```
+Alt+V  ->  speak  ->  Alt+V  ->  text inserted into the focused window
+```
 
-Остановка — это **тот же Alt+V** (или клик по пилюле, или `dictactl stop`), не Enter.
-Отмена без распознавания — `dictactl cancel` (клавишу для него назначить самому:
-`DICTA_CANCEL_KEY='Meta+Shift+Escape' ./adapters/kwin/install.sh`).
+Stopping is the **same Alt+V** (or a click on the overlay pill, or `dictactl stop`).
+Abort without recognition: `dictactl cancel`.
 
-## Состав
+Tested on KDE Plasma 6 (KWin, Wayland) + PipeWire + AMD RX 7900 XTX / Radeon 610M.
+Hyprland, Sway, Quickshell and GNOME adapters are included but less exercised.
 
-| crate | что делает |
+## How it works
+
+| part | role |
 |---|---|
-| `dicta-core` | конфиг, запись (PipeWire), распознавание (whisper-rs, Vulkan/HIP/CPU), фильтр галлюцинаций |
-| `dictad` | демон: Unix-сокет, запись, инференс, вставка текста в фокусное окно |
-| `dictactl` | CLI: `toggle`, `start`, `stop`, `cancel`, `status`, `paste-keys`, `calibrate`, `inject <текст>`, `infer file.wav` (диагностика) |
-| `adapters/` | горячие клавиши: KWin-скрипт (Plasma 6), Hyprland, sway, Quickshell, GNOME; все зовут `dictactl` |
-| `systemd/` | user-сервис `dictad.service` + oneshot-юниты для клавиш DE |
+| `crates/dicta-core` | config (TOML), PipeWire capture, recognition (whisper-rs / whisper.cpp: Vulkan or CPU), hallucination filter, clipboard + uinput injection, per-app paste keys |
+| `crates/dictad` | the daemon: Unix socket, recording, inference, text injection, spawns the overlay |
+| `crates/dictactl` | CLI client: `toggle start stop cancel status paste-keys calibrate inject infer` |
+| `crates/dicta-ui` | layer-shell overlay (REC pill + level waveform + "transcribing" scanner) |
+| `adapters/` | global hotkeys: KWin script (Plasma 6), Hyprland, Sway, Quickshell, GNOME |
+| `systemd/` | `dictad.service` (user service) + oneshot units the DE hotkey calls |
+| `docker/`, `compose.yaml` | running the daemon in a container (Docker Compose / Portainer stack) |
 
-## Статус
+Chain: DE hotkey -> systemd oneshot unit -> `dictactl toggle --app <focused window>` ->
+daemon (`pw-record` -> whisper -> filter) -> `wl-copy` + synthesized keystrokes via `/dev/uinput`.
 
-- [x] `dicta-core`: конфиг (TOML), WAV-чтение, whisper-rs (Vulkan-бэкенд собирается), фильтр галлюцинаций, тихий лог ggml/whisper
-- [x] `dictactl infer --timing` — распознавание файла (проверено: 4.2 с русской речи -> 2.2 с на CPU 8 потоков, small-q5_1)
-- [x] запись с микрофона (`pw-record` 16 kHz mono, SIGINT-остановка, RMS-уровень)
-- [x] Unix-сокет + `dictactl start/stop/toggle/cancel/status` (проверено: status/start/level/cancel)
-- [x] вставка текста: wl-copy + uinput-клавиши, режимы `paste` / `clipboard` / `stdout`;
-      `dictactl inject "текст"` гоняет её без микрофона (проверено: `shift+insert` в konsole, `ctrl+v` в firefox)
-- [x] layer-shell оверлей `dicta-ui` (пилюля 520x34 внизу по центру; проверено скриншотами KWin:
-      idle — полоса mean=0.232, запись — mean=0.109 (пилюля видна), после stop — снова прозрачно).
-      Важно: surface Wayland становится mapped только на commit с присоединённым буфером, поэтому
-      и в idle attachается пустой буфер — иначе композитор не присылает frame callback и оверлей
-      не появляется вообще (коммит «пустого» без буфера это и ломал)
-- [x] горячие клавиши: `adapters/` (KWin-скрипт `registerShortcut` + `callDBus` -> systemd-юнит, Hyprland, sway, Quickshell, GNOME) и встроенный evdev-слушатель в демоне
-      (проверено на живом Plasma 6: скрипт регистрирует `dicta-toggle`/`dicta-cancel`, цепочка
-      «скрипт -> systemd1 -> юнит -> dictactl» отработала; evdev требует группу `input`)
-- [x] `systemd/` — user-сервис демона + oneshot-юниты `dicta-toggle`/`dicta-cancel`
-      (+ шаблонные `dicta-toggle@<окно>.service`), `dictad --install-autostart` для `.desktop`
-- [x] выбор клавиш вставки по фокусному окну: `paste_keys_by_app`, `dictactl --app <окно>`,
-      `dictactl paste-keys` (проверено: konsole -> shift+insert, firefox -> ctrl+v)
-- [x] живая проверка: `Alt+V` на Plasma 6 поднимает `dicta-toggle@<окно>.service`, демон пишет
-      `dictad: "текст" (записано 3.1s, распознано за 1.2s, вставка shift+insert в Some("org.kde.konsole"))`;
-      гейтер тишины подобран (`min_level = 0.35`, speech_level по окнам 300 мс), артефакты шума
-      («По-русски, по-русски, по-русски.») вырезает `filter::looks_repetitive`
-- [ ] авто-остановка по тишине (VAD) — сейчас стоп только по повторному Alt+V/клику/`dictactl stop`
-- [ ] AT-SPI2-вставка (zbus) как точный путь без буфера обмена
-
-## Сборка
+## Quick start (host install)
 
 ```bash
-cd ~/projects/dicta && cargo build          # debug
-cargo build --release                      # whisper.cpp собирается один раз, потом кэш
+git clone https://github.com/<you>/dicta.git && cd dicta
+make build                      # release build with Vulkan
+make install                    # -> ~/.local/bin/{dictad,dictactl,dicta-ui}
+./tools/fetch-model.sh          # ggml model into ~/.local/share/whisper-cpp/
+mkdir -p ~/.config/dicta && cp config.example.toml ~/.config/dicta/config.toml
+./systemd/install.sh            # dictad.service + toggle/cancel units
+./adapters/kwin/install.sh      # Plasma 6: Alt+V via KWin script (logout/login needed)
+systemctl --user start dictad.service
 ```
 
-Нужны: `cmake`, `ninja`, `clang`, `glslc`/`shaderc`, `vulkan-headers` (для `-F vulkan`) — все уже стоят.
-
-## Проверка распознавания
+Then: `Alt+V`, speak 3-4 seconds, `Alt+V`. Watch what happened:
 
 ```bash
-dictactl infer --timing ~/.local/share/opencode-dictation/demo/audio/ru.wav
+journalctl --user -u dictad.service -f
 ```
 
-На CPU (не трогает VRAM, безопасно при занятом GPU):
+CPU-only build (no Vulkan SDK needed; add `use_gpu = false` to the config):
 
 ```bash
-dictactl --config /tmp/dicta-cpu.toml infer --timing demo.wav
-# в конфиге: use_gpu = false, model = ".../ggml-small-q5_1.bin"
+make build-cpu        # cargo build --release --no-default-features
 ```
 
-## Диагностика и подбор порога
+## Run in a container (Docker / Compose / Portainer)
 
 ```bash
-dictactl status                     # состояние и уровень
-dictactl calibrate --secs 8         # 8 с говоришь: печатает пик речи, среднее и уровень первых 2 с
-dictactl inject "проверка вставки"  # вставляет текст в активное окно без микрофона
-dictactl inject --app konsole "…"   # принудительно Shift+Insert (тест терминала)
-journalctl --user -u dictad.service -f   # что именно демон сделал и почему пропустил
+docker compose up -d --build          # or: make docker-build && make docker-run
+docker exec dicta dictactl status
 ```
 
-Если диктовка постоянно «пропускается» — подними речь ближе к микрофону или убавь `min_level`
-в `~/.config/dicta/config.toml` (0.35 по умолчанию; 0.25 = чувствительнее, 0.6 = агрессивнее).
+Portainer: **Stacks -> New Stack -> Web editor**, paste `compose.yaml`, set stack environment
+variables `XDG_RUNTIME_DIR=/run/user/1000` and `WAYLAND_DISPLAY=wayland-1`, then *Deploy the stack*.
 
-## Оверлей
+The container needs the live session, so `compose.yaml` mounts the session socket dir,
+`/dev/uinput` and `/dev/dri`. Details, permission notes and troubleshooting:
+[docs/CONTAINERS.md](docs/CONTAINERS.md).
+
+## Diagnostics
 
 ```bash
-dicta-ui                 # рисует пилюлю внизу экрана, когда демон записывает/распознаёт
-dicta-ui --probe         # проверить, понимает ли композитор zwlr_layer_shell_v1
+dictactl status                       # state + live input level
+dictactl calibrate --secs 8           # speak for 8 s: prints speech peak / mean / first-2s level
+dictactl inject "insertion test"      # inject text without a microphone
+dictactl inject --app konsole "..."   # force the konsole key combo
+dictactl paste-keys --app org.kde.konsole
+dictactl infer --timing speech.wav    # recognition only, no injection
+./tools/insert-test.sh                # end-to-end injection test into a dedicated window
 ```
 
-Оверлей не перехватывает клавиатуру (`KeyboardInteractivity::None`) и не резервирует место
-(`exclusive_zone = 0`); клик мышью по пилюле = «закончить и вставить». Когда демон в `idle`,
-кадр полностью прозрачный.
+If dictation keeps being skipped, tune `min_level` (0.35 default): 0.25 = more sensitive,
+0.6 = stricter. The gate uses the loudest 300 ms window, not the average.
 
-Экспериментальные переменные (для подбора под конкретный композитор): `DICTA_LAYER`
-(`overlay|top|bottom|background`), `DICTA_EXCLUSIVE`, `DICTA_DEBUG`, `DICTA_ALWAYS_DRAW`, `DICTA_FLASH`.
+## Configuration
 
-## Горячая клавиша
+`~/.config/dicta/config.toml` (see [`config.example.toml`](config.example.toml)). Every key is
+optional. Key ones: `model`, `language`, `use_gpu`, `gpu_device`, `mic`, `socket`,
+`inject_mode` (`paste|clipboard|stdout`), `paste_keys`, `paste_keys_by_app`, `hotkey`,
+`min_level`, `clipboard_restore_ms`, `paste_delay_ms`.
 
-Полная инструкция — в [`adapters/README.md`](adapters/README.md). Варианты:
+Environment: `DICTA_CONFIG`, `DICTA_UI`, `DICTA_HOTKEY`, `DICTA_APP`, and overlay knobs
+`DICTA_LAYER`, `DICTA_EXCLUSIVE`, `DICTA_DEBUG`, `DICTA_ALWAYS_DRAW`.
 
-| Композитор | как |
+## Hotkey wiring
+
+| compositor | how |
 |---|---|
-| KDE Plasma 6 | `./systemd/install.sh && ./adapters/kwin/install.sh` (скрипт `dicta-hotkey`, `Alt+V` — Meta+V занят историей буфера обмена Plasma 6) или System Settings → Keyboard → Custom Shortcuts → `systemctl --user start dicta-toggle.service` |
-| Hyprland | `source = ~/projects/dicta/adapters/hyprland/dicta.conf` |
-| Sway | `include ~/projects/dicta/adapters/sway/dicta.conf` |
+| KDE Plasma 6 | `./systemd/install.sh && ./adapters/kwin/install.sh` (KWin script registers `Alt+V`; `Meta+V` is taken by Plasma clipboard history) |
+| Hyprland | `source = .../adapters/hyprland/dicta.conf` |
+| Sway | `include .../adapters/sway/dicta.conf` |
 | GNOME | `./adapters/gnome/apply.sh '<Ctrl><Alt>v'` |
-| любой DE/без DE | встроенный evdev-слушатель демона: `hotkey = "ctrl+alt+v"` + доступ к `/dev/input/event*` (группа `input` или udev-ACL) |
+| no DE / any DE | daemon's built-in evdev listener: `hotkey = "ctrl+alt+v"` plus access to `/dev/input/event*` (`input` group or udev ACL) |
 
-Демон сам стартует оверлей по `--ui` (`dictad --ui`), а `dictad --install-autostart` кладёт
-`.desktop` в autostart и печатает подсказку по udev.
+## Status
 
-## Клавиши вставки под конкретное окно
+Working today: capture, recognition (Vulkan and CPU), silence gate, hallucination filter,
+clipboard+uinput injection with per-app key combos, layer-shell overlay, KWin/hotkey chain,
+systemd units, container image.
 
-Демон не умеет сам спрашивать у композитора фокусное окно (у KWin `queryWindowInfo`
-интерактивный), поэтому окно передаёт адаптер: `dictactl toggle --app konsole`
-(KWin-скрипт делает это сам через шаблонный юнит `dicta-toggle@konsole.service`).
-Диагностика: `dictactl paste-keys --app org.kde.konsole`.
+Not done: silence-based auto-stop (VAD), AT-SPI2 injection as an alternative to
+clipboard+keystrokes, packaged releases for other distros, macOS/Windows.
 
-## Vulkan-устройства
+## Contribute / release
 
-В Rust-сборке перечисление Vulkan-устройств ggml такое (проверено логом):
-`0 = AMD Radeon 610M (iGPU)`, `1 = AMD Radeon RX 7900 XTX`.
-То есть в `~/.config/dicta/config.toml` для 7900 XTX нужно `gpu_device = 1`, либо внешний
-`GGML_VK_VISIBLE_DEVICES=1`. Нумерация может отличаться от той, что видит opencode-плагин.
+See [CONTRIBUTING.md](CONTRIBUTING.md) and [docs/RELEASE.md](docs/RELEASE.md).
+CI builds both the Vulkan and CPU-only variants; tagging `v*` produces release archives and a
+container image. [CHANGELOG.md](CHANGELOG.md) · [SECURITY.md](SECURITY.md) · MIT license.
 
-## VRAM
-
-Модель держится в VRAM одним экземпляром. На этой машине GPU0 занято ~25.0/25.7 GiB
-(модель llama-swap + whisper), поэтому второй экземпляр модели не допускается: демон
-один, модель одна, приложения только клиенты.
+Русская версия: [README.ru.md](README.ru.md).

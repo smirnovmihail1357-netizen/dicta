@@ -1,0 +1,47 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  build:
+    name: build + tests (Vulkan и CPU-only)
+    runs-on: ubuntu-latest
+    container:
+      image: rust:1-bookworm
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: System deps (whisper.cpp + ggml-vulkan)
+        run: |
+          apt-get update
+          apt-get install -y --no-install-recommends \
+            build-essential pkg-config cmake clang libclang-dev \
+            libvulkan-dev glslang-tools pipewire wl-clipboard
+          rm -rf /var/lib/apt/lists/*
+
+      - name: Build (Vulkan, default)
+        run: cargo build --release --locked --workspace
+
+      - name: Build (CPU-only)
+        run: cargo build --release --locked --workspace --no-default-features
+
+      - name: Tests
+        run: cargo test --workspace
+
+      - name: Shell scripts syntax
+        run: |
+          for f in adapters/kwin/install.sh systemd/install.sh tools/fetch-model.sh \
+                   docker/entrypoint.sh docker/run-host.sh; do
+            bash -n "$f"
+          done
+
+  docker:
+    name: container image builds
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build image
+        run: docker build -f docker/Dockerfile -t dicta:ci .

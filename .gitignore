@@ -1,2 +1,6 @@
 /target
+**/*.rs.bk
 /config.toml
+*.wav
+*.log
+.DS_Store

@@ -1,0 +1,51 @@
+name: Проблема с диктовкой
+description: Демон не пишет, не вставляет, оверлей не появляется, клавиша не работает
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Before you file: run `dictactl status`, `journalctl --user -u dictad.service -f`
+        and `dictactl inject "test"` — they answer most questions in a minute.
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: Что произошло
+      description: Пошагово: нажал X, ожидал Y, получил Z. Какое окно было в фокусе.
+      placeholder: Alt+V -> говорю -> Alt+V, текст не появился в konsole
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: journalctl --user -u dictad.service (последние строки)
+      description: Демон пишет причину пропуска распознавания прямо в лог. Вставь сюда.
+      render: shell
+    validations:
+      required: true
+  - type: markdown
+    attributes:
+      value: |
+        Useful one-liners to include:
+        `dictactl status` · `dictactl calibrate --secs 8` · `dictactl paste-keys --app <окно>` ·
+        `echo $XDG_SESSION_TYPE $XDG_CURRENT_DESKTOP $WAYLAND_DISPLAY` · `rpm -q pipewire` (или `pacman -Q pipewire`)
+  - type: dropdown
+    id: de
+    attributes:
+      label: Окружение
+      options: [KDE Plasma 6 (KWin), Hyprland, Sway, GNOME, Quickshell, другое/нет DE]
+    validations:
+      required: true
+  - type: dropdown
+    id: backend
+    attributes:
+      label: Распознавание
+      options: [Vulkan (GPU), CPU, не знаю]
+    validations:
+      required: true
+  - type: textarea
+    id: config
+    attributes:
+      label: ~/.config/dicta/config.toml
+      description: Без личных путей, если они чувствительные.
+      render: toml

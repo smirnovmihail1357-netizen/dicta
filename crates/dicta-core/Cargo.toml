@@ -14,3 +14,9 @@ toml.workspace = true
 dirs.workspace = true
 whisper-rs.workspace = true
 whisper-rs-sys.workspace = true
+
+[features]
+default = ["vulkan"]
+# Vulkan (ggml-vulkan, RX 7900 XTX / iGPU). Требует glslangValidator при сборке.
+# Снимается так: cargo build --release --no-default-features  (чистый CPU)
+vulkan = ["whisper-rs/vulkan", "whisper-rs-sys/vulkan"]

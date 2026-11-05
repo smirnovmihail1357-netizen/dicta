@@ -7,4 +7,8 @@ license.workspace = true
 [dependencies]
 anyhow.workspace = true
 clap.workspace = true
-dicta-core = { path = "../dicta-core" }
+dicta-core = { path = "../dicta-core", default-features = false, features = ["vulkan"] }
+
+[features]
+default = ["vulkan"]
+vulkan = ["dicta-core/vulkan"]
