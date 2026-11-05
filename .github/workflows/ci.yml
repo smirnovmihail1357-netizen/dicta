@@ -24,25 +24,30 @@ jobs:
 
       - name: Build (Vulkan, default)
         run: |
-          set +e
           cargo build --release --locked --workspace 2>&1 | tee /tmp/b1.log
-          rc=${PIPESTATUS[0]}
-          grep -E "^(error|warning: unused|error\[)|^  -->" /tmp/b1.log | tail -30 \
-            | sed 's/%/%25/g; s/\r/%0D/g' \
-            | while IFS= read -r line; do echo "::error::${line}"; done
-          tail -40 /tmp/b1.log
-          exit $rc
+          echo "${PIPESTATUS[0]}" > /tmp/rc1
+        continue-on-error: true
 
       - name: Build (CPU-only)
         run: |
-          set +e
           cargo build --release --locked --workspace --no-default-features 2>&1 | tee /tmp/b2.log
-          rc=${PIPESTATUS[0]}
-          grep -E "^(error|error\[)|^  -->" /tmp/b2.log | tail -30 \
-            | sed 's/%/%25/g; s/\r/%0D/g' \
-            | while IFS= read -r line; do echo "::error::${line}"; done
-          tail -40 /tmp/b2.log
-          exit $rc
+          echo "${PIPESTATUS[0]}" > /tmp/rc2
+        continue-on-error: true
+
+      - name: Errors to annotations
+        if: always()
+        run: |
+          [ -f /tmp/b1.log ] && tail -n 30 /tmp/b1.log | sed 's/%/%25/g; s/\r/%0D/g; s/^/VULKAN: /' > /tmp/a1.txt
+          [ -f /tmp/b2.log ] && tail -n 20 /tmp/b2.log | sed 's/%/%25/g; s/\r/%0D/g; s/^/CPU: /' > /tmp/a2.txt
+          cat /tmp/a1.txt /tmp/a2.txt 2>/dev/null | while IFS= read -r line; do echo "::error::$line"; done
+
+      - name: Gate
+        if: always()
+        run: |
+          rc1=$(cat /tmp/rc1 2>/dev/null || echo 1)
+          rc2=$(cat /tmp/rc2 2>/dev/null || echo 1)
+          echo "rc1=$rc1 rc2=$rc2"
+          test "$rc1" = 0 -a "$rc2" = 0
 
       - name: Tests
         run: cargo test --workspace
