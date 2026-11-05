@@ -64,7 +64,7 @@ impl Default for Config {
             paste_keys: "ctrl+v".into(),
             inject_mode: "paste".into(),
             hotkey: "off".into(),
-            min_level: 0.45,
+            min_level: 0.35,
             paste_keys_by_app: default_paste_keys_by_app(),
         }
     }

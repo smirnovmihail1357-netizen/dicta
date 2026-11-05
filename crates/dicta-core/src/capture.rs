@@ -112,6 +112,13 @@ impl Drop for Recorder {
     }
 }
 
+/// Записать `secs` секунд и вернуть сэмпллы (для калибровки уровня).
+pub fn record_samples(cfg: &Config, secs: u64) -> Result<Vec<i16>> {
+    let rec = Recorder::start(cfg)?;
+    std::thread::sleep(Duration::from_secs(secs));
+    rec.stop()
+}
+
 /// Для отладки: записать `secs` секунд и сохранить в файл.
 pub fn record_to(cfg: &Config, secs: u64, out: &std::path::Path) -> Result<()> {
     let rec = Recorder::start(cfg)?;

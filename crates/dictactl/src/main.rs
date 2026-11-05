@@ -66,6 +66,11 @@ enum Command {
     },
     /// Какое окно демон считает фокусным и какие клавиши вставки он выберет
     PasteKeys,
+    /// Записать N секунд и показать измеренные уровни (чтобы подобрать min_level)
+    Calibrate {
+        #[arg(long, default_value_t = 8)]
+        secs: u64,
+    },
     /// Сообщить демону-обёртке, какое окно сейчас фокусное (для ~/.cache/dicta/focus)
     FocusReport { app: String },
 }
@@ -169,6 +174,20 @@ fn main() -> Result<()> {
         Command::Toggle => println!("{}", ask(&cfg.socket, "toggle", cli.app.as_deref())?),
         Command::Cancel => println!("{}", ask(&cfg.socket, "cancel", cli.app.as_deref())?),
         Command::Status => println!("{}", ask(&cfg.socket, "status", None)?),
+        Command::Calibrate { secs } => {
+            println!(
+                "говори все {secs} с (считай это тренировкой диктовки), потом ~2 с помолчи"
+            );
+            let samples = capture::record_samples(&cfg, secs)?;
+            let peak = dicta_core::speech_level(&samples);
+            let mean = dicta_core::normalized_rms(&samples);
+            let head = &samples[..(samples.len().min(16000 * 2))];
+            println!(
+                "пик речи={peak:.3}  в среднем={mean:.3}  первые 2 с={:.3}\n\
+                 min_level в конфиге ставят между «фоном» и «речью»; сейчас по умолчанию 0.35",
+                dicta_core::speech_level(head)
+            );
+        }
         Command::FocusReport { app } => {
             dicta_core::focus::write_focus_cache(&app)?;
             println!("{}", dicta_core::focus::focus_cache_path().display());
