@@ -66,7 +66,7 @@ struct InputEvent {
 }
 
 /// Комбинация клавиш, например Ctrl+V.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Combo {
     pub ctrl: bool,
     pub shift: bool,
@@ -103,6 +103,54 @@ impl Combo {
 
 pub struct Keyboard {
     fd: i32,
+}
+
+/// Виртуальная клавиатура держится всё время жизни демона.
+///
+/// Это принципиально: uinput-устройствоEnumerируется libinput/KWin не мгновенно
+/// (udev-событие + ACL + hotplug-переатрибуция seat'а). Если создавать девайс,
+/// послать клавиши и сразу UI_DEV_DESTROY (как было раньше), KWin не успевает
+/// его зарегистрировать — запись событий в /dev/uinput проходит успешно, но ни
+/// одно окно их не получает. Отсюда и «демон всё сделал, а вставки нет».
+static KEYBOARD: std::sync::Mutex<Option<Keyboard>> = std::sync::Mutex::new(None);
+
+/// Прогреть девайс при старте демона, чтобы KWin зарегистрировал его заранее.
+pub fn warm_up_keyboard() -> Result<()> {
+    let mut slot = KEYBOARD.lock().map_err(|_| anyhow::anyhow!("KEYBOARD отравлен"))?;
+    if slot.is_none() {
+        slot.replace(Keyboard::new()?);
+    }
+    Ok(())
+}
+
+fn with_keyboard<F, R>(f: F) -> Result<R>
+where
+    F: Fn(&mut Keyboard) -> Result<R>,
+{
+    let mut slot = KEYBOARD.lock().map_err(|_| anyhow::anyhow!("KEYBOARD отравлен"))?;
+    if slot.is_none() {
+        slot.replace(Keyboard::new()?);
+    }
+    let kb = slot.as_mut().unwrap();
+    match f(kb) {
+        Ok(value) => {
+            // flush: KWin/libinput читает события пачками
+            kb.event(EV_SYN, 0, SYN_REPORT)?;
+            std::thread::sleep(Duration::from_millis(40));
+            Ok(value)
+        }
+        Err(err) => {
+            // девайс мог быть выключен извне (udev/logind) — пересоздать один раз
+            eprintln!("dicta: клавиатура сбой ({err}), пересоздаю uinput-девайс");
+            slot.take();
+            slot.replace(Keyboard::new()?);
+            std::thread::sleep(Duration::from_millis(600));
+            let kb = slot.as_mut().unwrap();
+            let value = f(kb)?;
+            kb.event(EV_SYN, 0, SYN_REPORT)?;
+            Ok(value)
+        }
+    }
 }
 
 impl Keyboard {
@@ -268,12 +316,22 @@ fn clipboard_cmd(cmd: &str, args: &[&str], input: Option<&str>) -> Option<String
 }
 
 /// Кладёт текст в буфер обмена и посылает клавиши вставки; старый буфер возвращает.
-pub fn paste_text(text: &str, combo: Combo, restore_after: Duration) -> Result<()> {    let previous = clipboard_cmd("wl-paste", &["--no-newline", "--type", "text"], None);
-    clipboard_cmd("wl-copy", &["--type", "text"], Some(text));
+pub fn paste_text(
+    text: &str,
+    combo: Combo,
+    restore_after: Duration,
+    delay_before_keys: Duration,
+) -> Result<()> {
+    // Старый буфер сохраняем без --type: wl-paste сам выбирает текстовый тип.
+    let previous = clipboard_cmd("wl-paste", &["--no-newline"], None);
 
-    let mut kb = Keyboard::new().context("не создал виртуальную клавиатуру (uinput)")?;
-    kb.send(combo)?;
-    drop(kb);
+    // ВАЖНО: wl-copy --type text объявляет MIME ровно "text", и ни Konsole, ни Firefox
+    // такой тип не принимают (проверено: wl-paste --list-types -> "text").
+    // text/plain даёт стандартный набор text/plain, TEXT, STRING, UTF8_STRING.
+    clipboard_cmd("wl-copy", &["--type", "text/plain"], Some(text));
+
+    std::thread::sleep(delay_before_keys);
+    with_keyboard(|kb| kb.send(combo)).context("не удалось послать клавиши вставки (uinput)")?;
 
     if let Some(prev) = previous {
         if !prev.is_empty() {
@@ -285,17 +343,23 @@ pub fn paste_text(text: &str, combo: Combo, restore_after: Duration) -> Result<(
 }
 
 /// Вставить распознанный текст согласно inject_mode.
-pub fn insert_text(text: &str, mode: &str, combo: Combo, restore_after: Duration) -> Result<()> {
+pub fn insert_text(
+    text: &str,
+    mode: &str,
+    combo: Combo,
+    restore_after: Duration,
+    delay_before_keys: Duration,
+) -> Result<()> {
     match mode {
         "clipboard" => {
-            clipboard_cmd("wl-copy", &["--type", "text"], Some(text));
+            clipboard_cmd("wl-copy", &["--type", "text/plain"], Some(text));
             Ok(())
         }
         "stdout" => {
             println!("{text}");
             Ok(())
         }
-        _ => paste_text(text, combo, restore_after),
+        _ => paste_text(text, combo, restore_after, delay_before_keys),
     }
 }
 
@@ -303,8 +367,13 @@ pub fn insert_text(text: &str, mode: &str, combo: Combo, restore_after: Duration
 pub fn test_keys(combo_str: &str) -> Result<()> {
     let combo = Combo::parse(combo_str)?;
     let started = Instant::now();
-    let mut kb = Keyboard::new()?;
-    kb.send(combo)?;
-    eprintln!("послано {combo_str} за {:?}", started.elapsed());
+    warm_up_keyboard()?;
+    // процесс CLI живёт коротко: даём libinput/KWin время зарегистрировать девайс
+    std::thread::sleep(Duration::from_millis(1500));
+    with_keyboard(|kb| kb.send(combo))?;
+    eprintln!(
+        "послано {combo_str} за {:?}; проверь, дошло ли до окна",
+        started.elapsed()
+    );
     Ok(())
 }

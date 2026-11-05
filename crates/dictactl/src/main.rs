@@ -67,7 +67,12 @@ enum Command {
     /// Какое окно демон считает фокусным и какие клавиши вставки он выберет
     PasteKeys,
     /// Вставить текст в активное окно (проверка вставки без записи и распознавания)
-    Inject { text: String },
+    Inject {
+        text: String,
+        /// Принудительные клавиши вставки, напр. shift+insert (по умолчанию — по окну)
+        #[arg(long)]
+        keys: Option<String>,
+    },
     /// Записать N секунд и показать измеренные уровни (чтобы подобрать min_level)
     Calibrate {
         #[arg(long, default_value_t = 8)]
@@ -194,7 +199,7 @@ fn main() -> Result<()> {
         Command::Toggle => println!("{}", ask(&cfg.socket, "toggle", cli.app.as_deref())?),
         Command::Cancel => println!("{}", ask(&cfg.socket, "cancel", cli.app.as_deref())?),
         Command::Status => println!("{}", ask(&cfg.socket, "status", None)?),
-        Command::Inject { text } => {
+        Command::Inject { text, keys } => {
             let text = text.replace(['"', '\\'], "");
             let app = cli
                 .app
@@ -202,11 +207,15 @@ fn main() -> Result<()> {
                 .map(|a| a.replace(['"', '\\'], ""))
                 .map(|a| format!(",\"app\":\"{a}\""))
                 .unwrap_or_default();
+            let keys_opt = keys
+                .as_deref()
+                .map(|k| format!(",\"keys\":\"{}\"", k.replace(['"', '\\'], "")))
+                .unwrap_or_default();
             println!(
                 "{}",
                 ask_json(
                     &cfg.socket,
-                    &format!("{{\"cmd\":\"inject\",\"text\":\"{text}\"{app}}}\n")
+                    &format!("{{\"cmd\":\"inject\",\"text\":\"{text}\"{app}{keys_opt}}}\n")
                 )?
             );
         }

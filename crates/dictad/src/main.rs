@@ -26,6 +26,9 @@ struct Req {
     /// Для {"cmd":"inject"}: текст, который нужно вставить в активное окно.
     #[serde(default)]
     text: Option<String>,
+    /// Для {"cmd":"inject"}: принудительные клавиши вставки (диагностика раскладок).
+    #[serde(default)]
+    keys: Option<String>,
 }
 
 #[derive(serde::Serialize)]
@@ -160,6 +163,15 @@ fn main() -> Result<()> {
         });
     }
 
+    // uinput-девайс регистрируется в KWin не мгновенно: создаём его сразу при старте,
+    // чтобы первая же вставка дошла до окна.
+    if cfg.inject_mode == "paste" {
+        match inject::warm_up_keyboard() {
+            Ok(()) => eprintln!("dictad: виртуальная клавиатура (uinput) готова"),
+            Err(err) => eprintln!("dictad: не создал uinput-клавиатуру: {err}"),
+        }
+    }
+
     eprintln!(
         "dictad: сокет {}, модель {}, язык {}",
         socket.display(),
@@ -283,10 +295,19 @@ fn serve_conn(
                 } else {
                     // Подсказка окна необязательна: demo сам спросит адаптер/кэш.
                     let app = dicta_core::focus::active_app(req.app.as_deref());
-                    let keys = h.cfg.paste_keys_for(app.as_deref());
+                    let keys = match req.keys.as_deref() {
+                        Some(k) => k.to_string(),
+                        None => h.cfg.paste_keys_for(app.as_deref()),
+                    };
                     let combo = Combo::parse(&keys).unwrap_or_else(|_| h.paste_combo.clone());
                     h.last_text = Some(text.clone());
-                    match inject::insert_text(&text, &h.cfg.inject_mode, combo, Duration::from_millis(900))
+                    match inject::insert_text(
+                        &text,
+                        &h.cfg.inject_mode,
+                        combo,
+                        Duration::from_millis(h.cfg.clipboard_restore_ms),
+                        Duration::from_millis(h.cfg.paste_delay_ms),
+                    )
                     {
                         Ok(()) => {
                             eprintln!("dictad: inject {keys} в {app:?}: {text:?}");
@@ -467,7 +488,13 @@ fn run_stop(
     let keys = h.cfg.paste_keys_for(app.as_deref());
     let combo = Combo::parse(&keys).unwrap_or_else(|_| h.paste_combo.clone());
 
-    if let Err(err) = inject::insert_text(&text, &h.cfg.inject_mode, combo.clone(), Duration::from_millis(900)) {
+    if let Err(err) = inject::insert_text(
+        &text,
+        &h.cfg.inject_mode,
+        combo.clone(),
+        Duration::from_millis(h.cfg.clipboard_restore_ms),
+        Duration::from_millis(h.cfg.paste_delay_ms),
+    ) {
         h.last_error = Some(format!("вставка не удалась: {err}"));
     }
 

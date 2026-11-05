@@ -46,6 +46,11 @@ pub struct Config {
     /// Имя окна берётся у композитора (`focus::active_app`), ключ — после
     /// `focus::normalize` (без точек, тире и подчёркиваний, в нижнем регистре).
     pub paste_keys_by_app: HashMap<String, String>,
+    /// Через сколько мс вернуть прежний буфер обмена после вставки.
+    /// Слишком мало — приложение не успеет прочитать буфер и получит старый.
+    pub clipboard_restore_ms: u64,
+    /// Пауза между wl-copy и нажатием клавиш вставки.
+    pub paste_delay_ms: u64,
 }
 
 impl Default for Config {
@@ -66,25 +71,31 @@ impl Default for Config {
             hotkey: "off".into(),
             min_level: 0.35,
             paste_keys_by_app: default_paste_keys_by_app(),
+            clipboard_restore_ms: 2500,
+            paste_delay_ms: 150,
         }
     }
 }
 
-/// Терминалы и консоли обычно вставляют Shift+Insert или Ctrl+Shift+V,
-/// текстовые поля — Ctrl+V.
+/// Терминалы: Ctrl+Shift+V (так по умолчанию в Konsole, foot, alacritty, kitty, wezterm,
+/// ghostty). Shift+Insert остаётся для xterm и X11-наследия — на Wayland он в Konsole
+/// ничего не вставляет. Текстовые поля — Ctrl+V.
 fn default_paste_keys_by_app() -> HashMap<String, String> {
     let mut m = HashMap::new();
     for app in [
         "konsole",
         "yakuake",
         "alacritty",
-        "xterm",
         "foot",
+        "footclient",
         "kitty",
         "wezterm",
         "ghostty",
         "terminal",
     ] {
+        m.insert(app.to_string(), "ctrl+shift+v".to_string());
+    }
+    for app in ["xterm", "urxvt", "st"] {
         m.insert(app.to_string(), "shift+insert".to_string());
     }
     for app in [
@@ -164,5 +175,27 @@ impl Config {
             _ => "A conversation about programming. Rust, TypeScript, JSON, API, git, PipeWire, Wayland."
                 .to_string(),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn picks_paste_keys_by_normalized_app() {
+        let cfg = Config::default();
+        assert_eq!(cfg.paste_keys_for(Some("org.kde.konsole")), "ctrl+shift+v");
+        assert_eq!(cfg.paste_keys_for(Some("Firefox.desktop")), "ctrl+v");
+        assert_eq!(cfg.paste_keys_for(Some("xterm")), "shift+insert");
+        // неизвестное окно -> общий paste_keys
+        assert_eq!(cfg.paste_keys_for(Some("whatapp")), "ctrl+v");
+        assert_eq!(cfg.paste_keys_for(None), "ctrl+v");
+    }
+
+    #[test]
+    fn clipboard_timing_defaults_leave_room_for_the_target_app() {
+        let cfg = Config::default();
+        assert!(cfg.clipboard_restore_ms >= 2000);
     }
 }
