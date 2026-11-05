@@ -27,7 +27,11 @@ Kate, Konsole, Firefox, Discord, чат в браузере, промпт pi/ope
 - [x] Unix-сокет + `dictactl start/stop/toggle/cancel/status` (проверено: status/start/level/cancel)
 - [x] вставка текста: wl-copy + uinput-клавиши, режимы `paste` / `clipboard` / `stdout`;
       `dictactl inject "текст"` гоняет её без микрофона (проверено: `shift+insert` в konsole, `ctrl+v` в firefox)
-- [x] layer-shell оверлей `dicta-ui` (KWin проверялся: `zwlr_layer_shell_v1` есть, пилюля 520x34 рисуется и видна на снимке экрана)
+- [x] layer-shell оверлей `dicta-ui` (пилюля 520x34 внизу по центру; проверено скриншотами KWin:
+      idle — полоса mean=0.232, запись — mean=0.109 (пилюля видна), после stop — снова прозрачно).
+      Важно: surface Wayland становится mapped только на commit с присоединённым буфером, поэтому
+      и в idle attachается пустой буфер — иначе композитор не присылает frame callback и оверлей
+      не появляется вообще (коммит «пустого» без буфера это и ломал)
 - [x] горячие клавиши: `adapters/` (KWin-скрипт `registerShortcut` + `callDBus` -> systemd-юнит, Hyprland, sway, Quickshell, GNOME) и встроенный evdev-слушатель в демоне
       (проверено на живом Plasma 6: скрипт регистрирует `dicta-toggle`/`dicta-cancel`, цепочка
       «скрипт -> systemd1 -> юнит -> dictactl» отработала; evdev требует группу `input`)

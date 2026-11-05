@@ -458,17 +458,34 @@ impl Ui {
             .map(|s| s.clone())
             .unwrap_or_default();
 
-        // idle -> полностью прозрачный кадр: оверлея как будто нет
+        // idle -> полностью прозрачный кадр: оверлея как будто нет.
+        //
+        // Пустой буфер attach'ить ОБЯЗАТЕЛЬНО: surface становится mapped только на
+        // commit, в котором присоединён буфер. Если коммитить «ничего» (как делал
+        // раньше), композитор никогда не пришлёт frame callback -> draw() больше не
+        // вызывается -> при старте записи оверлей не появляется вообще.
         if status.state == "idle" && !always_draw() {
-            self.frame += 1;
-            if self.frame % 20 != 0 {
-                // всё равно просим следующий кадр, чтобы не «уснуть»
-                self.layer
-                    .wl_surface()
-                    .frame(q, FrameCallbackData(self.layer.wl_surface().clone()));
-                self.layer.commit();
-                return;
+            match self.pool.create_buffer(width as i32, height as i32, stride, wl_shm::Format::Argb8888) {
+                Ok((buffer, mut mem)) => {
+                    let empty: &mut [u8] = &mut mem;
+                    empty.fill(0);
+                    self.layer
+                        .wl_surface()
+                        .damage_buffer(0, 0, width as i32, height as i32);
+                    self.layer
+                        .wl_surface()
+                        .frame(q, FrameCallbackData(self.layer.wl_surface().clone()));
+                    let _ = buffer.attach_to(self.layer.wl_surface());
+                }
+                Err(err) => {
+                    if debug_on() {
+                        eprintln!("idle create_buffer не удался: {err}");
+                    }
+                }
             }
+            self.layer.commit();
+            self.frame = self.frame.wrapping_add(1);
+            return;
         }
 
         let recording = status.state == "recording";
