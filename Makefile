@@ -1,8 +1,7 @@
 CARGO ?= cargo
 BIN_DIR ?= $(HOME)/.local/bin
-IMAGE ?= dicta:local
 
-.PHONY: build build-cpu test run install uninstall docker-build docker-run compose-up compose-down fetch-model
+.PHONY: build build-cpu test run install uninstall fetch-model
 
 ## сборка с Vulkan (по умолчанию)
 build:
@@ -23,18 +22,6 @@ install: build
 
 uninstall:
 	rm -f $(BIN_DIR)/dictad $(BIN_DIR)/dictactl $(BIN_DIR)/dicta-ui
-
-docker-build:
-	docker build -f docker/Dockerfile -t $(IMAGE) .
-
-docker-run:
-	./docker/run-host.sh
-
-compose-up:
-	docker compose up -d --build
-
-compose-down:
-	docker compose down
 
 fetch-model:
 	./tools/fetch-model.sh

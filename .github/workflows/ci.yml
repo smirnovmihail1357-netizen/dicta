@@ -33,15 +33,6 @@ jobs:
 
       - name: Shell scripts syntax
         run: |
-          for f in adapters/kwin/install.sh systemd/install.sh tools/fetch-model.sh \
-                   docker/entrypoint.sh docker/run-host.sh; do
+          for f in adapters/kwin/install.sh systemd/install.sh tools/fetch-model.sh; do
             bash -n "$f"
           done
-
-  docker:
-    name: container image builds
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - name: Build image
-        run: docker build -f docker/Dockerfile -t dicta:ci .

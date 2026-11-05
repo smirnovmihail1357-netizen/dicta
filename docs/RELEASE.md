@@ -38,21 +38,26 @@ gh api -X PUT repos/<owner>/dicta/branches/main/protection \
 
 ## 3. Выпуск версии
 
-1. Обновить версию в `Cargo.toml` (`[workspace.package] version = "0.2.0"`),
+Версию ниже обозначаем как `0.N.0` — подставь актуальную, а не копируй пример дословно.
+
+1. Обновить версию в `Cargo.toml` (`[workspace.package] version = "0.N.0"`),
    `cargo metadata >/dev/null` чтобы обновить `Cargo.lock`.
 2. Записать раздел в `CHANGELOG.md` (из «Unreleased» в именованный).
 3. Коммит + тег + push:
 
 ```bash
-git commit -am "release: 0.2.0"
-git tag -a v0.2.0 -m "dicta 0.2.0"
+VERSION=0.N.0                      # актуальная версия этого релиза
+git commit -am "release: $VERSION"
+git tag -a "v$VERSION" -m "dicta $VERSION"
 git push origin main --follow-tags
 ```
 
 Тег `v*` запускает `.github/workflows/release.yml`:
 - архивы `dicta-<tag>-x86_64-linux-vulkan.tar.gz` и `...-cpu.tar.gz` (+ `config.example.toml`);
-- GitHub Release с `generate_release_notes: true`;
-- образ `ghcr.io/<owner>/dicta:<tag>` и `:latest`.
+- GitHub Release с `generate_release_notes: true`.
+
+Контейнер (`docker/Dockerfile`, `compose.yaml`, `docs/CONTAINERS.md`) в релиз 0.3.0 не входит:
+он лежит отдельной веткой `container` и в CI не собирается.
 
 ## 4. Что проверять перед тегом
 
@@ -60,8 +65,8 @@ git push origin main --follow-tags
 make build && make build-cpu && cargo test --workspace
 ./tools/insert-test.sh                 # вставка в окно
 dictactl calibrate --secs 8            # пороги уровня на живом микрофоне
-docker build -f docker/Dockerfile -t dicta:local . && docker compose up -d
-docker exec dicta dictactl status
+dictactl atspi-dump --depth 8          # дерево доступности видно сфокусированное поле
+dictactl atspi-insert "проверка"       # вставка без буфера обмена (нужен фокус в поле)
 ```
 
 ## 5. Честность описания релиза

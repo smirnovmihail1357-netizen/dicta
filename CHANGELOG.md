@@ -40,6 +40,13 @@
   вместо поля ввода нельзя.
 - `dictactl atspi-dump` больше не зависает навсегда: дамп честно отрабатывает дедлайн.
 
+### Changed
+- **Контейнер убран из релиза.** `docker/Dockerfile`, `docker/entrypoint.sh`,
+  `docker/run-host.sh`, `compose.yaml`, `.dockerignore`, `.env.example` и `docs/CONTAINERS.md`
+  вынесены отдельной веткой `container`. CI не собирает образ `ghcr.io/...` (цель `image` из
+  `release.yml` убрана), у `Makefile` больше нет целей `docker-build`/`docker-run`/`compose-*`.
+  В 0.3.0 поддерживается только хостовый демон.
+
 ## 0.2.0 — контейнер, CI, публичный релиз
 
 ### Added

@@ -16,11 +16,10 @@
 |---|---|
 | `dicta-core` | конфиг (TOML), запись (PipeWire), распознавание (whisper-rs: Vulkan/CPU), фильтр галлюцинаций, вставка (wl-copy + uinput), клавиши по окнам |
 | `dictad` | демон: Unix-сокет, запись, инференс, вставка текста в фокусное окно, порождает оверлей |
-| `dictactl` | CLI: `toggle`, `start`, `stop`, `cancel`, `status`, `paste-keys`, `calibrate`, `inject <текст>`, `infer file.wav` |
+| `dictactl` | CLI: `toggle`, `start`, `stop`, `cancel`, `status`, `paste-keys`, `calibrate`, `inject <текст>`, `infer file.wav`, `atspi-dump`, `atspi-insert <текст>` |
 | `dicta-ui` | layer-shell оверлей: пилюля REC + волна уровня + анимация распознавания |
 | `adapters/` | горячие клавиши: KWin-скрипт (Plasma 6), Hyprland, sway, Quickshell, GNOME |
 | `systemd/` | user-сервис `dictad.service` + oneshot-юниты, которые дёргает DE |
-| `docker/`, `compose.yaml` | запуск демона в контейнере (Compose / Portainer stack) |
 
 Цепочка: горячая клавиша DE -> oneshot-юнит systemd -> `dictactl toggle --app <окно>` -> демон
 (`pw-record` -> whisper -> фильтр) -> `wl-copy` + синтез клавиш через `/dev/uinput`.
@@ -43,18 +42,6 @@ systemctl --user start dictad.service
 
 Сборка без Vulkan (не нужен glslangValidator; в конфиге `use_gpu = false`):
 `make build-cpu`.
-
-## Контейнер
-
-```bash
-docker compose up -d --build
-docker exec dicta dictactl status
-```
-
-Portainer: Stacks -> New Stack -> Web editor, вставить `compose.yaml`, в environment steка
-указать `XDG_RUNTIME_DIR=/run/user/1000` и `WAYLAND_DISPLAY=wayland-1` -> Deploy.
-Подробности и подводные камни (uinput-ACL, PipeWire, Wayland-сокеты, GPU):
-[docs/CONTAINERS.md](docs/CONTAINERS.md).
 
 ## Диагностика и подбор порога
 
@@ -117,7 +104,7 @@ dictactl atspi-dump --app firefox --tree
 Работает: запись, распознавание (Vulkan и CPU), гейтер тишины, авто-остановка записи по
 тишине (VAD), фильтр галлюцинаций, вставка буфером + клавишами с подбором под окно,
 AT-SPI2-вставка без буфера обмена и без синтезированных клавиш, оверлей, цепочка клавиш
-через KWin, systemd-юниты, образ контейнера.
+через KWin, systemd-юниты.
 
 Не сделано: сквозная проверка AT-SPI-вставки в реальном фокусном поле ввода (на этой машине
 тест упирался в то, что `focused` у Firefox — документ, а не поле), доступность Qt-окон без

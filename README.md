@@ -20,11 +20,10 @@ Hyprland, Sway, Quickshell and GNOME adapters are included but less exercised.
 |---|---|
 | `crates/dicta-core` | config (TOML), PipeWire capture, recognition (whisper-rs / whisper.cpp: Vulkan or CPU), hallucination filter, clipboard + uinput injection, per-app paste keys |
 | `crates/dictad` | the daemon: Unix socket, recording, inference, text injection, spawns the overlay |
-| `crates/dictactl` | CLI client: `toggle start stop cancel status paste-keys calibrate inject infer` |
+| `crates/dictactl` | CLI client: `toggle start stop cancel status paste-keys calibrate inject infer atspi-dump atspi-insert` |
 | `crates/dicta-ui` | layer-shell overlay (REC pill + level waveform + "transcribing" scanner) |
 | `adapters/` | global hotkeys: KWin script (Plasma 6), Hyprland, Sway, Quickshell, GNOME |
 | `systemd/` | `dictad.service` (user service) + oneshot units the DE hotkey calls |
-| `docker/`, `compose.yaml` | running the daemon in a container (Docker Compose / Portainer stack) |
 
 Chain: DE hotkey -> systemd oneshot unit -> `dictactl toggle --app <focused window>` ->
 daemon (`pw-record` -> whisper -> filter) -> `wl-copy` + synthesized keystrokes via `/dev/uinput`.
@@ -53,20 +52,6 @@ CPU-only build (needs neither `glslc` nor `glslangValidator`; add `use_gpu = fal
 ```bash
 make build-cpu        # cargo build --release --no-default-features
 ```
-
-## Run in a container (Docker / Compose / Portainer)
-
-```bash
-docker compose up -d --build          # or: make docker-build && make docker-run
-docker exec dicta dictactl status
-```
-
-Portainer: **Stacks -> New Stack -> Web editor**, paste `compose.yaml`, set stack environment
-variables `XDG_RUNTIME_DIR=/run/user/1000` and `WAYLAND_DISPLAY=wayland-1`, then *Deploy the stack*.
-
-The container needs the live session, so `compose.yaml` mounts the session socket dir,
-`/dev/uinput` and `/dev/dri`. Details, permission notes and troubleshooting:
-[docs/CONTAINERS.md](docs/CONTAINERS.md).
 
 ## Diagnostics
 
@@ -140,7 +125,7 @@ Environment: `DICTA_CONFIG`, `DICTA_UI`, `DICTA_HOTKEY`, `DICTA_APP`, and overla
 Working today: capture, recognition (Vulkan and CPU), silence gate, silence-based auto-stop
 (VAD), hallucination filter, clipboard+uinput injection with per-app key combos, AT-SPI2
 injection (no clipboard, no synthesised keystrokes), layer-shell overlay, KWin/hotkey chain,
-systemd units, container image.
+systemd units.
 
 Not done: an end-to-end AT-SPI insertion check against a real focused input field (on the
 development machine Firefox reports `focused` on its document node, not on a field), Qt
@@ -149,7 +134,7 @@ windows without `QT_ACCESSIBILITY=1`, packaged releases for other distros, macOS
 ## Contribute / release
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) and [docs/RELEASE.md](docs/RELEASE.md).
-CI builds both the Vulkan and CPU-only variants; tagging `v*` produces release archives and a
-container image. [CHANGELOG.md](CHANGELOG.md) · [SECURITY.md](SECURITY.md) · MIT license.
+CI builds both the Vulkan and CPU-only variants; tagging `v*` produces release archives.
+[CHANGELOG.md](CHANGELOG.md) · [SECURITY.md](SECURITY.md) · MIT license.
 
 Русская версия: [README.ru.md](README.ru.md).

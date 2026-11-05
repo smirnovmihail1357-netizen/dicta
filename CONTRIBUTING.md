@@ -8,7 +8,8 @@
   Команды: `start stop toggle cancel status inject calibrate record`.
 - `crates/dictactl` — клиент; `crates/dicta-ui` — layer-shell оверлей.
 - `adapters/` — привязка глобальной горячей клавиши к DE; `systemd/` — юниты.
-- `docker/`, `compose.yaml` — контейнерный запуск.
+- Контейнерный запуск (`docker/`, `compose.yaml`, `docs/CONTAINERS.md`) в релиз не входит:
+  он живёт отдельной веткой `container`.
 
 ## Правила кода
 
@@ -29,6 +30,7 @@ cargo build --release --locked
 cargo build --release --locked --no-default-features   # CPU-вариант не должен ломаться
 ./tools/insert-test.sh                                 # вставка в окно (нужен foot)
 dictactl calibrate --secs 8                            # пороги уровня
+dictactl atspi-dump --depth 8                          # видит ли дерево доступности фокус
 journalctl --user -u dictad.service -f
 ```
 
@@ -45,4 +47,4 @@ Injections и оверлей проверяются скриншотами: `spe
 ## Релизы
 
 См. [docs/RELEASE.md](docs/RELEASE.md): версия в `[workspace.package]`, запись в
-`CHANGELOG.md`, тег `vMAJOR.MINOR.PATCH` -> CI собирает архивы (Vulkan и CPU) и образ контейнера.
+`CHANGELOG.md`, тег `vMAJOR.MINOR.PATCH` -> CI собирает архивы (Vulkan и CPU).
