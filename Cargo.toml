@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["crates/dicta-core", "crates/dictactl", "crates/dictad"]
+members = ["crates/dicta-core", "crates/dicta-ui", "crates/dictactl", "crates/dictad"]
 
 [workspace.package]
 version = "0.1.0"

@@ -8,7 +8,7 @@ use std::io::{BufRead, BufReader, Write};
 use std::os::unix::fs::PermissionsExt;
 use std::os::unix::net::{UnixListener, UnixStream};
 use std::path::PathBuf;
-use std::sync::atomic::{AtomicU32, AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicU32, AtomicU64, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::{Duration, Instant};
@@ -109,6 +109,7 @@ fn main() -> Result<()> {
     }));
     let state = Arc::new(AtomicUsize::new(State::Idle.to_index()));
     let level = Arc::new(AtomicU32::new(0));
+    let started_at = Arc::new(AtomicU64::new(0));
 
     // Модель прогреваем сразу: первый диктофон не должен ждать загрузки.
     {
@@ -162,9 +163,10 @@ fn main() -> Result<()> {
         let handler = handler.clone();
         let state = state.clone();
         let level = level.clone();
+        let started_at = started_at.clone();
         let socket2: PathBuf = socket.clone();
         thread::spawn(move || {
-            if let Err(err) = serve_conn(stream, handler, state, level, socket2) {
+            if let Err(err) = serve_conn(stream, handler, state, level, started_at, socket2) {
                 eprintln!("dictad: {err}");
             }
         });
@@ -180,11 +182,30 @@ fn bits_to_f32(v: u32) -> f32 {
     f32::from_bits(v)
 }
 
+fn now_ms() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_millis() as u64)
+        .unwrap_or(0)
+}
+
+fn elapsed_seconds(started_at: &Arc<AtomicU64>, state: &Arc<AtomicUsize>) -> f32 {
+    if State::from_index(state.load(Ordering::Relaxed)) != State::Recording {
+        return 0.0;
+    }
+    let start = started_at.load(Ordering::Relaxed);
+    if start == 0 {
+        return 0.0;
+    }
+    now_ms().saturating_sub(start) as f32 / 1000.0
+}
+
 fn serve_conn(
     stream: UnixStream,
     handler: Arc<Mutex<Handler>>,
     state: Arc<AtomicUsize>,
     level: Arc<AtomicU32>,
+    started_at: Arc<AtomicU64>,
     socket: PathBuf,
 ) -> Result<()> {
     let mut reader = BufReader::new(stream.try_clone()?);
@@ -196,7 +217,7 @@ fn serve_conn(
             "status" => Res {
                 state: State::from_index(state.load(Ordering::Relaxed)).as_str(),
                 level: bits_to_f32(level.load(Ordering::Relaxed)),
-                seconds: 0.0,
+                seconds: elapsed_seconds(&started_at, &state),
                 text: None,
                 error: None,
             },
@@ -205,6 +226,7 @@ fn serve_conn(
                 let cmd = req.cmd.clone();
                 if cmd == "cancel" {
                     h.recorder = None;
+                    started_at.store(0, Ordering::Relaxed);
                     state.store(State::Idle.to_index(), Ordering::Relaxed);
                     h.last_error = Some("запись отменена".into());
                 } else {
@@ -214,9 +236,9 @@ fn serve_conn(
                     _ => State::from_index(state.load(Ordering::Relaxed)) != State::Recording,
                 };
                 if want_start {
-                    run_start(&mut h, &state)?;
+                    run_start(&mut h, &state, &started_at)?;
                 } else {
-                    run_stop(&mut h, &state)?;
+                    run_stop(&mut h, &state, &started_at)?;
                 }
                 }
                 let seconds = h
@@ -256,19 +278,20 @@ fn serve_conn(
     Ok(())
 }
 
-fn run_start(h: &mut Handler, state: &Arc<AtomicUsize>) -> Result<()> {
+fn run_start(h: &mut Handler, state: &Arc<AtomicUsize>, started_at: &Arc<AtomicU64>) -> Result<()> {
     if State::from_index(state.load(Ordering::Relaxed)) == State::Recording {
         return Ok(());
     }
     h.last_error = None;
     h.last_text = None;
     let rec = Recorder::start(&h.cfg)?;
+    started_at.store(now_ms(), Ordering::Relaxed);
     h.recorder = Some(rec);
     state.store(State::Recording.to_index(), Ordering::Relaxed);
     Ok(())
 }
 
-fn run_stop(h: &mut Handler, state: &Arc<AtomicUsize>) -> Result<()> {
+fn run_stop(h: &mut Handler, state: &Arc<AtomicUsize>, started_at: &Arc<AtomicU64>) -> Result<()> {
     if State::from_index(state.load(Ordering::Relaxed)) != State::Recording {
         return Ok(());
     }
@@ -282,6 +305,7 @@ fn run_stop(h: &mut Handler, state: &Arc<AtomicUsize>) -> Result<()> {
         }
     };
     let spoken = recorder.elapsed();
+    started_at.store(0, Ordering::Relaxed);
 
     let samples = match recorder.stop() {
         Ok(s) => s,
