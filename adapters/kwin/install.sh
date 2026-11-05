@@ -53,6 +53,7 @@ else
     echo "nужен kwriteconfig6, чтобы скрипт загружался сам (иначе он живёт до перезапуска KWin)"
 fi
 dbus-send --session --dest=org.kde.KWin /KWin org.kde.KWin.reconfigure >/dev/null 2>&1 || true
+sleep 2
 
 loaded=$(dbus-send --session --print-reply --dest=org.kde.KWin /Scripting \
     org.kde.kwin.Scripting.isScriptLoaded string:"$ID" | tail -1 | awk '{print $NF}')
