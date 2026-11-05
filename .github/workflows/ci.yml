@@ -23,10 +23,26 @@ jobs:
           rm -rf /var/lib/apt/lists/*
 
       - name: Build (Vulkan, default)
-        run: cargo build --release --locked --workspace
+        run: |
+          set +e
+          cargo build --release --locked --workspace 2>&1 | tee /tmp/b1.log
+          rc=${PIPESTATUS[0]}
+          grep -E "^(error|warning: unused|error\[)|^  -->" /tmp/b1.log | tail -30 \
+            | sed 's/%/%25/g; s/\r/%0D/g' \
+            | while IFS= read -r line; do echo "::error::${line}"; done
+          tail -40 /tmp/b1.log
+          exit $rc
 
       - name: Build (CPU-only)
-        run: cargo build --release --locked --workspace --no-default-features
+        run: |
+          set +e
+          cargo build --release --locked --workspace --no-default-features 2>&1 | tee /tmp/b2.log
+          rc=${PIPESTATUS[0]}
+          grep -E "^(error|error\[)|^  -->" /tmp/b2.log | tail -30 \
+            | sed 's/%/%25/g; s/\r/%0D/g' \
+            | while IFS= read -r line; do echo "::error::${line}"; done
+          tail -40 /tmp/b2.log
+          exit $rc
 
       - name: Tests
         run: cargo test --workspace
