@@ -1,11 +1,21 @@
 version: 2
 updates:
+  # Мелкие и минорные обновления приходят, major — нет: часть зависимостей
+  # зафиксирована осознанно (atspi 0.22 + zbus 4.4 — под них написан обход
+  # дерева доступности в crates/dicta-core/src/atspi.rs).
   - package-ecosystem: cargo
     directory: "/"
     schedule:
       interval: weekly
     open-pull-requests-limit: 5
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
+
   - package-ecosystem: github-actions
     directory: "/"
     schedule:
       interval: monthly
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
