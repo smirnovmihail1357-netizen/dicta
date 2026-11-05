@@ -23,6 +23,9 @@ struct Req {
     /// Опциональная подсказка от адаптера: в какое окно вставлять (konsole, firefox...).
     #[serde(default)]
     app: Option<String>,
+    /// Для {"cmd":"inject"}: текст, который нужно вставить в активное окно.
+    #[serde(default)]
+    text: Option<String>,
 }
 
 #[derive(serde::Serialize)]
@@ -266,6 +269,49 @@ fn serve_conn(
                 text: None,
                 error: None,
             },
+            "inject" => {
+                let text = req.text.clone().unwrap_or_default();
+                let mut h = handler.lock().map_err(|_| anyhow::anyhow!("handler отравлен"))?;
+                if text.is_empty() || text.chars().count() > 5000 {
+                    Res {
+                        state: State::Idle.as_str(),
+                        level: 0.0,
+                        seconds: 0.0,
+                        text: None,
+                        error: Some("inject: текст пустой или длиннее 5000 символов".into()),
+                    }
+                } else {
+                    // Подсказка окна необязательна: demo сам спросит адаптер/кэш.
+                    let app = dicta_core::focus::active_app(req.app.as_deref());
+                    let keys = h.cfg.paste_keys_for(app.as_deref());
+                    let combo = Combo::parse(&keys).unwrap_or_else(|_| h.paste_combo.clone());
+                    h.last_text = Some(text.clone());
+                    match inject::insert_text(&text, &h.cfg.inject_mode, combo, Duration::from_millis(900))
+                    {
+                        Ok(()) => {
+                            eprintln!("dictad: inject {keys} в {app:?}: {text:?}");
+                            h.last_error = None;
+                            Res {
+                                state: State::Idle.as_str(),
+                                level: 0.0,
+                                seconds: 0.0,
+                                text: Some(text),
+                                error: None,
+                            }
+                        }
+                        Err(err) => {
+                            h.last_error = Some(format!("вставка не удалась: {err}"));
+                            Res {
+                                state: State::Idle.as_str(),
+                                level: 0.0,
+                                seconds: 0.0,
+                                text: None,
+                                error: h.last_error.clone(),
+                            }
+                        }
+                    }
+                }
+            }
             "start" | "stop" | "toggle" | "cancel" => {
                 let mut h = handler.lock().map_err(|_| anyhow::anyhow!("handler отравлен"))?;
                 let cmd = req.cmd.clone();

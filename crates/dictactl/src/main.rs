@@ -66,6 +66,8 @@ enum Command {
     },
     /// Какое окно демон считает фокусным и какие клавиши вставки он выберет
     PasteKeys,
+    /// Вставить текст в активное окно (проверка вставки без записи и распознавания)
+    Inject { text: String },
     /// Записать N секунд и показать измеренные уровни (чтобы подобрать min_level)
     Calibrate {
         #[arg(long, default_value_t = 8)]
@@ -73,6 +75,24 @@ enum Command {
     },
     /// Сообщить демону-обёртке, какое окно сейчас фокусное (для ~/.cache/dicta/focus)
     FocusReport { app: String },
+}
+
+fn ask_json(socket: &std::path::Path, payload: &str) -> Result<String> {
+    use std::io::{BufRead, BufReader, Write};
+    let stream = std::os::unix::net::UnixStream::connect(socket).map_err(|err| {
+        anyhow::anyhow!(
+            "демон не отвечает на {} ({err}) — запусти dictad",
+            socket.display()
+        )
+    })?;
+    stream.set_read_timeout(Some(std::time::Duration::from_secs(120)))?;
+    let mut writer = stream.try_clone()?;
+    let mut reader = BufReader::new(stream);
+    writer.write_all(payload.as_bytes())?;
+    writer.flush()?;
+    let mut line = String::new();
+    reader.read_line(&mut line)?;
+    Ok(line.trim().to_string())
 }
 
 fn ask(socket: &std::path::Path, cmd: &str, app: Option<&str>) -> Result<String> {
@@ -174,6 +194,22 @@ fn main() -> Result<()> {
         Command::Toggle => println!("{}", ask(&cfg.socket, "toggle", cli.app.as_deref())?),
         Command::Cancel => println!("{}", ask(&cfg.socket, "cancel", cli.app.as_deref())?),
         Command::Status => println!("{}", ask(&cfg.socket, "status", None)?),
+        Command::Inject { text } => {
+            let text = text.replace(['"', '\\'], "");
+            let app = cli
+                .app
+                .as_deref()
+                .map(|a| a.replace(['"', '\\'], ""))
+                .map(|a| format!(",\"app\":\"{a}\""))
+                .unwrap_or_default();
+            println!(
+                "{}",
+                ask_json(
+                    &cfg.socket,
+                    &format!("{{\"cmd\":\"inject\",\"text\":\"{text}\"{app}}}\n")
+                )?
+            );
+        }
         Command::Calibrate { secs } => {
             println!(
                 "говори все {secs} с (считай это тренировкой диктовки), потом ~2 с помолчи"
