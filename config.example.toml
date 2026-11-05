@@ -1,0 +1,29 @@
+# ~/.config/dicta/config.toml
+# Все поля необязательные; значения по умолчанию совпадают с этим файлом.
+
+# ggml-модель whisper.cpp. medium-q5_0 — текущая рабочая (лучше по русскому).
+# Для быстрой проверки без нагрузки на VRAM: ggml-small-q5_1.bin + use_gpu = false.
+model = "/home/wardreg/.local/share/whisper-cpp/ggml-medium-q5_0.bin"
+
+language = "ru"
+beam_size = 5
+n_threads = 4
+
+# false -> только CPU (не трогает VRAM, безопасно рядом с llama-swap).
+use_gpu = true
+gpu_device = 0
+flash_attn = false
+
+# Вокабуляр. Если убрать, берётся типовая строка по языку.
+prompt = "Разговор о программировании. Rust, TypeScript, JSON, API, git, PipeWire, Wayland, Proxmox."
+
+# PipeWire source для записи. null -> дефолтный микрофон системы.
+# Список: pactl list short sources
+# mic = "alsa_input.usb-MV-SILICON_fifine_Microphone_20190808-00.analog-stereo"
+
+socket = "/run/user/1000/dicta.sock"
+
+# Как вставлять текст: "paste" (буфер + клавиши), "clipboard" (только буфер),
+# "stdout" (печатать в терминал — безопасно для проверки).
+inject_mode = "paste"
+paste_keys = "ctrl+v"
