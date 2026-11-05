@@ -1,0 +1,6 @@
+[Unit]
+Description=Dicta: проверка цепочки «клавиша -> systemd -> демон» (окно %i)
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/env bash -c 'echo "$(date -u +%%FT%%T)Z hotkey %i" >> /tmp/dicta-probe.log; %h/.local/bin/dictactl paste-keys --app %i >> /tmp/dicta-probe.log'

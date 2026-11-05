@@ -1,0 +1,6 @@
+[Unit]
+Description=Dicta: проверка цепочки «горячая клавиша -> systemd -> демон»
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/env bash -c 'echo "$(date -u +%%FT%%T)Z hotkey" >> /tmp/dicta-probe.log; %h/.local/bin/dictactl status >> /tmp/dicta-probe.log'

@@ -1,0 +1,18 @@
+[Unit]
+Description=Dicta — демон системного голосового ввода
+PartOf=graphical-session.target
+After=graphical-session.target pipewire.service
+Wants=pipewire.service
+
+[Service]
+Type=simple
+# --ui поднимает и держит живым оверлей-индикатор (dicta-ui)
+ExecStart=%h/.local/bin/dictad --ui
+Restart=on-failure
+RestartSec=3
+# Сокет: /run/user/1000/dicta.sock (берётся из ~/.config/dicta/config.toml)
+# Горячую клавишу встраивает сам демон, если у пользователя есть доступ к
+# /dev/input/event* (группа input или udev-ACL) — тогда юнит-адаптеры не нужны.
+
+[Install]
+WantedBy=graphical-session.target

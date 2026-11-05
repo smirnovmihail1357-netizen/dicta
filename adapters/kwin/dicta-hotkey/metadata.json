@@ -1,0 +1,12 @@
+{
+    "KPackageStructure": "KWin/Script",
+    "KPlugin": {
+        "Description": "Глобальная горячая клавиша диктовки dicta (start/stop, cancel)",
+        "Id": "dicta-hotkey",
+        "License": "MIT",
+        "Name": "Dicta Hotkey"
+    },
+    "X-KDE-ConfigModule": "kcm_kwin4_genericscripted",
+    "X-Plasma-API": "javascript",
+    "X-Plasma-MainScript": "code/main.js"
+}

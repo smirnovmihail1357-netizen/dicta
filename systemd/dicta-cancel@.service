@@ -1,0 +1,6 @@
+[Unit]
+Description=Dicta: отменить запись (окно %i)
+
+[Service]
+Type=oneshot
+ExecStart=%h/.local/bin/dictactl cancel --app %i

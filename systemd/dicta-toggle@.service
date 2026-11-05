@@ -1,0 +1,7 @@
+[Unit]
+Description=Dicta: начать или закончить диктовку (окно %i)
+
+[Service]
+Type=oneshot
+# %i — имя фокусного окна, его подставляет KWin-скрипт (dicta-toggle@konsole.service)
+ExecStart=%h/.local/bin/dictactl toggle --app %i
