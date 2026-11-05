@@ -11,7 +11,9 @@
 #   * Vulkan в контейнере требует /dev/dri + mesa-vulkan-drivers; без этого поставь
 #     в конфиге use_gpu = false — ggml собран с Vulkan, но возьмёт CPU.
 
-ARG RUST_IMAGE=rust:1-bookworm
+# rust:1-trixie, а не bookworm: ggml-vulkan в whisper-rs-sys 0.15 требует Vulkan-Hpp
+# с vk::LayerSettingEXT (Vulkan-Headers 1.4+). В bookworm headers 1.3.239 -> сборка падает.
+ARG RUST_IMAGE=rust:1-trixie
 
 # --- сборка -----------------------------------------------------------------
 FROM ${RUST_IMAGE} AS build
@@ -19,7 +21,7 @@ ARG VULKAN=1
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
         build-essential pkg-config cmake clang libclang-dev \
-        libvulkan-dev glslang-tools libxkbcommon-dev \
+        libvulkan-dev glslang-tools glslc libxkbcommon-dev \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /build
@@ -38,7 +40,7 @@ RUN set -eux; \
     cp -v target/release/dictad target/release/dictactl target/release/dicta-ui /usr/local/bin/
 
 # --- рантайм ----------------------------------------------------------------
-FROM debian:bookworm-slim AS runtime
+FROM debian:trixie-slim AS runtime
 
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
@@ -57,7 +59,7 @@ COPY config.example.toml /usr/local/share/dicta/config.example.toml
 RUN chmod +x /usr/local/bin/dicta-entrypoint
 
 ENV DICTA_CONFIG=/config/config.toml \
-    DICTA_SOCKET=/run/user/1000/dicta.sock \
+    DICTA_SOCKET=/run/dicta/dicta.sock \
     DICTA_MODEL=/models/ggml-medium-q5_0.bin \
     XDG_RUNTIME_DIR=/run/user/1000
 

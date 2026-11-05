@@ -267,7 +267,7 @@ checksum = "f27ae1dd37df86211c42e150270f82743308803d90a6f6e6651cd730d5e1732f"
 
 [[package]]
 name = "dicta-core"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "dirs",
@@ -282,7 +282,7 @@ dependencies = [
 
 [[package]]
 name = "dicta-ui"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "ab_glyph",
  "anyhow",
@@ -294,7 +294,7 @@ dependencies = [
 
 [[package]]
 name = "dictactl"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "clap",
@@ -303,7 +303,7 @@ dependencies = [
 
 [[package]]
 name = "dictad"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "dicta-core",

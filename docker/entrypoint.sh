@@ -5,7 +5,7 @@ set -eu
 CONFIG="${DICTA_CONFIG:-/config/config.toml}"
 MODEL="${DICTA_MODEL:-/models/ggml-medium-q5_0.bin}"
 
-mkdir -p "$(dirname "$CONFIG")" /models
+mkdir -p "$(dirname "$CONFIG")" /models "$(dirname "${DICTA_SOCKET:-/run/dicta/dicta.sock}")"
 if [ ! -f "$CONFIG" ]; then
     cp /usr/local/share/dicta/config.example.toml "$CONFIG"
     echo "dicta: создан $CONFIG из примера — правь через volume /config"

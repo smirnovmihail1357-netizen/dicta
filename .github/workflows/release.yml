@@ -20,7 +20,7 @@ jobs:
           - name: cpu
             extra: "--no-default-features"
     container:
-      image: rust:1-bookworm
+      image: rust:1-trixie
     steps:
       - uses: actions/checkout@v4
       - name: System deps
@@ -28,7 +28,7 @@ jobs:
           apt-get update
           apt-get install -y --no-install-recommends \
             build-essential pkg-config cmake clang libclang-dev \
-            libvulkan-dev glslang-tools
+            libvulkan-dev glslang-tools glslc
           rm -rf /var/lib/apt/lists/*
       - name: Build
         run: cargo build --release --locked --workspace ${{ matrix.extra }}

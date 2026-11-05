@@ -48,7 +48,7 @@ Then: `Alt+V`, speak 3-4 seconds, `Alt+V`. Watch what happened:
 journalctl --user -u dictad.service -f
 ```
 
-CPU-only build (no Vulkan SDK needed; add `use_gpu = false` to the config):
+CPU-only build (needs neither `glslc` nor `glslangValidator`; add `use_gpu = false` to the config):
 
 ```bash
 make build-cpu        # cargo build --release --no-default-features

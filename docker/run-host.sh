@@ -20,6 +20,6 @@ docker run --rm -it \
     -e XDG_RUNTIME_DIR="$RUNTIME" \
     -e WAYLAND_DISPLAY="$WAYLAND" \
     -e DICTA_CONFIG=/config/config.toml \
-    -e DICTA_SOCKET="$RUNTIME/dicta.sock" \
+    -e DICTA_SOCKET=/run/dicta/dicta.sock \
     -e DICTA_MODEL=/models/ggml-medium-q5_0.bin \
     "$IMAGE" "$@"

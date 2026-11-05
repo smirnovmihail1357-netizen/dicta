@@ -146,9 +146,12 @@ fn default_socket_path() -> PathBuf {
 impl Config {
     /// $DICTA_CONFIG, затем XDG_CONFIG_HOME/dicta/config.toml, затем defaults.
     pub fn load(explicit: Option<&std::path::Path>) -> Result<Self> {
+        // Приоритет: явный --config, затем $DICTA_CONFIG (нужно контейнеру: там конфиг в /config),
+        // затем XDG_CONFIG_HOME/dicta/config.toml.
+        let from_env = || std::env::var_os("DICTA_CONFIG").map(std::path::PathBuf::from);
         let path = match explicit {
             Some(p) => Some(p.to_path_buf()),
-            None => dirs::config_dir().map(|d| d.join("dicta").join("config.toml")),
+            None => from_env().or_else(|| dirs::config_dir().map(|d| d.join("dicta").join("config.toml"))),
         };
 
         let Some(path) = path else {
