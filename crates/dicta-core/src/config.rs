@@ -30,6 +30,12 @@ pub struct Config {
     /// Как вставлять: "paste" (буфер + клавиши), "clipboard" (только буфер),
     /// "stdout" (напечатать в терминал — для проверки без влияния на окна).
     pub inject_mode: String,
+    /// Минимальный уровень записи в той же шкале 0..1, что и индикатор в UI
+    /// (`audio::normalized_rms`: -55 дБ -> 0.0, -15 дБ -> 1.0). Ниже порога
+    /// распознавание не запускается: whisper на фоновом шуме уверенно сочиняет
+    /// правдоподобные фразы, и они улетели бы в фокусное окно.
+    /// Измерено на этой машине: фон в комнате ~0.25, русская речь ~0.95.
+    pub min_level: f32,
     /// Глобальная горячая клавиша демона (evdev, читает /dev/input/event*).
     /// По умолчанию "off": доступ к /dev/input обычно требует группы input или
     /// udev-ACL, а клавишу чаще навешивает DE (см. adapters/README.md).
@@ -56,6 +62,7 @@ impl Default for Config {
             paste_keys: "ctrl+v".into(),
             inject_mode: "paste".into(),
             hotkey: "off".into(),
+            min_level: 0.5,
             paste_keys_by_app: default_paste_keys_by_app(),
         }
     }

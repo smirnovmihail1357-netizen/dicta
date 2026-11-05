@@ -126,8 +126,8 @@ pub fn record_to(cfg: &Config, secs: u64, out: &std::path::Path) -> Result<()> {
 }
 
 fn wav_header(data_len: usize) -> [u8; 44] {
-    let total = 44 + data_len * 2;
     let data_size = (data_len * 2) as u32;
+    let total = (44 + data_len * 2) as u32;
     let mut h = [0u8; 44];
     h[0..4].copy_from_slice(b"RIFF");
     h[4..8].copy_from_slice(&(total - 8).to_le_bytes());

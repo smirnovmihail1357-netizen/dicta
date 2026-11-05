@@ -28,6 +28,11 @@ socket = "/run/user/1000/dicta.sock"
 inject_mode = "paste"
 paste_keys = "ctrl+v"
 
+# Порог уровня записи в шкале индикатора (0..1; -55 дБ -> 0.0, -15 дБ -> 1.0): ниже —
+# распознавание не запускается (whisper на шуме сочиняет фразы, они вставились бы в окно).
+# На этой машине: фон в комнате ~0.25, русская речь ~0.95.
+min_level = 0.5
+
 # Клавиши под конкретные окна (id окна приходит от адаптера: dictactl toggle --app konsole).
 # Имя окна нормализуется: org.kde.konsole -> konsole, firefox.desktop -> firefox.
 # Если окна нет в списке (и имени нет в ~/.cache/dicta/focus) — берётся paste_keys.
