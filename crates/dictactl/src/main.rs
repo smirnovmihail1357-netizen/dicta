@@ -16,6 +16,11 @@ struct Cli {
     #[arg(long, global = true)]
     mic: Option<String>,
 
+    /// В какое окно вставлять (id приложения: konsole, firefox, kate...).
+    /// Адаптеры горячей клавиши получают это из композитора.
+    #[arg(long, global = true)]
+    app: Option<String>,
+
     /// Не использовать GPU (CPU-бэкенд, не трогает VRAM)
     #[arg(long, global = true)]
     cpu: bool,
@@ -59,9 +64,13 @@ enum Command {
     TestKeys {
         combo: String,
     },
+    /// Какое окно демон считает фокусным и какие клавиши вставки он выберет
+    PasteKeys,
+    /// Сообщить демону-обёртке, какое окно сейчас фокусное (для ~/.cache/dicta/focus)
+    FocusReport { app: String },
 }
 
-fn ask(socket: &std::path::Path, cmd: &str) -> Result<String> {
+fn ask(socket: &std::path::Path, cmd: &str, app: Option<&str>) -> Result<String> {
     use std::io::{BufRead, BufReader, Write};
     let stream = std::os::unix::net::UnixStream::connect(socket).map_err(|err| {
         anyhow::anyhow!(
@@ -70,9 +79,16 @@ fn ask(socket: &std::path::Path, cmd: &str) -> Result<String> {
         )
     })?;
     stream.set_read_timeout(Some(std::time::Duration::from_secs(120)))?;
+    let payload = match app {
+        Some(app) => {
+            let app = app.replace(['"', '\\'], "");
+            format!("{{\"cmd\":\"{cmd}\",\"app\":\"{app}\"}}\n")
+        }
+        None => format!("{{\"cmd\":\"{cmd}\"}}\n"),
+    };
     let mut writer = stream.try_clone()?;
     let mut reader = BufReader::new(stream);
-    writer.write_all(format!("{{\"cmd\":\"{cmd}\"}}\n").as_bytes())?;
+    writer.write_all(payload.as_bytes())?;
     writer.flush()?;
     let mut line = String::new();
     reader.read_line(&mut line)?;
@@ -148,11 +164,25 @@ fn main() -> Result<()> {
         Command::TestKeys { combo } => {
             dicta_core::inject::test_keys(&combo)?;
         }
-        Command::Start => println!("{}", ask(&cfg.socket, "start")?),
-        Command::Stop => println!("{}", ask(&cfg.socket, "stop")?),
-        Command::Toggle => println!("{}", ask(&cfg.socket, "toggle")?),
-        Command::Cancel => println!("{}", ask(&cfg.socket, "cancel")?),
-        Command::Status => println!("{}", ask(&cfg.socket, "status")?),
+        Command::Start => println!("{}", ask(&cfg.socket, "start", cli.app.as_deref())?),
+        Command::Stop => println!("{}", ask(&cfg.socket, "stop", cli.app.as_deref())?),
+        Command::Toggle => println!("{}", ask(&cfg.socket, "toggle", cli.app.as_deref())?),
+        Command::Cancel => println!("{}", ask(&cfg.socket, "cancel", cli.app.as_deref())?),
+        Command::Status => println!("{}", ask(&cfg.socket, "status", None)?),
+        Command::FocusReport { app } => {
+            dicta_core::focus::write_focus_cache(&app)?;
+            println!("{}", dicta_core::focus::focus_cache_path().display());
+        }
+        Command::PasteKeys => {
+            let app = dicta_core::focus::active_app(cli.app.as_deref());
+            let keys = cfg.paste_keys_for(app.as_deref());
+            println!(
+                "окно: {}\nклавиши: {} (по умолчанию: {})",
+                app.unwrap_or_else(|| "не определено".into()),
+                keys,
+                cfg.paste_keys
+            );
+        }
     }
 
     Ok(())

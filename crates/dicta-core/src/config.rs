@@ -30,7 +30,9 @@ pub struct Config {
     /// Как вставлять: "paste" (буфер + клавиши), "clipboard" (только буфер),
     /// "stdout" (напечатать в терминал — для проверки без влияния на окна).
     pub inject_mode: String,
-    /// Глобальная горячая клавиша демона (evdev). "off" — выключить.
+    /// Глобальная горячая клавиша демона (evdev, читает /dev/input/event*).
+    /// По умолчанию "off": доступ к /dev/input обычно требует группы input или
+    /// udev-ACL, а клавишу чаще навешивает DE (см. adapters/README.md).
     pub hotkey: String,
     /// Клавиши вставки по классу фокусного окна: { konsole = "shift+insert", ... }.
     /// Имя окна берётся у композитора (`focus::active_app`), ключ — после
@@ -53,7 +55,7 @@ impl Default for Config {
             socket: default_socket_path(),
             paste_keys: "ctrl+v".into(),
             inject_mode: "paste".into(),
-            hotkey: "ctrl+alt+v".into(),
+            hotkey: "off".into(),
             paste_keys_by_app: default_paste_keys_by_app(),
         }
     }

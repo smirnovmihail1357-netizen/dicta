@@ -11,8 +11,9 @@ Kate, Konsole, Firefox, Discord, чат в браузере, промпт pi/ope
 |---|---|
 | `dicta-core` | конфиг, запись (PipeWire), распознавание (whisper-rs, Vulkan/HIP/CPU), фильтр галлюцинаций |
 | `dictad` | демон: Unix-сокет, запись, инференс, вставка текста в фокусное окно |
-| `dictactl` | CLI: `toggle`, `start`, `stop`, `status`, `infer file.wav` (диагностика) |
-| `adapters/` | горячие клавиши: KWin/D-Bus, Hyprland, sway, Quickshell; все зовут `dictactl` |
+| `dictactl` | CLI: `toggle`, `start`, `stop`, `status`, `paste-keys`, `infer file.wav` (диагностика) |
+| `adapters/` | горячие клавиши: KWin-скрипт (Plasma 6), Hyprland, sway, Quickshell, GNOME; все зовут `dictactl` |
+| `systemd/` | user-сервис `dictad.service` + oneshot-юниты для клавиш DE |
 
 ## Статус
 
@@ -22,10 +23,15 @@ Kate, Konsole, Firefox, Discord, чат в браузере, промпт pi/ope
 - [x] Unix-сокет + `dictactl start/stop/toggle/cancel/status` (проверено: status/start/level/cancel)
 - [x] вставка текста: wl-copy + uinput-клавиши, режимы `paste` / `clipboard` / `stdout` (на живых окнах ещё не проверялась)
 - [x] layer-shell оверлей `dicta-ui` (KWin проверялся: `zwlr_layer_shell_v1` есть, пилюля 520x34 рисуется и видна на снимке экрана)
-- [ ] горячие клавиши по композиторам (KWin D-Bus, Hyprland bind, sway bindsym, Quickshell)
-- [ ] выбор клавиш вставки по классу фокусного окна (Konsole -> Shift+Insert, Kate/Firefox -> Ctrl+V)
+- [x] горячие клавиши: `adapters/` (KWin-скрипт `registerShortcut` + `callDBus` -> systemd-юнит, Hyprland, sway, Quickshell, GNOME) и встроенный evdev-слушатель в демоне
+      (проверено на живом Plasma 6: скрипт регистрирует `dicta-toggle`/`dicta-cancel`, цепочка
+      «скрипт -> systemd1 -> юнит -> dictactl» отработала; evdev требует группу `input`)
+- [x] `systemd/` — user-сервис демона + oneshot-юниты `dicta-toggle`/`dicta-cancel`
+      (+ шаблонные `dicta-toggle@<окно>.service`), `dictad --install-autostart` для `.desktop`
+- [x] выбор клавиш вставки по фокусному окну: `paste_keys_by_app`, `dictactl --app <окно>`,
+      `dictactl paste-keys` (проверено: konsole -> shift+insert, firefox -> ctrl+v)
+- [ ] живая проверка вставки в реальные окна (пока проверялась только сборка клавиш и uinput-события)
 - [ ] AT-SPI2-вставка (zbus) как точный путь без буфера обмена
-- [ ] systemd user-сервис + autostart
 
 ## Сборка
 
@@ -65,15 +71,25 @@ dicta-ui --probe         # проверить, понимает ли компо�
 
 ## Горячая клавиша
 
-Где-то должен быть запуск `dictactl toggle`. Готовые сниппеты:
+Полная инструкция — в [`adapters/README.md`](adapters/README.md). Варианты:
 
 | Композитор | как |
 |---|---|
-| KDE Plasma | System Settings → Shortcuts → Custom Shortcuts → Command/URL → `dictactl toggle`, ключ `Meta+V` |
-| Hyprland | `bind = META, V, exec, dictactl toggle` |
-| Sway | `bindsym $mod+v exec dictactl toggle` |
-| GNOME | `gsettings set org.gnome.settings-daemon.plugins.media-keys custom-keybindings "['/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/custom0/']"` + name/command |
-| любой (нужен доступ к /dev/input/event*) | встроенный evdev-слушатель демона (нужен udev-правкой доступ) |
+| KDE Plasma 6 | `./systemd/install.sh && ./adapters/kwin/install.sh` (скрипт `dicta-hotkey`, `Meta+V`) или System Settings → Keyboard → Custom Shortcuts → `systemctl --user start dicta-toggle.service` |
+| Hyprland | `source = ~/projects/dicta/adapters/hyprland/dicta.conf` |
+| Sway | `include ~/projects/dicta/adapters/sway/dicta.conf` |
+| GNOME | `./adapters/gnome/apply.sh '<Ctrl><Alt>v'` |
+| любой DE/без DE | встроенный evdev-слушатель демона: `hotkey = "ctrl+alt+v"` + доступ к `/dev/input/event*` (группа `input` или udev-ACL) |
+
+Демон сам стартует оверлей по `--ui` (`dictad --ui`), а `dictad --install-autostart` кладёт
+`.desktop` в autostart и печатает подсказку по udev.
+
+## Клавиши вставки под конкретное окно
+
+Демон не умеет сам спрашивать у композитора фокусное окно (у KWin `queryWindowInfo`
+интерактивный), поэтому окно передаёт адаптер: `dictactl toggle --app konsole`
+(KWin-скрипт делает это сам через шаблонный юнит `dicta-toggle@konsole.service`).
+Диагностика: `dictactl paste-keys --app org.kde.konsole`.
 
 ## Vulkan-устройства
 
