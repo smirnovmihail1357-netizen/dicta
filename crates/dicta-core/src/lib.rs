@@ -2,6 +2,8 @@ pub mod audio;
 pub mod capture;
 pub mod config;
 pub mod filter;
+pub mod focus;
+pub mod hotkey;
 pub mod inject;
 pub mod stt;
 

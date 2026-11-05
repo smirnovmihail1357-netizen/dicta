@@ -20,6 +20,9 @@ use dicta_core::{capture::Recorder, Config, Engine};
 #[derive(serde::Deserialize)]
 struct Req {
     cmd: String,
+    /// Опциональная подсказка от адаптера: в какое окно вставлять (konsole, firefox...).
+    #[serde(default)]
+    app: Option<String>,
 }
 
 #[derive(serde::Serialize)]
@@ -72,6 +75,9 @@ struct Handler {
 }
 
 fn main() -> Result<()> {
+    if std::env::args().any(|a| a == "--install-autostart") {
+        return install_autostart();
+    }
     let cfg = Config::load(
         std::env::var_os("DICTA_CONFIG")
             .as_deref()
@@ -158,6 +164,45 @@ fn main() -> Result<()> {
         cfg.language
     );
 
+    // Встроенная глобальная горячая клавиша (evdev): без скриптов DE,
+    // работает в KWin/Hyprland/sway/GNOME одинаково.
+    let hotkey_spec = std::env::var("DICTA_HOTKEY").unwrap_or_else(|_| cfg.hotkey.clone());
+    if hotkey_spec != "off" {
+        let handler = handler.clone();
+        let state = state.clone();
+        let started_at = started_at.clone();
+        thread::spawn(move || {
+            let mut backoff = Duration::from_secs(10);
+            loop {
+                let outcome = dicta_core::hotkey::listen(&hotkey_spec, || {
+                    if let Err(err) = do_toggle(&handler, &state, &started_at) {
+                        eprintln!("dictad: {err}");
+                    }
+                });
+                match outcome {
+                    Ok(()) => break,
+                    Err(err) => {
+                        eprintln!(
+                            "dictad: горячая клавиша '{}' недоступна: {} (повтор через {:?})",
+                            hotkey_spec, err, backoff
+                        );
+                        eprintln!(
+                            "dictad: либо добавь пользователя в группу input (или udev-ACL на /dev/input/event*), \
+                             либо hotkey = \"off\" и клавишу DE (см. adapters/README.md)"
+                        );
+                        thread::sleep(backoff);
+                        backoff = (backoff * 2).min(Duration::from_secs(900));
+                    }
+                }
+            }
+        });
+    }
+
+    // По --ui поднимаем оверлей сами: демон + индикатор одной командой.
+    if std::env::args().any(|a| a == "--ui") || std::env::var("DICTA_UI").is_ok() {
+        thread::spawn(spawn_ui);
+    }
+
     for stream in listener.incoming() {
         let Ok(stream) = stream else { continue };
         let handler = handler.clone();
@@ -238,7 +283,7 @@ fn serve_conn(
                 if want_start {
                     run_start(&mut h, &state, &started_at)?;
                 } else {
-                    run_stop(&mut h, &state, &started_at)?;
+                    run_stop(&mut h, &state, &started_at, req.app.as_deref())?;
                 }
                 }
                 let seconds = h
@@ -291,7 +336,12 @@ fn run_start(h: &mut Handler, state: &Arc<AtomicUsize>, started_at: &Arc<AtomicU
     Ok(())
 }
 
-fn run_stop(h: &mut Handler, state: &Arc<AtomicUsize>, started_at: &Arc<AtomicU64>) -> Result<()> {
+fn run_stop(
+    h: &mut Handler,
+    state: &Arc<AtomicUsize>,
+    started_at: &Arc<AtomicU64>,
+    app_hint: Option<&str>,
+) -> Result<()> {
     if State::from_index(state.load(Ordering::Relaxed)) != State::Recording {
         return Ok(());
     }
@@ -348,19 +398,94 @@ fn run_stop(h: &mut Handler, state: &Arc<AtomicUsize>, started_at: &Arc<AtomicU6
 
     h.last_text = Some(text.clone());
 
-    if let Err(err) = inject::insert_text(
-        &text,
-        &h.cfg.inject_mode,
-        h.paste_combo.clone(),
-        Duration::from_millis(900),
-    ) {
+    // Клавиши вставки подбираем под фокусное окно (konsole -> Shift+Insert,
+    // браузер/Kate -> Ctrl+V).
+    let app = dicta_core::focus::active_app(app_hint);
+    let keys = h.cfg.paste_keys_for(app.as_deref());
+    let combo = Combo::parse(&keys).unwrap_or_else(|_| h.paste_combo.clone());
+
+    if let Err(err) = inject::insert_text(&text, &h.cfg.inject_mode, combo.clone(), Duration::from_millis(900)) {
         h.last_error = Some(format!("вставка не удалась: {err}"));
     }
 
     eprintln!(
-        "dictad: \"{text}\" (записано {spoken:?}, распознано за {inferred:?})"
+        "dictad: \"{text}\" (записано {spoken:?}, распознано за {inferred:?}, вставка {keys} в {:?})",
+        app
     );
 
     state.store(State::Idle.to_index(), Ordering::Relaxed);
+    Ok(())
+}
+
+fn do_toggle(
+    handler: &Arc<Mutex<Handler>>,
+    state: &Arc<AtomicUsize>,
+    started_at: &Arc<AtomicU64>,
+) -> Result<()> {
+    let mut h = handler.lock().map_err(|_| anyhow::anyhow!("handler отравлен"))?;
+    let want_start = State::from_index(state.load(Ordering::Relaxed)) != State::Recording;
+    if want_start {
+        run_start(&mut h, state, started_at)
+    } else {
+        run_stop(&mut h, state, started_at, None)
+    }
+}
+
+/// Держит оверлей dicta-ui живым, пока работает демон.
+fn spawn_ui() {
+    let exe = std::env::current_exe().ok().and_then(|path| {
+        let sibling = path.parent()?.join("dicta-ui");
+        if sibling.exists() {
+            Some(sibling)
+        } else {
+            let local = home_dir().join(".local/bin/dicta-ui");
+            local.exists().then_some(local)
+        }
+    });
+    let Some(exe) = exe else {
+        eprintln!("dictad: dicta-ui не найден рядом с демоном");
+        return;
+    };
+    loop {
+        match std::process::Command::new(&exe).spawn() {
+            Ok(mut child) => {
+                let _ = child.wait();
+            }
+            Err(err) => eprintln!("dictad: не смог запустить {}: {err}", exe.display()),
+        }
+        thread::sleep(Duration::from_secs(2));
+    }
+}
+
+fn home_dir() -> PathBuf {
+    std::env::var_os("HOME").map(PathBuf::from).unwrap_or_default()
+}
+
+/// Autostart-запись + подсказка про одноразовое разрешение на /dev/input.
+fn install_autostart() -> Result<()> {
+    let config_home = std::env::var_os("XDG_CONFIG_HOME")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| home_dir().join(".config"));
+    let dir = config_home.join("autostart");
+    std::fs::create_dir_all(&dir)?;
+
+    let bin = {
+        let local = home_dir().join(".local/bin/dictad");
+        if local.exists() { local } else { std::env::current_exe()? }
+    };
+    let entry = format!(
+        "[Desktop Entry]\nName=Dicta (голосовой ввод)\nComment=Диктовка в любое окно\nType=Application\nExec={} --ui\nTerminal=false\nX-GNOME-Autostart-enabled=true\nX-KDE-autostart-after=login\n",
+        bin.display()
+    );
+    let file = dir.join("dicta.desktop");
+    std::fs::write(&file, &entry)?;
+    println!("автозапуск: {}", file.display());
+
+    println!();
+    println!("Один раз (нужен root), чтобы демон сам слушал клавишу:");
+    println!(r#"  printf 'KERNEL=="event*", SUBSYSTEM=="input", MODE="0660", GROUP="input"\n' > /etc/udev/rules.d/99-dicta-input.rules"#);
+    println!("  sudo udevadm control --reload-rules && sudo udevadm trigger");
+    println!("либо: sudo usermod -aG input $USER и перелогин.");
+    println!("Без этого диктовка запускается клавишей, назначенной в DE.");
     Ok(())
 }

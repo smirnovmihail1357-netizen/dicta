@@ -27,3 +27,13 @@ socket = "/run/user/1000/dicta.sock"
 # "stdout" (печатать в терминал — безопасно для проверки).
 inject_mode = "paste"
 paste_keys = "ctrl+v"
+
+# Клавиши под конкретные окна (id окна приходит от адаптера: dictactl toggle --app konsole).
+# Имя окна нормализуется: org.kde.konsole -> konsole, firefox.desktop -> firefox.
+# Если окна нет в списке (и имени нет в ~/.cache/dicta/focus) — берётся paste_keys.
+# Значения по умолчанию уже покрывают терминалы (shift+insert) и браузеры/редакторы (ctrl+v).
+# paste_keys_by_app = { konsole = "shift+insert", kitty = "ctrl+shift+v", firefox = "ctrl+v" }
+
+# Встроенная глобальная клавиша демона (evdev, читает /dev/input/event*).
+# Требует доступа: группа input или udev-ACL. "off" — полагаться на клавишу DE.
+hotkey = "ctrl+alt+v"

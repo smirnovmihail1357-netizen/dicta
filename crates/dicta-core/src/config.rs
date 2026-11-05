@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::path::PathBuf;
 
 use anyhow::{Context, Result};
@@ -29,6 +30,12 @@ pub struct Config {
     /// Как вставлять: "paste" (буфер + клавиши), "clipboard" (только буфер),
     /// "stdout" (напечатать в терминал — для проверки без влияния на окна).
     pub inject_mode: String,
+    /// Глобальная горячая клавиша демона (evdev). "off" — выключить.
+    pub hotkey: String,
+    /// Клавиши вставки по классу фокусного окна: { konsole = "shift+insert", ... }.
+    /// Имя окна берётся у композитора (`focus::active_app`), ключ — после
+    /// `focus::normalize` (без точек, тире и подчёркиваний, в нижнем регистре).
+    pub paste_keys_by_app: HashMap<String, String>,
 }
 
 impl Default for Config {
@@ -46,6 +53,53 @@ impl Default for Config {
             socket: default_socket_path(),
             paste_keys: "ctrl+v".into(),
             inject_mode: "paste".into(),
+            hotkey: "ctrl+alt+v".into(),
+            paste_keys_by_app: default_paste_keys_by_app(),
+        }
+    }
+}
+
+/// Терминалы и консоли обычно вставляют Shift+Insert или Ctrl+Shift+V,
+/// текстовые поля — Ctrl+V.
+fn default_paste_keys_by_app() -> HashMap<String, String> {
+    let mut m = HashMap::new();
+    for app in [
+        "konsole",
+        "yakuake",
+        "alacritty",
+        "xterm",
+        "foot",
+        "kitty",
+        "wezterm",
+        "ghostty",
+        "terminal",
+    ] {
+        m.insert(app.to_string(), "shift+insert".to_string());
+    }
+    for app in [
+        "firefox",
+        "chromium",
+        "chrome",
+        "brave",
+        "opera",
+        "discord",
+        "kate",
+        "telegramdesktop",
+    ] {
+        m.insert(app.to_string(), "ctrl+v".to_string());
+    }
+    m
+}
+
+impl Config {
+    /// Какие клавиши слать в это окно.
+    pub fn paste_keys_for(&self, app: Option<&str>) -> String {
+        match app {
+            Some(app) => match self.paste_keys_by_app.get(&crate::focus::normalize(app)) {
+                Some(keys) => keys.clone(),
+                None => self.paste_keys.clone(),
+            },
+            None => self.paste_keys.clone(),
         }
     }
 }
