@@ -16,7 +16,7 @@ whisper-rs.workspace = true
 whisper-rs-sys.workspace = true
 atspi = { version = "0.22", optional = true, default-features = false, features = ["proxies", "async-std"] }
 futures = { version = "0.3", optional = true }
-zbus = { version = "4.2", optional = true }
+zbus = { version = "6.2", optional = true }
 
 [features]
 default = ["vulkan"]
