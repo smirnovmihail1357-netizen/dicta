@@ -46,6 +46,9 @@
   вынесены отдельной веткой `container`. CI не собирает образ `ghcr.io/...` (цель `image` из
   `release.yml` убрана), у `Makefile` больше нет целей `docker-build`/`docker-run`/`compose-*`.
   В 0.3.0 поддерживается только хостовый демон.
+- CI и релизный пайплайн: в сборочные образы добавлен `libxkbcommon-dev` — build-скрипт
+  `smithay-client-toolkit` (зависимость `dicta-ui`) требует `xkbcommon` через pkg-config,
+  без пакета шаг `Build (Vulkan, default)` падал.
 
 ## 0.2.0 — контейнер, CI, публичный релиз
 

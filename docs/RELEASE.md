@@ -1,33 +1,35 @@
 # Релиз на GitHub
 
-Репозиторий пока локальный (`/home/wardreg/projects/dicta`, ветка `main`). Порядок, чтобы
-выложить его и выпускать релизы.
+Репозиторий выложен: https://github.com/smirnovmihail1357-netizen/dicta (публичный).
+Локальная копия — `/home/wardreg/projects/dicta`, `origin` смотрит на него, рабочие ветки
+`main` и `container` (в `container` живёт вынесенный из релиза контейнер).
 
-## 1. Создать репозиторий
-
-Вариант через `gh` (если поставишь `pacman -S github-cli`):
+## 1. Что уже сделано
 
 ```bash
-cd ~/projects/dicta
-git init -b main           # уже сделано: ветка переименована из master
-git remote add origin https://github.com/<owner>/dicta.git
+git remote add origin https://github.com/smirnovmihail1357-netizen/dicta.git
 git push -u origin main
+git push -u origin container
 ```
 
-или:
+Два подводных камня, оба проверены вживую:
+
+- **Токен, которым платит git, обязан иметь право `Workflows`.** Иначе push отвергается целиком:
+  `remote rejected main -> main (refusing to allow a Personal Access Token to create or update
+  workflow .github/workflows/ci.yml without workflow scope)`. Лечение: Edit токена -> включить
+  Workflows (fine-grained: Permissions -> Actions/Workflows -> Read and write).
+- **В сборочном образе нужен `libxkbcommon-dev`.** `dicta-ui` зависит от
+  `smithay-client-toolkit`, чей build-скрипт ищет `xkbcommon` через pkg-config; без пакета
+  падает шаг `Build (Vulkan, default)` (у cargo exit 101). Пакет прописан в `ci.yml` и
+  `release.yml`; на Arch он есть по умолчанию, поэтому локально сборка проходит, а в CI — нет.
+
+Описание и topics — Settings -> General -> About: `wayland`, `whisper`, `dictation`,
+`voice-input`, `kde`, `hyprland`, `pipewire`, `speech-to-text`.
+
+## 2. Правила веток и protected main
 
 ```bash
-gh repo create dicta --public --source=. --remote=origin --push \
-  --description "System-wide voice dictation for Linux/Wayland (whisper.cpp + PipeWire + uinput)"
-```
-
-Дальше в Settings -> General: About (описание + topics `wayland`, `whisper`, `dictation`,
-`voice-input`, `kde`, `hyprland`, `pipewire`, `speech-to-text`), включить Issues.
-
-## 2. Правила веток иProtected main
-
-```bash
-gh api -X PUT repos/<owner>/dicta/branches/main/protection \
+gh api -X PUT repos/smirnovmihail1357-netizen/dicta/branches/main/protection \
   -f 'required_status_checks[strict]=true' \
   -f 'required_status_checks[contexts][]=build + tests (Vulkan и CPU-only)' \
   -F 'required_pull_request_reviews=' \
