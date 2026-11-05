@@ -2,7 +2,7 @@
 
 Системный голосовой ввод для Wayland/Linux: один демон вместо отдельной интеграции в каждое приложение.
 
-`Alt/Meta+V` (или `dictactl start`) → говоришь → `Enter` → текст появляется в том месте, где сейчас курсор:
+`Alt+V` (или `dictactl toggle`) → говоришь → `Enter` → текст появляется в том месте, где сейчас курсор:
 Kate, Konsole, Firefox, Discord, чат в браузере, промпт pi/opencode.
 
 ## Состав
@@ -75,7 +75,7 @@ dicta-ui --probe         # проверить, понимает ли компо�
 
 | Композитор | как |
 |---|---|
-| KDE Plasma 6 | `./systemd/install.sh && ./adapters/kwin/install.sh` (скрипт `dicta-hotkey`, `Meta+V`) или System Settings → Keyboard → Custom Shortcuts → `systemctl --user start dicta-toggle.service` |
+| KDE Plasma 6 | `./systemd/install.sh && ./adapters/kwin/install.sh` (скрипт `dicta-hotkey`, `Alt+V` — Meta+V занят историей буфера обмена Plasma 6) или System Settings → Keyboard → Custom Shortcuts → `systemctl --user start dicta-toggle.service` |
 | Hyprland | `source = ~/projects/dicta/adapters/hyprland/dicta.conf` |
 | Sway | `include ~/projects/dicta/adapters/sway/dicta.conf` |
 | GNOME | `./adapters/gnome/apply.sh '<Ctrl><Alt>v'` |

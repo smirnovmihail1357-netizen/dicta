@@ -1,14 +1,14 @@
 #!/usr/bin/env bash
 # Устанавливает KWin-скрипт dicta-hotkey и загружает его в текущую сессию Plasma 6.
 #
-#   ./install.sh                                    # Meta+V = начать/закончить диктовку
+#   ./install.sh                                    # Alt+V = начать/закончить диктовку
 #   DICTA_KEY='Ctrl+Alt+V' ./install.sh             # другой ключ
 #   DICTA_CANCEL_KEY='Meta+Shift+Escape' ./install.sh
 #   DICTA_SELFTEST=1 ./install.sh                   # скрипт сам дёргает юнит при загрузке:
 #                                                   # проверка цепочки без нажатия клавиш
 #
 # Проверка после установки:
-#   journalctl --user -b 0 | grep dicta-hotkey      # "toggle 'Meta+V' -> ok"
+#   journalctl --user -b 0 | grep dicta-hotkey      # "toggle 'Alt+V' -> ok"
 #   busctl --user call org.kde.kglobalaccel /kglobalaccel org.kde.KGlobalAccel \
 #       allActionsForComponent as 1 kwin | tr ' ' '\n' | grep -i dicta
 #
@@ -17,6 +17,10 @@
 #
 # Нужно, чтобы юниты dicta-toggle.service / dicta-cancel.service лежали в
 # ~/.config/systemd/user (см. ../systemd/install.sh).
+#
+# Важно: Meta+V в Plasma 6 занят историей буфера обмена, поэтому по умолчанию Alt+V.
+# Привязка клавиши живёт в ~/.config/kglobalshortcutsrc; KWin не перезагружает скрипт на
+# лету — после смены клавиши нужен перелогин (или перезапуск сессии).
 set -euo pipefail
 
 ID=dicta-hotkey
@@ -24,7 +28,7 @@ HERE="$(cd "$(dirname "$0")" && pwd)"
 SRC="$HERE/$ID"
 DEST="${XDG_DATA_HOME:-$HOME/.local/share}/kwin/scripts/$ID"
 
-KEY="${DICTA_KEY:-Meta+V}"
+KEY="${DICTA_KEY:-Alt+V}"
 CANCEL_KEY="${DICTA_CANCEL_KEY:-}"
 TOGGLE_UNIT="${DICTA_UNIT:-dicta-toggle.service}"
 CANCEL_UNIT="${DICTA_CANCEL_UNIT:-dicta-cancel.service}"

@@ -39,14 +39,15 @@ DICTA_SELFTEST=1 DICTA_UNIT=dicta-probe.service ./install.sh   # то же, но
 
 KWin 6 в скриптах не имеет `spawn()`, поэтому скрипт зовёт `callDBus` на
 `org.freedesktop.systemd1 Manager.StartUnit("dicta-toggle@<окно>.service")`, а имя окна берёт
-из `workspace.activeWindow` (`appId` / `resourceClass`). Ключ — `Meta+V`
-(`DICTA_KEY='Ctrl+Alt+V' ./install.sh`), отмена без клавиши по умолчанию
+из `workspace.activeWindow` (`appId` / `resourceClass`). Ключ — `Alt+V`
+(Meta+V в Plasma 6 занят историей буфера обмена; сменить: `DICTA_KEY='Ctrl+Alt+V' ./install.sh`),
+отмена без клавиши по умолчанию
 (`DICTA_CANCEL_KEY='Meta+Shift+Escape' ./install.sh`). Удаление: `./uninstall.sh`.
 
 Проверка установки (без нажатия клавиш):
 
 ```bash
-journalctl --user -b 0 | grep dicta-hotkey        # "toggle 'Meta+V' -> ok"
+journalctl --user -b 0 | grep dicta-hotkey        # "toggle 'Alt+V' -> ok"
 busctl --user call org.kde.kglobalaccel /component/kwin org.kde.kglobalaccel.Component shortcutNames \
     | tr ' ' '\n' | grep -i dicta                 # dicta-toggle, dicta-cancel
 tail /tmp/dicta-probe.log                          # если ставил DICTA_SELFTEST=1
@@ -59,7 +60,26 @@ dёргает `KWin.reconfigure`; надёжнее всего это работ�
 нельзя — это делает пользователь.
 
 Вариант без скрипта: System Settings → Keyboard → Custom Shortcuts → New → Global →
-Command/URL = `systemctl --user start dicta-toggle.service`, ключ `Meta+V`.
+Command/URL = `systemctl --user start dicta-toggle.service`, ключ `Alt+V`.
+
+Смена клавиши: `DICTA_KEY='...' ./install.sh`, затем перелогин — KWin не перечитывает скрипт
+на лету, а старая привязка остаётся в `~/.config/kglobalshortcutsrc` (строки `dicta-toggle=...`;
+`./uninstall.sh` их чистит).
+
+Откат живой клавиши, не дожидаясь перелогинов (проверено — Plasma 6 сразу возвращает себе
+Meta+V и историю буфера обмена):
+
+```bash
+for a in dicta-toggle dicta-cancel; do
+    dbus-send --session --dest=org.kde.kglobalaccel /kglobalaccel \
+        org.kde.KGlobalAccel.unRegister array:string:kwin,$a
+done
+# посмотреть, кто держит клавишу:
+busctl --user --json=short call org.kde.kglobalaccel /component/kwin \
+    org.kde.kglobalaccel.Component allShortcutInfos |
+    python3 -c 'import json,sys; [print(r[0], [hex(x) for x in r[6]]) for r in json.load(sys.stdin)["data"] if r[6]]'
+# 268435542 = Meta+V, 33554518 = Alt+V
+```
 
 ## 3. Hyprland
 
