@@ -359,7 +359,7 @@ fn preview(dir: &Path) -> Result<()> {
         language: "ru".into(),
         inject_mode: "paste".into(),
         min_level: 0.35,
-        auto_stop: true,
+        auto_stop: false,
         use_gpu: true,
         paste_keys: "ctrl+v".into(),
         model: "/home/u/.dicta/models/ggml-medium-q5_0.bin".into(),
@@ -390,24 +390,33 @@ fn preview(dir: &Path) -> Result<()> {
         files.push(path);
     }
 
-    // Панель на левой грани: те же кнопки, развёрнутые на 90° (ряд — колонка).
-    let keys = panel::buttons(&settings, true, Edge::Left);
-    let left = Placement::new(Edge::Left);
-    let c = render::paint_panel(
-        left.panel_width(),
-        left.panel_height(),
-        left.panel_origin(1.0).0,
-        1.0,
-        true,
-        "dicta · запись 0:03",
-        "порог 0.40 — сохранено",
-        "левая грань: ряды идут вдоль края",
-        &keys,
-        font.as_ref(),
-    );
-    let path = dir.join("panel_left.bmp");
-    render::write_bmp(&path, &c)?;
-    files.push(path);
+    // Панель на каждой из четырёх сторон: размер окна и координату корпуса берём из тех
+    // же Placement-функций, которыми пользуется живой оверлей (так видно, что ни одна
+    // кнопка не обрезана краем окна ни на одной стороне).
+    for edge in Edge::all() {
+        let placement = Placement::new(edge);
+        let vertical = !edge.horizontal();
+        let origin = placement.panel_origin(1.0);
+        let c = render::paint_panel(
+            placement.panel_width(),
+            placement.panel_height(),
+            if vertical { origin.0 } else { origin.1 },
+            1.0,
+            vertical,
+            "dicta · запись 0:03",
+            "порог 0.40 — сохранено в ~/.config/dicta/config.toml",
+            if vertical {
+                "ряд кнопок идёт вдоль края экрана"
+            } else {
+                "Ctrl+Alt+V — открыть/закрыть · клик по кнопке = применить"
+            },
+            &panel::buttons(&settings, true, edge),
+            font.as_ref(),
+        );
+        let path = dir.join(format!("panel_{}.bmp", edge.as_str()));
+        render::write_bmp(&path, &c)?;
+        files.push(path);
+    }
 
     // Контрольный снимок: панель и пилюля, обе прибиты к нижней кромке экрана.
     let mut stack = Canvas::new(render::PANEL_W, render::PANEL_SURFACE_H);
@@ -1222,8 +1231,16 @@ impl Ui {
             return;
         }
         let header = format!("dicta · {}", state);
+        // Подсказка: на вертикальной стороне она идёт столбцом вниз по корпусу, поэтому
+        // короткая — длинная не влезает между заголовком и низом панели.
         let hint = if settings.reloading {
-            "модель загружается: порог и авто-стоп менять можно, смену модели повтори после загрузки"
+            if vertical {
+                "модель загружается…"
+            } else {
+                "модель загружается: порог и авто-стоп менять можно, смену модели повтори после загрузки"
+            }
+        } else if vertical {
+            "клик = применить"
         } else {
             "Ctrl+Alt+V — открыть/закрыть · клик по кнопке = применить · удержать пилюлю и потащить к краю — переставить"
         };
@@ -1708,5 +1725,85 @@ mod tests {
             dark_rows > h as usize / 2,
             "корпус вертикальной панели отрисован только на {dark_rows} строк из {h}"
         );
+        // внутри каждой кнопки обязан быть текст: подпись складывается столбцом вниз по
+        // длине кнопки, и бюджет у неё — длина, а не толщина (иначе остаётся один символ)
+        let bright = |x0: usize, y0: usize, x1: usize, y1: usize| -> usize {
+            let mut n = 0;
+            for y in y0..y1 {
+                for x in x0..x1 {
+                    let i = (y * w as usize + x) * 4;
+                    if px[i].max(px[i + 1]).max(px[i + 2]) > 90 && px[i + 3] > 0x80 {
+                        n += 1;
+                    }
+                }
+            }
+            n
+        };
+        let ox = left.panel_origin(1.0).0 as usize;
+        for (name, key) in [("запись", &keys[0]), ("авто-стоп", &keys[5]), ("закрыть", &keys[12])] {
+            let x0 = ox + key.y as usize;
+            let y0 = key.x as usize;
+            let n = bright(x0 + 4, y0 + 2, x0 + render::PANEL_BTN_H as usize - 2, y0 + key.w as usize - 2);
+            assert!(n > 25, "кнопка {name} без подписи: светлых пикселей {n}");
+        }
+        // заголовок и ответ демона — в своих свободных полосах поперёк корпуса
+        assert!(bright(ox + 8, 12, ox + 30, 300) > 40, "заголовок не отрисован");
+        assert!(bright(ox + 128, 12, ox + 150, 300) > 40, "строка ответа демона не отрисована");
+    }
+
+    #[test]
+    fn hidden_and_overshooting_frames_survive_on_every_side() {
+        // На уходе за кромку координата корпуса отрицательная, при overshoot'е —
+        // за пределами кадра. Canvas живёт на u32: раньше это кончалось паникой
+        // «attempt to add/subtract with overflow» ровно в момент, когда пилюля
+        // пряталась на левой или верхней стороне.
+        let font = load_font();
+        let levels = [0.2f32, 0.6, 0.9, 0.4];
+        for edge in Edge::all() {
+            let p = Placement::new(edge);
+            let vertical = !edge.horizontal();
+            for reveal in [0.0f32, 0.3, 1.0, render::EASE_MAX] {
+                let scene = Scene {
+                    recording: reveal > 0.5,
+                    seconds: 3.0,
+                    frame: 7,
+                };
+                let pill = paint(
+                    p.pill_width(),
+                    p.pill_height(),
+                    p.pill_coord(p.pill_width(), p.pill_height(), reveal),
+                    0.5 + 0.5 * reveal,
+                    vertical,
+                    &scene,
+                    &levels,
+                    font.as_ref(),
+                );
+                assert_eq!(
+                    (pill.w, pill.h),
+                    (p.pill_width(), p.pill_height()),
+                    "{edge:?} reveal={reveal}: размер кадра пилюли поменялся"
+                );
+
+                let origin = p.panel_origin(reveal);
+                let keys = panel::buttons(&Settings::default(), true, edge);
+                let panel_frame = render::paint_panel(
+                    p.panel_width(),
+                    p.panel_height(),
+                    if vertical { origin.0 } else { origin.1 },
+                    1.0,
+                    vertical,
+                    "dicta · запись 0:03",
+                    "порог 0.40 — сохранено",
+                    "клик = применить",
+                    &keys,
+                    font.as_ref(),
+                );
+                assert_eq!(
+                    (panel_frame.w, panel_frame.h),
+                    (p.panel_width(), p.panel_height()),
+                    "{edge:?} reveal={reveal}: размер кадра панели поменялся"
+                );
+            }
+        }
     }
 }
