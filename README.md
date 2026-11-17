@@ -110,6 +110,56 @@ optional. Key ones: `model`, `language`, `use_gpu`, `gpu_device`, `mic`, `socket
 Environment: `DICTA_CONFIG`, `DICTA_UI`, `DICTA_HOTKEY`, `DICTA_APP`, and overlay knobs
 `DICTA_LAYER`, `DICTA_EXCLUSIVE`, `DICTA_DEBUG`, `DICTA_ALWAYS_DRAW`.
 
+The pill slides up from under the bottom edge of the screen (46 px, spring curve, ~260 ms)
+and sinks back behind it when the recording ends: `DICTA_ANIM_MS` / `DICTA_ANIM_OUT_MS` set
+the durations, `DICTA_ANIM=0` turns the animation off. `dicta-ui --preview out/` writes the
+animation frames as BMPs without touching a compositor, which is how the curve is tuned.
+
+## Settings panel
+
+`Ctrl+Alt+V` (KWin; set the key with `DICTA_PANEL_KEY` in `adapters/kwin/install.sh`) opens a
+row of buttons above the pill: record/stop, cancel, `min_level` (−/+), auto-stop, injection
+mode, GPU, language, model, paste keys, close. Whether the panel is open is daemon state, the
+overlay only draws it, so it can be opened from a terminal too: `dictactl panel`.
+
+A button press is one command to the daemon (`{"cmd":"set","key":...,"value":...}`): the daemon
+validates the value, applies it to the live config and writes `~/.config/dicta/config.toml`,
+keeping comments and key order. The line at the bottom of the panel is the daemon's answer —
+what was saved, or why the value was rejected.
+
+```bash
+dictactl panel                    # show/hide
+dictactl panel --state show       # same as Ctrl+Alt+V
+dictactl settings                 # settings snapshot + the .bin models found
+dictactl settings min_level 0.4   # same as the «min +» button
+dictactl settings model ggml-large-v3-turbo-q5_0   # a bare name is looked up in the model folder
+```
+
+`model`, `language`, `use_gpu`, `gpu_device`, `n_threads`, `beam_size` require reloading the
+model: the daemon does it on a separate thread and refuses while a recording or transcription is
+running (the panel then says «модель загружается…»). Setting a value that is already set
+reloads and rewrites nothing.
+
+## Where the pill sits
+
+The pill can be dragged with the mouse: press it and pull — after 60 px of movement the overlay
+treats it as a drag. The direction of the pull decides where it docks: towards the top edge of the
+monitor it goes to the top side, to the right — to the right side, and so on. Movement along the
+side it already sits on only shifts the pill along that edge, and pulling outwards past its own
+edge leaves it in place (there is nothing to draw beyond the screen edge). A plain click without
+movement still means the same as before: stop the recording and insert the text.
+
+Bottom and top keep the pill and the panel horizontal; left and right turn both of them vertical,
+and the reveal animation still slides out from behind the edge the pill sits on.
+
+The placement — side, shift along the edge and inset from the edge (for a dock or a taskbar) — is
+saved in `~/.config/dicta/ui.toml` and read back on the next start. The same from a terminal:
+
+```bash
+dicta-ui --list-edges               # where the overlay sits now
+dicta-ui --edge right               # move it to the right side
+```
+
 ## Hotkey wiring
 
 | compositor | how |
@@ -119,6 +169,9 @@ Environment: `DICTA_CONFIG`, `DICTA_UI`, `DICTA_HOTKEY`, `DICTA_APP`, and overla
 | Sway | `include .../adapters/sway/dicta.conf` |
 | GNOME | `./adapters/gnome/apply.sh '<Ctrl><Alt>v'` |
 | no DE / any DE | daemon's built-in evdev listener: `hotkey = "ctrl+alt+v"` plus access to `/dev/input/event*` (`input` group or udev ACL) |
+
+Settings panel: `Ctrl+Alt+V` (KWin), `SUPER SHIFT, S` (Hyprland), `$mod+Shift+s` (sway),
+`dicta-panel.service` (any DE) or just `dictactl panel`.
 
 ## Status
 

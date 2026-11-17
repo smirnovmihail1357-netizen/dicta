@@ -9,14 +9,20 @@
  * Имя фокусного окна передаётся демоном-адаптером (instance юнита -> `dictactl --app`),
  * поэтому демон может выбрать Ctrl+V для браузеров и Shift+Insert для терминалов.
  *
+ * Третья клавиша открывает панель настроек оверлея (dictactl panel): её состояние держит
+ * демон, а оверлей рисует. Настройки применяются и сохраняются самим демоном.
+ *
  * Плюсы: не нужен root и доступ к /dev/input, работает на Wayland.
- * Юниты: systemd/dicta-toggle.service (+ dicta-toggle@.service), dicta-cancel.service.
+ * Юниты: systemd/dicta-toggle.service (+ dicta-toggle@.service), dicta-cancel.service,
+ * dicta-panel.service.
  */
 
 const TOGGLE_UNIT = "dicta-toggle.service";
 const CANCEL_UNIT = "dicta-cancel.service";
+const PANEL_UNIT = "dicta-panel.service";
 const TOGGLE_KEY = "__DICTA_KEY__";
 const CANCEL_KEY = "__DICTA_CANCEL_KEY__";
+const PANEL_KEY = "__DICTA_PANEL_KEY__";
 
 function activeApp() {
     try {
@@ -64,10 +70,15 @@ const okToggle = registerShortcut("dicta-toggle", "Диктовка: начат�
 const okCancel = registerShortcut("dicta-cancel", "Диктовка: отменить", CANCEL_KEY, () =>
     startUnit(unitFor(CANCEL_UNIT))
 );
+// Панель — не про фокусное окно, ей нужен только демон.
+const okPanel = registerShortcut("dicta-panel", "Диктовка: панель настроек", PANEL_KEY, () =>
+    startUnit(PANEL_UNIT)
+);
 
 print(
     `dicta-hotkey: toggle '${TOGGLE_KEY}' -> ${okToggle ? "ok" : "ОШИБКА"}, ` +
-    `cancel '${CANCEL_KEY}' -> ${okCancel ? "ok" : "ОШИБКА"}`
+    `cancel '${CANCEL_KEY}' -> ${okCancel ? "ok" : "ОШИБКА"}, ` +
+    `panel '${PANEL_KEY}' -> ${okPanel ? "ok" : "ОШИБКА"}`
 );
 
 // __DICTA_SELFTEST__ — true только при установке с DICTA_SELFTEST=1: скрипт сам дёргает

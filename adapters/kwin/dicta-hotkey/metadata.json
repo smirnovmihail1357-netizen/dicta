@@ -1,7 +1,7 @@
 {
     "KPackageStructure": "KWin/Script",
     "KPlugin": {
-        "Description": "Глобальная горячая клавиша диктовки dicta (start/stop, cancel)",
+        "Description": "Глобальная горячая клавиша диктовки dicta (start/stop, cancel, панель настроек)",
         "Id": "dicta-hotkey",
         "License": "MIT",
         "Name": "Dicta Hotkey"

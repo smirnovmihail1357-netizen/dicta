@@ -541,9 +541,12 @@ version = "0.3.0"
 dependencies = [
  "ab_glyph",
  "anyhow",
+ "dirs",
+ "libc",
  "serde",
  "serde_json",
  "smithay-client-toolkit",
+ "toml",
  "wayland-client",
 ]
 

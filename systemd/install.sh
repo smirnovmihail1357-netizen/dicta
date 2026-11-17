@@ -11,7 +11,7 @@ HERE="$(cd "$(dirname "$0")" && pwd)"
 DEST="${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user"
 mkdir -p "$DEST"
 for u in dictad.service dicta-toggle.service dicta-toggle@.service dicta-cancel.service \
-         dicta-cancel@.service dicta-probe.service dicta-probe@.service; do
+         dicta-cancel@.service dicta-panel.service dicta-probe.service dicta-probe@.service; do
     install -m 644 "$HERE/$u" "$DEST/$u"
     echo "установлен $DEST/$u"
 done

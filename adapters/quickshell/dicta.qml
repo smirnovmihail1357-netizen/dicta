@@ -20,6 +20,11 @@ QtObject {
                 description: "Диктовка: отменить"
                 onActivate: Process.exec(["dictactl", "cancel"], [])
             }
+            property ShellShortcut panel: ShellShortcut {
+                name: "dictaPanel"
+                description: "Диктовка: панель настроек"
+                onActivate: Process.exec(["dictactl", "panel"], [])
+            }
         }
     ]
 }

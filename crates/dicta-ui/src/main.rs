@@ -1,17 +1,31 @@
 //! dicta-ui — маленький оверлей над всеми окнами: `● REC 0:03 ▁▂▄█  ⏎ готово · esc отмена`.
 //!
 //! Рендер — wl_shm (софт), слой — zwlr_layer_shell_v1 (KWin, Hyprland, sway и др.).
-//! Состояние читается из демона по Unix-сокету каждые 100 мс; клик мышью по оверлею = stop.
+//! Состояние читается из демона по Unix-сокету каждые 100 мс; клик мышью по оверлею = stop,
+//! а если зажать пилюлю и потащить её к другой границе монитора — оверлей переезжает на
+//! эту сторону (снизу/сверху горизонтальный, слева/справа вертикальный) и запоминает
+//! положение в ui.toml, чтобы в следующий раз появиться там же.
+//! Появление и уход — анимация: пилюля выезжает из-за кромки своей стороны (с лёгким
+//! пружинным overshoot'ом) и уходит обратно за неё. Геометрия стороны — в `edge.rs`,
+//! картинка — в `render.rs`.
 
+mod edge;
+mod panel;
+mod render;
+
+use std::os::fd::{AsFd, AsRawFd};
+use std::path::Path;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::thread;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
-use ab_glyph::{point, Font, FontRef, GlyphId, PxScale};
+use ab_glyph::FontRef;
+use anyhow::Context;
 use anyhow::Result;
 use serde::Deserialize;
 use smithay_client_toolkit::{
-    compositor::{CompositorHandler, CompositorState, FrameCallbackData},
+    compositor::{CompositorHandler, CompositorState},
     delegate_registry,
     output::{OutputHandler, OutputState},
     registry::{ProvidesRegistryState, RegistryState},
@@ -29,16 +43,59 @@ use smithay_client_toolkit::{
 };
 use wayland_client::{
     globals::registry_queue_init,
-    protocol::{wl_output, wl_pointer, wl_registry, wl_seat, wl_shm, wl_surface},
-    Connection, Dispatch, QueueHandle,
+    protocol::{
+        wl_compositor, wl_output, wl_pointer, wl_region, wl_registry, wl_seat, wl_shm, wl_surface,
+    },
+    Connection, Dispatch, Proxy, QueueHandle,
 };
 
-const W: u32 = 520;
-const H: u32 = 34;
+use panel::Settings;
+use render::{ease_in_cubic, ease_out_back, paint, Button, Canvas, Scene, SURF_H, SURF_W};
+
+use edge::{Edge, Placement};
+
+/// Опрос демона.
 const POLL_MS: u64 = 100;
+/// Кадр во время анимации.
+const FRAME_MS: u64 = 16;
+/// Как часто просыпаться, когда пилюля скрыта (чтобы заметить начало записи).
+const IDLE_MS: u64 = 50;
+/// Сколько пикселей надо утащить пилюлю, чтобы движение стало «перестановкой»,
+/// а не обычным кликом по ней.
+const DRAG_THRESHOLD: i32 = 60;
 
 fn debug_on() -> bool {
     std::env::var("DICTA_DEBUG").is_ok()
+}
+
+fn env_num(name: &str, default: u64) -> u64 {
+    std::env::var(name)
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(default)
+}
+
+/// Длительность появления из-за кромки своей стороны (мс). `DICTA_ANIM=0` — без анимации.
+fn anim_rise_ms() -> u64 {
+    if !anim_on() {
+        return 0;
+    }
+    env_num("DICTA_ANIM_MS", 260)
+}
+
+/// Длительность ухода обратно за кромку своей стороны (мс).
+fn anim_fall_ms() -> u64 {
+    if !anim_on() {
+        return 0;
+    }
+    env_num("DICTA_ANIM_OUT_MS", 170)
+}
+
+fn anim_on() -> bool {
+    !matches!(
+        std::env::var("DICTA_ANIM").unwrap_or_default().as_str(),
+        "0" | "off" | "none" | "no"
+    )
 }
 
 /// Экспериментальные knobs для подбора режима, который понимает конкретный композитор.
@@ -62,6 +119,11 @@ fn always_draw() -> bool {
     std::env::var("DICTA_ALWAYS_DRAW").is_ok()
 }
 
+/// Для отладки панели: показать её без команды демона.
+fn panel_always() -> bool {
+    std::env::var("DICTA_PANEL").is_ok()
+}
+
 /// Ответ dictad на {"cmd":"status"}.
 #[derive(Debug, Clone, Deserialize, Default)]
 struct Status {
@@ -71,9 +133,20 @@ struct Status {
     level: f32,
     #[serde(default)]
     seconds: f32,
+    /// Открыта ли панель настроек (её состояние держит демон).
+    #[serde(default)]
+    panel: bool,
     #[serde(default)]
     #[allow(dead_code)] // зарезервировано: сообщения демона можно показывать в оверлее
     error: Option<String>,
+}
+
+/// Всё, что оверлей знает о демоне: одно состояние на два окна (пилюлю и панель).
+#[derive(Debug, Default)]
+struct Shared {
+    status: Status,
+    levels: Vec<f32>,
+    settings: Option<Settings>,
 }
 
 const FONT_PATHS: &[&str] = &[
@@ -82,11 +155,75 @@ const FONT_PATHS: &[&str] = &[
 ];
 
 fn main() -> Result<()> {
+    let args: Vec<String> = std::env::args().collect();
+
     // dicta-ui --probe: проверить, понимает ли композитор layer shell, и выйти.
-    if std::env::args().any(|a| a == "--probe") {
+    if args.iter().any(|a| a == "--probe") {
         return probe();
     }
+    // dicta-ui --preview <dir>: нарисовать кадры анимации в BMP и выйти (без Wayland).
+    if let Some(i) = args.iter().position(|a| a == "--preview") {
+        let dir = args
+            .get(i + 1)
+            .map(Path::new)
+            .unwrap_or(Path::new("dicta-preview"));
+        return preview(dir);
+    }
+    // dicta-ui --list-edges: показать, где оверлей стоит сейчас и куда умеет вставать.
+    if args.iter().any(|a| a == "--list-edges") {
+        return list_edges();
+    }
+    // dicta-ui --edge right|left|top|bottom: записать сторону и выйти. Следующий
+    // запуск оверлея (или его перезагрузка демоном) встанет туда.
+    if let Some(i) = args.iter().position(|a| a == "--edge") {
+        return set_edge(args.get(i + 1).map(String::as_str));
+    }
     run()
+}
+
+/// Записать сторону в ui.toml, сохранив смещение вдоль края и отступ от него.
+fn set_edge(raw: Option<&str>) -> Result<()> {
+    let Some(raw) = raw else {
+        anyhow::bail!("--edge: укажи bottom, top, left или right (dicta-ui --list-edges)");
+    };
+    let Some(edge) = Edge::parse(raw) else {
+        anyhow::bail!("--edge: не сторона {raw:?} — бывают bottom, top, left, right");
+    };
+    let path = edge::config_path();
+    let mut cfg = edge::load(&path);
+    cfg.edge = Some(edge);
+    edge::save(&path, &cfg)?;
+    println!("сторона: {} -> {}", path.display(), edge.as_str());
+    println!(
+        "перезапусти оверлей: pkill -x dicta-ui (демон поднимет его заново) или выйди и войди"
+    );
+    Ok(())
+}
+
+/// Текущее положение + все стороны, которые понимает оверлей.
+fn list_edges() -> Result<()> {
+    let path = edge::config_path();
+    let current = edge::load(&path).placement();
+    println!("ui.toml: {}", path.display());
+    println!(
+        "сейчас: {} (вдоль края {}, от края {})",
+        current.edge.as_str(),
+        current.cross(),
+        current.along()
+    );
+    for edge in Edge::all() {
+        println!(
+            "  {:<7} {}",
+            edge.as_str(),
+            if edge.horizontal() {
+                "горизонтально"
+            } else {
+                "вертикально"
+            }
+        );
+    }
+    println!("переставить: dicta-ui --edge right|left|top|bottom");
+    Ok(())
 }
 
 /// Минимальный скан реестра: есть ли у композитора zwlr_layer_shell_v1.
@@ -148,27 +285,220 @@ fn load_font() -> Option<FontRef<'static>> {
     None
 }
 
+/// Kadры анимации как BMP: чтобы подбирать длительность и кривую, не глядя в композитор.
+fn preview(dir: &Path) -> Result<()> {
+    std::fs::create_dir_all(dir)?;
+    let font = load_font();
+    let scene = Scene {
+        recording: true,
+        seconds: 3.4,
+        frame: 0,
+    };
+    let levels: Vec<f32> = (0..render::WAVE_LEN)
+        .map(|i| {
+            let x = i as f32 / render::WAVE_LEN as f32;
+            (0.35 + 0.55 * (x * 9.0).sin().abs() * (1.0 - x * 0.4)).min(1.0)
+        })
+        .collect();
+
+    let mut files = Vec::new();
+    for i in 0..=10 {
+        let t = i as f32 / 10.0;
+        let reveal = ease_out_back(t);
+        let c = paint(
+            SURF_W,
+            SURF_H,
+            Placement::new(Edge::Bottom).pill_top(SURF_H, reveal),
+            0.45 + 0.55 * t,
+            false,
+            &scene,
+            &levels,
+            font.as_ref(),
+        );
+        let path = dir.join(format!("rise_{:02}_t{t:.2}.bmp", i));
+        render::write_bmp(&path, &c)?;
+        files.push(path);
+    }
+    for i in 0..=6 {
+        let t = i as f32 / 6.0;
+        let reveal = 1.0 - ease_in_cubic(t);
+        let c = paint(
+            SURF_W,
+            SURF_H,
+            Placement::new(Edge::Bottom).pill_top(SURF_H, reveal),
+            0.45 + 0.55 * reveal,
+            false,
+            &scene,
+            &levels,
+            font.as_ref(),
+        );
+        let path = dir.join(format!("fall_{:02}_t{t:.2}.bmp", i));
+        render::write_bmp(&path, &c)?;
+        files.push(path);
+    }
+    // Вертикальная ориентация (левая и правая стороны): та же пилюля, повёрнутая на 90°.
+    // Вертикальная пилюля (стороны слева/справа): та же толщина, развёрнутая на 90°
+    for edge in [Edge::Left, Edge::Right] {
+        let placement = Placement::new(edge);
+        let c = paint(
+            placement.pill_width(),
+            placement.pill_height(),
+            placement.pill_coord(placement.pill_width(), placement.pill_height(), 1.0),
+            1.0,
+            true,
+            &scene,
+            &levels,
+            font.as_ref(),
+        );
+        let path = dir.join(format!("pill_{}.bmp", edge.as_str()));
+        render::write_bmp(&path, &c)?;
+        files.push(path);
+    }
+    // Панель настроек: три кадра подъёма и контрольный снимок вместе с пилюлей.
+    let settings = Settings {
+        language: "ru".into(),
+        inject_mode: "paste".into(),
+        min_level: 0.35,
+        auto_stop: true,
+        use_gpu: true,
+        paste_keys: "ctrl+v".into(),
+        model: "/home/u/.dicta/models/ggml-medium-q5_0.bin".into(),
+        models: vec![
+            "/home/u/.dicta/models/ggml-medium-q5_0.bin".into(),
+            "/home/u/.dicta/models/ggml-large-v3-turbo-q5_0.bin".into(),
+        ],
+        config_path: "/home/u/.config/dicta/config.toml".into(),
+        ..Settings::default()
+    };
+    for i in [0usize, 4, 10] {
+        let reveal = ease_out_back(i as f32 / 10.0);
+        let keys = panel::buttons(&settings, true, Edge::Bottom);
+        let c = render::paint_panel(
+            render::PANEL_W,
+            render::PANEL_SURFACE_H,
+            Placement::new(Edge::Bottom).panel_coord(render::PANEL_SURFACE_H, reveal),
+            0.5 + 0.5 * reveal,
+            false,
+            "dicta · запись 0:03",
+            "порог 0.40 — сохранено в ~/.config/dicta/config.toml",
+            "Ctrl+Alt+V — открыть/закрыть · клик по кнопке = применить · удержать и потащить к краю — переставить",
+            &keys,
+            font.as_ref(),
+        );
+        let path = dir.join(format!("panel_{:02}_t{:.1}.bmp", i, i as f32 / 10.0));
+        render::write_bmp(&path, &c)?;
+        files.push(path);
+    }
+
+    // Панель на левой грани: те же кнопки, развёрнутые на 90° (ряд — колонка).
+    let keys = panel::buttons(&settings, true, Edge::Left);
+    let left = Placement::new(Edge::Left);
+    let c = render::paint_panel(
+        left.panel_width(),
+        left.panel_height(),
+        left.panel_origin(1.0).0,
+        1.0,
+        true,
+        "dicta · запись 0:03",
+        "порог 0.40 — сохранено",
+        "левая грань: ряды идут вдоль края",
+        &keys,
+        font.as_ref(),
+    );
+    let path = dir.join("panel_left.bmp");
+    render::write_bmp(&path, &c)?;
+    files.push(path);
+
+    // Контрольный снимок: панель и пилюля, обе прибиты к нижней кромке экрана.
+    let mut stack = Canvas::new(render::PANEL_W, render::PANEL_SURFACE_H);
+    let pill = paint(
+        SURF_W,
+        SURF_H,
+        Placement::new(Edge::Bottom).pill_top(SURF_H, 1.0),
+        1.0,
+        false,
+        &scene,
+        &levels,
+        font.as_ref(),
+    );
+    let panel = render::paint_panel(
+        render::PANEL_W,
+        render::PANEL_SURFACE_H,
+        Placement::new(Edge::Bottom).panel_coord(render::PANEL_SURFACE_H, 1.0),
+        1.0,
+        false,
+        "dicta · запись 0:03",
+        "порог 0.40 — сохранено в ~/.config/dicta/config.toml",
+        "Ctrl+Alt+V — открыть/закрыть · клик по кнопке = применить",
+        &panel::buttons(&settings, true, Edge::Bottom),
+        font.as_ref(),
+    );
+    stack.blit(&pill, 0, (render::PANEL_SURFACE_H - SURF_H) as i32);
+    stack.blit(&panel, 0, 0);
+    let path = dir.join("stack.bmp");
+    render::write_bmp(&path, &stack)?;
+    files.push(path);
+
+    println!("кадры анимации: {} файлов в {}", files.len(), dir.display());
+    for path in &files {
+        println!("  {}", path.display());
+    }
+    Ok(())
+}
+
 fn run() -> Result<()> {
     let socket = dicta_core_socket_path();
-    let status: Arc<Mutex<Status>> = Arc::new(Mutex::new(Status::default()));
+    let shared: Arc<Mutex<Shared>> = Arc::new(Mutex::new(Shared::default()));
+    let settings_due = Arc::new(AtomicBool::new(false));
 
-    // Опрос демона.
     {
-        let status = status.clone();
+        let shared = shared.clone();
+        let settings_due = settings_due.clone();
         let socket = socket.clone();
         let mut last_state = String::from("startup");
+        // Настройки спрашиваем только когда панель открыта: в простое оверлей
+        // по-прежнему делает один маленький запрос раз в POLL_MS.
+        let mut last_settings = Instant::now() - Duration::from_secs(60);
         thread::spawn(move || loop {
             if let Ok(next) = ask_status(&socket) {
-                if debug_on() && next.state != last_state {
+                let state = next.state.clone();
+                if debug_on() && state != last_state {
                     eprintln!(
-                        "status: {} level={:.2} sec={:.1}",
-                        next.state, next.level, next.seconds
+                        "status: {} level={:.2} sec={:.1} panel={}",
+                        state, next.level, next.seconds, next.panel
                     );
-                    last_state = next.state.clone();
                 }
-                if let Ok(mut cur) = status.lock() {
-                    *cur = next;
+                let want_settings = if let Ok(mut cur) = shared.lock() {
+                    // История уровня за последние ~1.8 с: волна рисуется по ней, а не
+                    // «дрожанием». Ведёт её поток опроса, а не поток рисования: частота
+                    // кадров разная (100 мс в покое, 16 мс в анимации), а волна должна
+                    // быть одинаковой в обеих.
+                    if state == "recording" {
+                        cur.levels.push(next.level);
+                        if cur.levels.len() > render::WAVE_LEN {
+                            cur.levels.remove(0);
+                        }
+                    } else {
+                        cur.levels.clear();
+                    }
+                    let stale =
+                        cur.settings.is_none() || last_settings.elapsed() > Duration::from_secs(2);
+                    let panel_open = next.panel;
+                    cur.status = next;
+                    panel_open && (settings_due.load(Ordering::Relaxed) || stale)
+                } else {
+                    false
+                };
+                if want_settings {
+                    if let Ok(settings) = ask_settings(&socket) {
+                        if let Ok(mut cur) = shared.lock() {
+                            cur.settings = Some(settings);
+                        }
+                    }
+                    settings_due.store(false, Ordering::Relaxed);
+                    last_settings = Instant::now();
                 }
+                last_state = state;
             }
             thread::sleep(Duration::from_millis(POLL_MS));
         });
@@ -189,15 +519,48 @@ fn run() -> Result<()> {
 
     let surface = compositor.create_surface(&qh);
     let layer = layer_shell.create_layer_surface(&qh, surface, layer_kind(), Some("dicta"), None);
-    layer.set_anchor(Anchor::BOTTOM);
-    layer.set_margin(0, 0, 12, 0);
-    layer.set_size(W, H);
+
+    // Где стоять — берём из ui.toml (туда пишет перетаскивание мышью и --edge).
+    // Сторона задаёт якорь, размер поверхности (горизонтальная/вертикальная) и то,
+    // с какой кромки пилюля будет выезжать.
+    // Где стоять — берём из ui.toml: туда пишет и перетаскивание мышью, и --edge.
+    let ui_path = edge::config_path();
+    let placement = edge::load(&ui_path).placement();
+    if debug_on() {
+        eprintln!(
+            "сторона: {} margins {:?}",
+            placement.edge.as_str(),
+            placement.margins
+        );
+    }
+
+    // Поверхность на REST_GAP длиннее пилюли: в этом зазоре пилюля и прячется, когда её
+    // нет. Поэтому margin вдоль своей стороны — 0, а зазор «зашит» в размер поверхности.
+    apply_placement(&layer, placement);
     layer.set_exclusive_zone(exclusive_zone());
     // Ноль: оверлей не перехватывает клавиатуру — клавиши остаются у фокусного окна.
     layer.set_keyboard_interactivity(KeyboardInteractivity::None);
     layer.commit();
 
-    let pool = SlotPool::new((W * H * 4) as usize, &shm)?;
+    // Панель настроек — вторая поверхность того же процесса: та же сторона, тот же слой,
+    // то же поведение (не перехватывает клавиатуру, не перекрывает клики мимо неё).
+    let panel_surface = compositor.create_surface(&qh);
+    let panel_layer = layer_shell.create_layer_surface(
+        &qh,
+        panel_surface.clone(),
+        layer_kind(),
+        Some("dicta-panel"),
+        None,
+    );
+    apply_panel_placement(&panel_layer, placement);
+    // Ноль и здесь: панель — не окно ввода, она только кнопок.
+    panel_layer.set_keyboard_interactivity(KeyboardInteractivity::None);
+    panel_layer.commit();
+
+    let pool = SlotPool::new(
+        (SURF_W * SURF_H).max(render::PANEL_W * render::PANEL_SURFACE_H) as usize * 4,
+        &shm,
+    )?;
 
     let mut ui = Ui {
         registry_state: RegistryState::new(&globals),
@@ -207,24 +570,170 @@ fn run() -> Result<()> {
         exit: false,
         first_configure: true,
         pool,
-        width: W,
-        height: H,
+        width: placement.pill_width(),
+        height: placement.pill_height(),
         layer,
         pointer: None,
-        status: status.clone(),
-        socket,
-        levels: Vec::new(),
+        shared: shared.clone(),
+        settings_due: settings_due.clone(),
         font: load_font(),
         frame: 0,
+        compositor: compositor.wl_compositor().clone(),
+        mapped: None,
+        reveal: Reveal::new(),
+        dirty: false,
+        shown: Status::default(),
+        panel_layer,
+        panel_surface,
+        panel_width: placement.panel_width(),
+        panel_height: placement.panel_height(),
+        panel_reveal: Reveal::new(),
+        panel_mapped: None,
+        panel_keys: Vec::new(),
+        notice: String::new(),
+        panel_rest_sig: None,
+        placement,
+        ui_path,
+        press_origin: None,
+        dragged: false,
     };
 
+    let mut next_draw = Instant::now();
     loop {
-        event_queue.blocking_dispatch(&mut ui)?;
+        event_queue.dispatch_pending(&mut ui)?;
         if ui.exit {
             break;
         }
+        let animating = ui.tick();
+        let showing = ui.reveal.want == Some(true) || ui.panel_reveal.want == Some(true);
+        if !ui.first_configure && (showing || animating || ui.dirty) {
+            let now = Instant::now();
+            // Кадр рисуем не чаще, чем нужно: во время анимации — каждые FRAME_MS,
+            // в покое — каждые POLL_MS (волна уровня обновляется раз на опрос демона).
+            if ui.dirty || now >= next_draw {
+                ui.draw_pill(&qh);
+                ui.draw_panel(&qh);
+                ui.dirty = false;
+                next_draw = now + Duration::from_millis(if animating { FRAME_MS } else { POLL_MS });
+            }
+        }
+        let wake = if animating {
+            FRAME_MS
+        } else if showing {
+            POLL_MS
+        } else {
+            IDLE_MS
+        };
+        event_queue.flush()?;
+        if let Some(guard) = event_queue.prepare_read() {
+            let mut fd = libc::pollfd {
+                fd: conn.as_fd().as_raw_fd(),
+                events: libc::POLLIN,
+                revents: 0,
+            };
+            let result = unsafe { libc::poll(&mut fd, 1, wake as i32) };
+            if result < 0 {
+                let err = std::io::Error::last_os_error();
+                if err.kind() != std::io::ErrorKind::Interrupted {
+                    return Err(err.into());
+                }
+            } else if result > 0 {
+                guard.read()?;
+            }
+        }
     }
     Ok(())
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+enum Anim {
+    None,
+    /// окно едет вверх из-под кромки экрана
+    Rise,
+    /// окно уходит обратно за кромку
+    Fall,
+}
+
+/// Анимация одного окна: 0.0 — целиком под нижней кромкой, 1.0 — на своём месте.
+/// Пилюля и панель анимируются независимо (панель может открыться, когда пилюли нет).
+#[derive(Debug)]
+struct Reveal {
+    value: f32,
+    anim: Anim,
+    from: f32,
+    start: Instant,
+    dur: Duration,
+    /// видим ли окно по состоянию демона
+    want: Option<bool>,
+}
+
+impl Reveal {
+    fn new() -> Self {
+        Self {
+            value: 0.0,
+            anim: Anim::None,
+            from: 0.0,
+            start: Instant::now(),
+            dur: Duration::from_millis(0),
+            want: None,
+        }
+    }
+
+    fn t(&self) -> f32 {
+        let dur = self.dur.as_secs_f32();
+        if dur <= 0.0 {
+            return 1.0;
+        }
+        self.start.elapsed().as_secs_f32() / dur
+    }
+
+    /// Направить окно к цели (true — показать). Возвращает true, если нужен кадр.
+    fn step(&mut self, target: bool, dirty: &mut bool) -> bool {
+        if self.want != Some(target) {
+            self.want = Some(target);
+            *dirty = true;
+            self.from = self.value;
+            self.start = Instant::now();
+            self.dur = Duration::from_millis(if target {
+                anim_rise_ms()
+            } else {
+                anim_fall_ms()
+            });
+            if !anim_on() || self.dur.is_zero() {
+                self.value = if target { 1.0 } else { 0.0 };
+                self.anim = Anim::None;
+            } else if target {
+                self.anim = Anim::Rise;
+            } else if self.value > 0.0 {
+                self.anim = Anim::Fall;
+            } else {
+                self.anim = Anim::None;
+            }
+        }
+        match self.anim {
+            Anim::None => false,
+            Anim::Rise => {
+                let t = self.t();
+                // ease-out-back: быстрый вылет, лёгкое превышение, мягкая усадка на место
+                self.value = self.from + (1.0 - self.from) * ease_out_back(t);
+                if t >= 1.0 {
+                    self.value = 1.0;
+                    self.anim = Anim::None;
+                }
+                true
+            }
+            Anim::Fall => {
+                let t = self.t();
+                let eased = ease_in_cubic(t);
+                self.value = self.from * (1.0 - eased);
+                if t >= 1.0 {
+                    self.value = 0.0;
+                    self.anim = Anim::None;
+                }
+                true
+            }
+        }
+    }
 }
 
 struct Ui {
@@ -240,12 +749,73 @@ struct Ui {
     height: u32,
     layer: LayerSurface,
     pointer: Option<wl_pointer::WlPointer>,
-    status: Arc<Mutex<Status>>,
-    socket: std::path::PathBuf,
-    /// история уровня за последние ~1.8 с: волна рисуется по ней, а не «дрожанием»
-    levels: Vec<f32>,
+    shared: Arc<Mutex<Shared>>,
+    /// «настройки изменились, переспроси демон» — ставится после клика по кнопке
+    settings_due: Arc<AtomicBool>,
     font: Option<FontRef<'static>>,
     frame: u32,
+    compositor: wl_compositor::WlCompositor,
+    /// был ли последний commit пустым (пишу только тогда, когда состояние меняется)
+    mapped: Option<bool>,
+
+    /// анимация пилюли
+    reveal: Reveal,
+    /// нужен ли кадр немедленно (смена цели, первый configure)
+    dirty: bool,
+    /// последний «живой» статус: пока им рисуем, пока пилюля уходит
+    shown: Status,
+
+    /// окно панели настроек (второй layer surface того же процесса)
+    panel_layer: LayerSurface,
+    panel_surface: wl_surface::WlSurface,
+    panel_width: u32,
+    panel_height: u32,
+    panel_reveal: Reveal,
+    panel_mapped: Option<bool>,
+    /// кнопки последнего нарисованного кадра: по ним узнаём, куда кликнули
+    panel_keys: Vec<Button>,
+    /// строка результата: что ответил демон на последнюю команду
+    notice: String,
+    /// подпись последнего нарисованного покоящегося кадра панели. Пока она не
+    /// поменялась, второй буфер не гоняем: кадр панели — 114 400 пикселей, и
+    /// перерисовывать его каждые 100 мс ради неподвижных кнопок смысла нет.
+    panel_rest_sig: Option<String>,
+
+    /// где оверлей стоит: сторона монитора и смещения (меняется перетаскиванием)
+    placement: Placement,
+    /// файл, в который положение сохраняется, чтобы следующий запуск встал туда же
+    ui_path: std::path::PathBuf,
+    /// куда указала мышь в момент нажатия на пилюлю (None = не держим ничего)
+    press_origin: Option<(f64, f64)>,
+    /// это движение уже стало перетаскиванием: по отпусканию не считаем его «кликом = стоп»
+    dragged: bool,
+}
+
+/// Якорь и размер поверхности пилюли по стороне. Поверхность длиннее пилюли на
+/// REST_GAP вдоль своей стороны — в этом зазоре пилюля и прячется.
+fn apply_placement(layer: &LayerSurface, p: Placement) {
+    layer.set_anchor(anchor_for(p.edge));
+    // margin вдоль края (смещение) и от края (отступ) — из самой стороны
+    let (t, r, b, l) = p.margins;
+    layer.set_margin(t, r, b, l);
+    layer.set_size(p.pill_width(), p.pill_height());
+}
+
+/// То же для окна панели: оно во столько же раз длиннее и стоит рядом с пилюлей.
+fn apply_panel_placement(layer: &LayerSurface, p: Placement) {
+    layer.set_anchor(anchor_for(p.edge));
+    let (t, r, b, l) = p.panel_margins();
+    layer.set_margin(t, r, b, l);
+    layer.set_size(p.panel_width(), p.panel_height());
+}
+
+fn anchor_for(edge: Edge) -> Anchor {
+    match edge {
+        Edge::Bottom => Anchor::BOTTOM,
+        Edge::Top => Anchor::TOP,
+        Edge::Left => Anchor::LEFT,
+        Edge::Right => Anchor::RIGHT,
+    }
 }
 
 impl CompositorHandler for Ui {
@@ -268,14 +838,10 @@ impl CompositorHandler for Ui {
     fn frame(
         &mut self,
         _c: &Connection,
-        q: &QueueHandle<Self>,
+        _q: &QueueHandle<Self>,
         _s: &wl_surface::WlSurface,
         _t: u32,
     ) {
-        if debug_on() && self.frame % 30 == 0 {
-            eprintln!("frame-событие #{}", self.frame);
-        }
-        self.draw(q);
     }
     fn surface_enter(
         &mut self,
@@ -351,10 +917,127 @@ impl PointerHandler for Ui {
         events: &[PointerEvent],
     ) {
         for event in events {
-            if matches!(event.kind, PointerEventKind::Press { .. }) {
-                // Клик по оверлею = «закончить и вставить».
-                let _ = ask_command(&self.socket, "stop");
+            let (x, y) = event.position;
+            match event.kind {
+                PointerEventKind::Press { .. } => self.on_press(event, x, y),
+                PointerEventKind::Release { .. } => self.on_release(event, x, y),
+                PointerEventKind::Motion { .. } => self.on_motion(x, y),
+                _ => {}
             }
+        }
+    }
+}
+
+impl Ui {
+    /// Нажали на пилюлю: запоминаем точку — дальше по ней решаем, был это клик или
+    /// перетаскивание к другой границе монитора. Кнопка панели применяется сразу.
+    fn on_press(&mut self, event: &PointerEvent, x: f64, y: f64) {
+        if event.surface.id() == self.panel_surface.id() {
+            let origin = self.placement.panel_origin(self.panel_reveal.value);
+            let index = edge::button_at(
+                &self.panel_keys,
+                x,
+                y,
+                origin,
+                !self.placement.edge.horizontal(),
+            );
+            if let Some(index) = index {
+                let id = self.panel_keys[index].id;
+                self.press(id);
+            }
+            return;
+        }
+        if event.surface.id() != self.layer.wl_surface().id() {
+            return;
+        }
+        // Клик по пилюле = «закончить и вставить», но только если его не тащили.
+        self.press_origin = Some((x, y));
+        self.dragged = false;
+    }
+
+    /// Отпустили пилюлю: дотащили до другой стороны — переезжаем и запоминаем; иначе
+    /// это был обычный клик = стоп.
+    fn on_release(&mut self, event: &PointerEvent, x: f64, y: f64) {
+        if event.surface.id() != self.layer.wl_surface().id() {
+            return;
+        }
+        let Some((ox, oy)) = self.press_origin.take() else {
+            return;
+        };
+        let moved = (x - ox, y - oy);
+        if !self.dragged
+            && moved.0.abs() < DRAG_THRESHOLD as f64
+            && moved.1.abs() < DRAG_THRESHOLD as f64
+        {
+            // Клик по пилюле = «закончить и вставить».
+            let _ = ask_command(&dicta_core_socket_path_static(), "stop");
+            return;
+        }
+        self.move_to(moved.0, moved.1);
+    }
+
+    /// Движение с зажатой кнопкой: после DRAG_THRESHOLD пилюля считает, что её тащат,
+    /// и переставляется на ту сторону экрана, куда смотрит движение.
+    fn on_motion(&mut self, x: f64, y: f64) {
+        let Some((ox, oy)) = self.press_origin else {
+            return;
+        };
+        let dx = x - ox;
+        let dy = y - oy;
+        if !self.dragged && dx.abs() < DRAG_THRESHOLD as f64 && dy.abs() < DRAG_THRESHOLD as f64 {
+            return;
+        }
+        self.dragged = true;
+        self.move_to(dx, dy);
+    }
+
+    /// Переставить оверлей по смещению мыши и сохранить: в следующий раз он встанет туда же.
+    fn move_to(&mut self, dx: f64, dy: f64) {
+        let next = self.placement.dragged(dx, dy);
+        // Переезд на другую сторону — смещение вдоль неё начинается заново, а отступ
+        // от края сохраняется; сдвиг вдоль своей стороны остаётся сдвигом.
+        let placement = if next.edge != self.placement.edge {
+            Placement::new(next.edge).with_along(self.placement.along())
+        } else {
+            next
+        };
+        self.apply_placement(placement);
+    }
+
+    /// Переставить оверлей на заданную сторону (кнопка «край» в панели настроек).
+    fn move_to_edge(&mut self, edge: Edge) {
+        self.apply_placement(self.placement.with_edge(edge));
+    }
+
+    /// Применить положение: размеры обоих окон, их маргины и запись в ui.toml.
+    fn apply_placement(&mut self, placement: Placement) {
+        if placement == self.placement {
+            return;
+        }
+        self.placement = placement;
+        self.width = placement.pill_width();
+        self.height = placement.pill_height();
+        self.panel_width = placement.panel_width();
+        self.panel_height = placement.panel_height();
+        apply_placement(&self.layer, placement);
+        apply_panel_placement(&self.panel_layer, placement);
+        self.layer.commit();
+        self.panel_layer.commit();
+        // Композитор ответит configure на новый размер — перерисовку берём на себя сразу,
+        // пока его ответ не пришёл: пилюля должна оказаться на новой стороне без паузы.
+        self.dirty = true;
+        // новое положение — новый кадр: подпись покоя панели больше не годится
+        self.panel_rest_sig = None;
+        let cfg = edge::UiConfig::from_placement(&placement);
+        if let Err(err) = edge::save(&self.ui_path, &cfg) {
+            eprintln!("не сохранил положение ({}): {err}", self.ui_path.display());
+        }
+        if debug_on() {
+            eprintln!(
+                "сторона -> {} margins {:?}",
+                placement.edge.as_str(),
+                placement.margins
+            );
         }
     }
 }
@@ -372,318 +1055,346 @@ impl LayerShellHandler for Ui {
     fn configure(
         &mut self,
         _c: &Connection,
-        q: &QueueHandle<Self>,
-        _l: &LayerSurface,
+        _q: &QueueHandle<Self>,
+        layer: &LayerSurface,
         configure: LayerSurfaceConfigure,
         _serial: u32,
     ) {
-        if configure.new_size.0 != 0 && configure.new_size.1 != 0 {
-            self.width = configure.new_size.0;
-            self.height = configure.new_size.1;
+        let given = configure.new_size;
+        if layer.wl_surface().id() == self.panel_layer.wl_surface().id() {
+            // Панель: размер задан явно, перерисовываем только если композитор его поменял.
+            if given != (0, 0) && given != (self.panel_width, self.panel_height) {
+                self.panel_width = given.0;
+                self.panel_height = given.1;
+                self.dirty = true;
+            }
+            if debug_on() {
+                eprintln!(
+                    "configure панель: ({}x{}) -> {:?}",
+                    self.placement.panel_width(),
+                    self.placement.panel_height(),
+                    given
+                );
+            }
+            return;
+        }
+
+        let size_changed = given != (self.width, self.height) && given.0 != 0 && given.1 != 0;
+        if given.0 != 0 && given.1 != 0 {
+            self.width = given.0;
+            self.height = given.1;
         }
         if debug_on() {
             eprintln!(
-                "configure: requested ({}x{}) -> suggested {:?}",
-                W, H, configure.new_size
+                "configure пилюля: requested ({}x{}) -> suggested {:?}",
+                self.placement.pill_width(),
+                self.placement.pill_height(),
+                given
             );
         }
-        if self.first_configure {
-            self.first_configure = false;
-        }
-        self.draw(q);
-    }
-}
-
-/// ARGB как u32 (0xAARRGGBB), пишется little-endian — как ожидает wl_shm Argb8888.
-struct Canvas {
-    w: u32,
-    h: u32,
-    px: Vec<u8>,
-}
-
-impl Canvas {
-    fn new(w: u32, h: u32) -> Self {
-        Self {
-            w,
-            h,
-            px: vec![0; (w * h * 4) as usize],
+        let was_first = self.first_configure;
+        self.first_configure = false;
+        // Кадр берёт на себя главный цикл. Перерисовывать по случаю и поводу
+        // нельзя: композиторы (особенно wlroots) присылают configure в ответ на
+        // каждый commit — получится бесконечный обмен commit'ами. Нужен только
+        // самый первый configure и случай, когда композитор изменил размер.
+        if was_first || size_changed {
+            self.dirty = true;
         }
     }
-    fn blend(&mut self, x: u32, y: u32, color: u32) {
-        if x >= self.w || y >= self.h {
-            return;
-        }
-        let a_src = ((color >> 24) & 0xFF) as u32;
-        if a_src == 0 {
-            return;
-        }
-        let idx = ((y * self.w + x) * 4) as usize;
-        let dst = u32::from_le_bytes([
-            self.px[idx],
-            self.px[idx + 1],
-            self.px[idx + 2],
-            self.px[idx + 3],
-        ]);
-        let mix = |s: u32, d: u32| -> u32 { (s * a_src + d * (255 - a_src)) / 255 };
-        let out = (255u32) << 24
-            | mix((color >> 16) & 0xFF, (dst >> 16) & 0xFF) << 16
-            | mix((color >> 8) & 0xFF, (dst >> 8) & 0xFF) << 8
-            | mix(color & 0xFF, dst & 0xFF);
-        self.px[idx..idx + 4].copy_from_slice(&out.to_le_bytes());
-    }
-    fn rect(&mut self, x0: u32, y0: u32, w: u32, h: u32, color: u32) {
-        for y in y0..(y0 + h) {
-            for x in x0..(x0 + w) {
-                self.blend(x, y, color);
-            }
-        }
-    }
-    fn circle(&mut self, cx: u32, cy: u32, r: u32, color: u32) {
-        for dy in 0..=(2 * r) {
-            for dx in 0..=(2 * r) {
-                let ddx = dx as i32 - r as i32;
-                let ddy = dy as i32 - r as i32;
-                if ddx * ddx + ddy * ddy <= (r * r) as i32 {
-                    self.blend(cx + dx, cy + dy, color);
-                }
-            }
-        }
-    }
-    fn write_into(&self, canvas: &mut [u8]) {
-        canvas.copy_from_slice(&self.px);
-    }
-}
-
-fn argb(a: u8, r: u8, g: u8, b: u8) -> u32 {
-    ((a as u32) << 24) | ((r as u32) << 16) | ((g as u32) << 8) | (b as u32)
 }
 
 impl Ui {
-    fn draw(&mut self, q: &QueueHandle<Self>) {
+    /// Один шаг анимации обоих окон; true, если хоть одно ещё движется.
+    fn tick(&mut self) -> bool {
+        let (pill_target, panel_target, live) = {
+            let Ok(shared) = self.shared.lock() else {
+                return false;
+            };
+            (
+                always_draw()
+                    || shared.status.state == "recording"
+                    || shared.status.state == "transcribing",
+                shared.status.panel || panel_always(),
+                shared.status.clone(),
+            )
+        };
+        if pill_target {
+            // пока пилюля на экране, рисуем живой статус (таймер, волна, подсказка)
+            self.shown = live;
+        }
+        let pill = self.reveal.step(pill_target, &mut self.dirty);
+        let panel = self.panel_reveal.step(panel_target, &mut self.dirty);
+        pill || panel
+    }
+
+    /// Клик по кнопке панели: отправить команду демону и показать его ответ.
+    fn press(&mut self, id: &'static str) {
+        if id == "edge" {
+            // «край» — локальное действие демону не передаётся: это положение окна.
+            self.move_to_edge(self.placement.edge.next());
+            return;
+        }
+        let (settings, recording) = match self.shared.lock() {
+            Ok(shared) => (
+                shared.settings.clone().unwrap_or_default(),
+                shared.status.state == "recording",
+            ),
+            Err(_) => return,
+        };
+        let Some(request) = panel::request_for(id, &settings, recording) else {
+            return;
+        };
+        let payload = request.json();
+        if debug_on() {
+            eprintln!("panel: клик {id} -> {}", payload.trim());
+        }
+        self.notice = match ask_payload(&dicta_core_socket_path_static(), &payload) {
+            Ok(reply) => notice_from_reply(&reply),
+            Err(err) => format!("демон не ответил: {err}"),
+        };
+        // значения после изменения спрашиваем заново
+        self.settings_due.store(true, Ordering::Relaxed);
+        self.dirty = true;
+    }
+
+    /// Панель настроек: вторая поверхность того же процесса, та же анимация снизу.
+    fn draw_panel(&mut self, q: &QueueHandle<Self>) {
+        let (width, height) = (self.panel_width, self.panel_height);
+        let reveal = self.panel_reveal.value;
+        let vertical = !self.placement.edge.horizontal();
+        // Корпус панели в координатах её поверхности: сдвиг по стороне + подъём.
+        let origin = self.placement.panel_origin(reveal);
+        let stride: i32 = (width * 4) as i32;
+
+        if reveal <= 0.0 {
+            if self.panel_mapped == Some(false) {
+                return;
+            }
+            let Ok((buffer, mem)) = self.pool.create_buffer(
+                width as i32,
+                height as i32,
+                stride,
+                wl_shm::Format::Argb8888,
+            ) else {
+                return;
+            };
+            mem.fill(0);
+            self.panel_layer
+                .wl_surface()
+                .damage_buffer(0, 0, width as i32, height as i32);
+            let _ = buffer.attach_to(self.panel_layer.wl_surface());
+            let region = self.compositor.create_region(q, ());
+            self.panel_layer
+                .wl_surface()
+                .set_input_region(Some(&region));
+            region.destroy();
+            self.panel_layer.commit();
+            self.panel_mapped = Some(false);
+            self.panel_rest_sig = None;
+            return;
+        }
+
+        let (settings, recording, state) = match self.shared.lock() {
+            Ok(shared) => (
+                shared.settings.clone().unwrap_or_default(),
+                shared.status.state == "recording",
+                shared.status.state.clone(),
+            ),
+            Err(_) => return,
+        };
+        let keys = panel::buttons(&settings, recording, self.placement.edge);
+        let notice = self.notice.clone();
+        // Состав кадра определяется подписями кнопок, заголовком и строкой ответа:
+        // если они те же, что в последнем покоящемся кадре, рисовать нечего.
+        let sig = format!(
+            "{state}|{}|{}",
+            notice,
+            keys.iter()
+                .map(|k| k.label.as_str())
+                .collect::<Vec<_>>()
+                .join("|")
+        );
+        if reveal >= 1.0
+            && self.panel_mapped == Some(true)
+            && self.panel_rest_sig.as_deref() == Some(&sig)
+        {
+            return;
+        }
+        let header = format!("dicta · {}", state);
+        let hint = if settings.reloading {
+            "модель загружается: порог и авто-стоп менять можно, смену модели повтори после загрузки"
+        } else {
+            "Ctrl+Alt+V — открыть/закрыть · клик по кнопке = применить · удержать пилюлю и потащить к краю — переставить"
+        };
+        // Параллельно с подъёмом — фейд: панель проявляется, а не выпрыгивает.
+        let alpha = 0.5 + 0.5 * reveal.clamp(0.0, 1.0);
+        let canvas = render::paint_panel(
+            width,
+            height,
+            if vertical { origin.0 } else { origin.1 },
+            alpha,
+            vertical,
+            &header,
+            &notice,
+            hint,
+            &keys,
+            self.font.as_ref(),
+        );
+        self.panel_keys = keys;
+
+        let Ok((buffer, mem)) = self.pool.create_buffer(
+            width as i32,
+            height as i32,
+            stride,
+            wl_shm::Format::Argb8888,
+        ) else {
+            return;
+        };
+        canvas.write_into(mem);
+        self.panel_layer
+            .wl_surface()
+            .damage_buffer(0, 0, width as i32, height as i32);
+        let _ = buffer.attach_to(self.panel_layer.wl_surface());
+
+        // Клики ловим только по корпусу панели: полоса рядом с ней (там пилюля и рабочий
+        // стол) должна оставаться кликабельной для остальных окон.
+        let region = self.compositor.create_region(q, ());
+        if vertical {
+            region.add(origin.0.max(0), 0, render::PANEL_H as i32, height as i32);
+        } else {
+            region.add(0, origin.1.max(0), width as i32, render::PANEL_H as i32);
+        }
+        self.panel_layer
+            .wl_surface()
+            .set_input_region(Some(&region));
+        region.destroy();
+
+        self.panel_layer.commit();
+        self.panel_mapped = Some(true);
+        // Пока кадр не на месте (анимация), подпись покоя не запоминаем: последний
+        // кадр подъёма обязан быть отправлен.
+        self.panel_rest_sig = if reveal >= 1.0 { Some(sig) } else { None };
+        if debug_on() {
+            eprintln!(
+                "panel: reveal={:.3} origin={}x{} кнопок {}",
+                reveal,
+                origin.0,
+                origin.1,
+                self.panel_keys.len()
+            );
+        }
+    }
+
+    fn draw_pill(&mut self, q: &QueueHandle<Self>) {
         if self.first_configure {
             return;
         }
         let (width, height) = (self.width, self.height);
         let stride: i32 = (width * 4) as i32;
+        let reveal = self.reveal.value;
+        // Ориентация берётся из стороны: горизонтальная пилюля выезжает по вертикали,
+        // вертикальная — по горизонтали.
+        let vertical = !self.placement.edge.horizontal();
+        // для низа/верха это координата по вертикали, для лева/права — по горизонтали:
+        // paint принимает именно её
+        let coord = self.placement.pill_coord(width, height, reveal);
 
-        let status = self.status.lock().map(|s| s.clone()).unwrap_or_default();
+        if debug_on() && (self.reveal.anim != Anim::None || self.frame % 30 == 0) {
+            eprintln!(
+                "draw #{} t={:.3} reveal={:.3} coord={} state={}",
+                self.frame,
+                self.reveal.t(),
+                reveal,
+                coord,
+                self.shown.state
+            );
+        }
 
-        // idle -> полностью прозрачный кадр: оверлея как будто нет.
-        //
-        // Пустой буфер attach'ить ОБЯЗАТЕЛЬНО: surface становится mapped только на
-        // commit, в котором присоединён буфер. Если коммитить «ничего» (как делал
-        // раньше), композитор никогда не пришлёт frame callback -> draw() больше не
-        // вызывается -> при старте записи оверлей не появляется вообще.
-        if status.state == "idle" && !always_draw() {
-            match self.pool.create_buffer(
+        if reveal <= 0.0 {
+            // Пилюли нет: пустой буфер (поверхность остаётсяMapped, чтобы пилюля
+            // появилась мгновенно) и пустая input region — клики идут сквозь неё.
+            if self.mapped == Some(false) {
+                if let Ok(mut shared) = self.shared.lock() {
+                    shared.levels.clear();
+                }
+                return;
+            }
+            let Ok((buffer, mem)) = self.pool.create_buffer(
                 width as i32,
                 height as i32,
                 stride,
                 wl_shm::Format::Argb8888,
-            ) {
-                Ok((buffer, mut mem)) => {
-                    let empty: &mut [u8] = &mut mem;
-                    empty.fill(0);
-                    self.layer
-                        .wl_surface()
-                        .damage_buffer(0, 0, width as i32, height as i32);
-                    self.layer
-                        .wl_surface()
-                        .frame(q, FrameCallbackData(self.layer.wl_surface().clone()));
-                    let _ = buffer.attach_to(self.layer.wl_surface());
-                }
-                Err(err) => {
-                    if debug_on() {
-                        eprintln!("idle create_buffer не удался: {err}");
-                    }
-                }
-            }
+            ) else {
+                return;
+            };
+            mem.fill(0);
+            self.layer
+                .wl_surface()
+                .damage_buffer(0, 0, width as i32, height as i32);
+            let _ = buffer.attach_to(self.layer.wl_surface());
+            let region = self.compositor.create_region(q, ());
+            self.layer.wl_surface().set_input_region(Some(&region));
+            region.destroy();
             self.layer.commit();
-            self.frame = self.frame.wrapping_add(1);
+            self.mapped = Some(false);
+            if let Ok(mut shared) = self.shared.lock() {
+                shared.levels.clear();
+            }
             return;
         }
 
-        let recording = status.state == "recording";
-        if recording {
-            // статус приходит ~10 раз в секунду, кадры — 60: сдвигаем раз в 6 кадров
-            if self.frame % 6 == 0 {
-                self.levels.push(status.level);
-                if self.levels.len() > 18 {
-                    self.levels.remove(0);
-                }
-            }
-        } else if !self.levels.is_empty() {
-            self.levels.clear();
-        }
+        let scene = Scene {
+            recording: self.shown.state == "recording",
+            seconds: self.shown.seconds,
+            frame: self.frame,
+        };
+        let hist: Vec<f32> = self
+            .shared
+            .lock()
+            .map(|s| s.levels.clone())
+            .unwrap_or_default();
+        // Параллельно с подъёмом — фейд: появляется не «выпрыгиванием», а проявлением.
+        let alpha = 0.45 + 0.55 * reveal.clamp(0.0, 1.0);
+        let canvas: Canvas = paint(
+            width,
+            height,
+            coord,
+            alpha,
+            vertical,
+            &scene,
+            &hist,
+            self.font.as_ref(),
+        );
 
-        let mut c = Canvas::new(width, height);
-        let transcribing = status.state == "transcribing";
-
-        if recording || transcribing || always_draw() {
-            // фон-пилюля
-            let pill = if std::env::var("DICTA_FLASH").is_ok() {
-                argb(0xFF, 0x00, 0xFF, 0x00)
-            } else {
-                argb(0xE6, 0x18, 0x1A, 0x1E)
-            };
-            c.rect(0, 2, width, height - 4, pill);
-            c.rect(0, 0, width, 2, argb(0x00, 0, 0, 0));
-            // индикатор
-            if recording {
-                // без мигания: оно выглядело как «рябь»; пульс даёт сама волна истории
-                c.circle(18, height / 2, 5, argb(0xFF, 0xE5, 0x4B, 0x4B));
-            } else {
-                // «сканер» при распознавании: яркая голова со шлейфом
-                let period = 14;
-                let step = (self.frame / 2) % period;
-                let head = if step < period / 2 {
-                    step
-                } else {
-                    period - step
-                };
-                for i in 0..period {
-                    let d = (i as i32 - head as i32).abs();
-                    let color = if d < 3 {
-                        argb(0xFF, 0x89, 0xB4, 0xFA)
-                    } else {
-                        argb(0xFF, 0x45, 0x4A, 0x52)
-                    };
-                    c.rect(12 + (i as u32) * 8, height / 2 - 4, 6, 8, color);
-                }
-            }
-
-            let scale = PxScale::from(17.0);
-            let mut x = 32.0f32;
-            x = self.text(
-                &mut c,
-                if recording { "REC" } else { "… " },
-                x,
-                11.0,
-                scale,
-                argb(0xFF, 0xE5, 0x4B, 0x4B),
-            );
-            let _ = self.text(
-                &mut c,
-                &format!(
-                    "{:01}:{:02}",
-                    (status.seconds as u32) / 60,
-                    (status.seconds as u32) % 60
-                ),
-                x + 4.0,
-                11.0,
-                scale,
-                argb(0xFF, 0xF2, 0xF3, 0xF4),
-            );
-
-            // волна уровня: 18 колонок
-            let bars = 18u32;
-            let bw = 7u32;
-            let gap = 2u32;
-            let x0 = 12.0 + (width as f32 - (bars * (bw + gap)) as f32) / 2.0 + 40.0;
-            for i in 0..bars as usize {
-                // newest справа; если истории ещё нет — колонка пустая
-                let jitter = if self.levels.len() > i {
-                    self.levels[self.levels.len() - 1 - i]
-                } else {
-                    0.0
-                };
-                let h = ((jitter * 22.0).round() as u32).max(2);
-                let shade = if jitter > 0.6 {
-                    argb(0xFF, 0x89, 0xB4, 0xFA)
-                } else if jitter > 0.3 {
-                    argb(0xFF, 0x6E, 0x9E, 0xE8)
-                } else {
-                    argb(0xFF, 0x3C, 0x55, 0x77)
-                };
-                c.rect(
-                    (x0 + (i as u32 * (bw + gap)) as f32) as u32,
-                    height - 6 - h,
-                    bw,
-                    h,
-                    shade,
-                );
-            }
-
-            let hint = if recording {
-                "клик = готово"
-            } else {
-                "распознаю…"
-            };
-            self.text_right(
-                &mut c,
-                hint,
-                (width as f32) - 12.0,
-                11.0,
-                PxScale::from(15.0),
-                argb(0xFF, 0x9A, 0xA0, 0xA8),
-            );
-        }
-
-        let (buffer, canvas) = match self.pool.create_buffer(
+        let Ok((buffer, mem)) = self.pool.create_buffer(
             width as i32,
             height as i32,
             stride,
             wl_shm::Format::Argb8888,
-        ) {
-            Ok(pair) => pair,
-            Err(err) => {
-                if debug_on() {
-                    eprintln!("create_buffer не удался: {err}");
-                }
-                return;
+        ) else {
+            if debug_on() {
+                eprintln!("create_buffer не удался");
             }
+            return;
         };
-        if debug_on() && self.frame % 30 == 0 {
-            eprintln!(
-                "draw #{} state={} level={:.2}",
-                self.frame, status.state, status.level
-            );
-        }
-        c.write_into(canvas);
-
+        canvas.write_into(mem);
         self.layer
             .wl_surface()
             .damage_buffer(0, 0, width as i32, height as i32);
-        self.layer
-            .wl_surface()
-            .frame(q, FrameCallbackData(self.layer.wl_surface().clone()));
         let _ = buffer.attach_to(self.layer.wl_surface());
+
+        // Клик ловим только по пилюле: прозрачная полоса вокруг неё не должна
+        // мешать окну под оверлеем.
+        let (rx, ry, rw, rh) = self.placement.pill_rect(width, height, reveal);
+        let region = self.compositor.create_region(q, ());
+        region.add(rx, ry, rw as i32, rh as i32);
+        self.layer.wl_surface().set_input_region(Some(&region));
+        region.destroy();
+
         self.layer.commit();
+        self.mapped = Some(true);
         self.frame = self.frame.wrapping_add(1);
-    }
-
-    fn text(&self, c: &mut Canvas, s: &str, mut x: f32, y: f32, scale: PxScale, color: u32) -> f32 {
-        let Some(font) = &self.font else { return x };
-        for ch in s.chars() {
-            let id: GlyphId = font.glyph_id(ch);
-            let glyph = id.with_scale_and_position(scale, point(x, y));
-            if let Some(outlined) = font.outline_glyph(glyph.clone()) {
-                let bounds = outlined.px_bounds();
-                let ox = bounds.min.x.max(0.0) as i32;
-                let oy = bounds.min.y.max(0.0) as i32;
-                outlined.draw(|gx, gy, coverage| {
-                    let px = ox + gx as i32;
-                    let py = oy + gy as i32;
-                    if px < 0 || py < 0 {
-                        return;
-                    }
-                    let a = (coverage * 255.0).clamp(0.0, 1.0) as u32;
-                    let with_alpha = (color & 0x00FF_FFFF) | (a << 24);
-                    c.blend(px as u32, py as u32, with_alpha);
-                });
-            }
-            x += font.h_advance_unscaled(id) * scale.x;
-        }
-        x
-    }
-
-    fn text_right(&self, c: &mut Canvas, s: &str, right: f32, y: f32, scale: PxScale, color: u32) {
-        let Some(font) = &self.font else { return };
-        let width: f32 = s
-            .chars()
-            .map(|ch| font.h_advance_unscaled(font.glyph_id(ch)) * scale.x)
-            .sum();
-        self.text(c, s, (right - width).max(0.0), y, scale, color);
     }
 }
 
@@ -703,6 +1414,13 @@ fn dicta_core_socket_path() -> std::path::PathBuf {
         .join("dicta.sock")
 }
 
+/// Путь к сокету один раз на процесс: нужен в обработчике клика.
+fn dicta_core_socket_path_static() -> std::path::PathBuf {
+    use std::sync::OnceLock;
+    static SOCKET: OnceLock<std::path::PathBuf> = OnceLock::new();
+    SOCKET.get_or_init(dicta_core_socket_path).clone()
+}
+
 fn ask_status(socket: &std::path::Path) -> Result<Status> {
     let raw = ask_command(socket, "status")?;
     let parsed: Status = serde_json::from_str(&raw)?;
@@ -710,16 +1428,50 @@ fn ask_status(socket: &std::path::Path) -> Result<Status> {
 }
 
 fn ask_command(socket: &std::path::Path, cmd: &str) -> Result<String> {
+    ask_payload(socket, &format!("{{\"cmd\":\"{cmd}\"}}\n"))
+}
+
+/// То же, но с готовым JSON: команды панели несут key/value.
+fn ask_payload(socket: &std::path::Path, payload: &str) -> Result<String> {
     use std::io::{BufRead, BufReader, Write};
     let stream = std::os::unix::net::UnixStream::connect(socket)?;
     stream.set_read_timeout(Some(Duration::from_secs(5)))?;
     let mut writer = stream.try_clone()?;
     let mut reader = BufReader::new(stream);
-    writer.write_all(format!("{{\"cmd\":\"{cmd}\"}}\n").as_bytes())?;
+    writer.write_all(payload.as_bytes())?;
     writer.flush()?;
     let mut line = String::new();
     reader.read_line(&mut line)?;
     Ok(line.trim().to_string())
+}
+
+/// Что показать строкой результата панели: сначала ошибку, потом сообщение демона.
+#[derive(Deserialize)]
+struct DaemonReply {
+    #[serde(default)]
+    text: Option<String>,
+    #[serde(default)]
+    error: Option<String>,
+}
+
+fn notice_from_reply(raw: &str) -> String {
+    match serde_json::from_str::<DaemonReply>(raw) {
+        Ok(reply) => reply.error.or(reply.text).unwrap_or_default(),
+        Err(_) => String::new(),
+    }
+}
+
+/// Снимок настроек из демона (для подписей кнопок).
+fn ask_settings(socket: &std::path::Path) -> Result<Settings> {
+    #[derive(Deserialize)]
+    struct Wrapper {
+        #[serde(default)]
+        settings: Option<Settings>,
+    }
+    let raw = ask_command(socket, "settings")?;
+    let parsed: Wrapper =
+        serde_json::from_str(&raw).context("демон ответил непонятно на settings")?;
+    Ok(parsed.settings.unwrap_or_default())
 }
 
 delegate_registry!(Ui);
@@ -730,4 +1482,231 @@ impl ProvidesRegistryState for Ui {
         &mut self.registry_state
     }
     registry_handlers![OutputState, SeatState];
+}
+
+impl Dispatch<wl_region::WlRegion, ()> for Ui {
+    fn event(
+        _: &mut Self,
+        _: &wl_region::WlRegion,
+        _: wl_region::Event,
+        _: &(),
+        _: &Connection,
+        _: &QueueHandle<Self>,
+    ) {
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn pill_rises_from_behind_the_bottom_edge() {
+        let bottom = Placement::new(Edge::Bottom);
+        // в покое — на render::REST_GAP выше кромки экрана
+        assert_eq!(
+            bottom.pill_top(SURF_H, 1.0),
+            (SURF_H - render::TRAVEL) as i32
+        );
+        // старт — целиком под кромкой: верх пилюли равен высоте поверхности
+        assert_eq!(bottom.pill_top(SURF_H, 0.0), SURF_H as i32);
+        // середина пути между ними
+        assert!(bottom.pill_top(SURF_H, 0.5) < bottom.pill_top(SURF_H, 0.0));
+        assert!(bottom.pill_top(SURF_H, 0.5) > bottom.pill_top(SURF_H, 1.0));
+        // overshoot пружинной кривой не должен обрезаться верхним краем поверхности
+        let peak = (0..=100)
+            .map(|i| ease_out_back(i as f32 / 100.0))
+            .fold(f32::MIN, f32::max);
+        let overshoot_px = (peak - 1.0) * render::TRAVEL as f32;
+        assert!(overshoot_px > 2.0, "пружина должна быть заметна");
+        assert!(
+            overshoot_px < render::HEADROOM as f32,
+            "overshoot {overshoot_px}px не должен обрезаться краем поверхности"
+        );
+    }
+
+    #[test]
+    fn hidden_frame_draws_nothing() {
+        let scene = Scene {
+            recording: true,
+            seconds: 1.0,
+            frame: 0,
+        };
+        let bottom = Placement::new(Edge::Bottom);
+        let canvas = paint(
+            render::SURF_W,
+            SURF_H,
+            bottom.pill_top(SURF_H, 0.0),
+            1.0,
+            false,
+            &scene,
+            &[],
+            None,
+        );
+        assert!(canvas.pixels().iter().all(|b| *b == 0));
+    }
+
+    #[test]
+    fn resting_frame_draws_pill() {
+        let scene = Scene {
+            recording: true,
+            seconds: 1.0,
+            frame: 0,
+        };
+        let bottom = Placement::new(Edge::Bottom);
+        let canvas = paint(
+            render::SURF_W,
+            SURF_H,
+            bottom.pill_top(SURF_H, 1.0),
+            1.0,
+            false,
+            &scene,
+            &[],
+            None,
+        );
+        let px = canvas.pixels();
+        // центр пилюли непрозрачен, нижний зазор (12 px) — пуст
+        let rest = bottom.pill_top(SURF_H, 1.0) as usize;
+        let mid_row = rest + 2 + 15;
+        assert_eq!(px[(mid_row * render::SURF_W as usize + 200) * 4 + 3], 0xE6);
+        let gap_row = (SURF_H - 1) as usize;
+        assert!(px[(gap_row * render::SURF_W as usize + 200) * 4 + 3] == 0);
+    }
+
+    #[test]
+    fn vertical_frame_draws_a_turned_pill() {
+        // сторона слева/справа: та же толщина, только вдоль высоты кадра
+        let scene = Scene {
+            recording: true,
+            seconds: 1.0,
+            frame: 0,
+        };
+        let left = Placement::new(Edge::Left);
+        let (w, h) = (left.pill_width(), left.pill_height());
+        assert_eq!((w, h), (SURF_H, render::SURF_W));
+        let canvas = paint(
+            w,
+            h,
+            left.pill_coord(w, h, 1.0),
+            1.0,
+            true,
+            &scene,
+            &[0.8, 0.4],
+            None,
+        );
+        let px = canvas.pixels();
+        // корпус непрозрачен вдоль всей высоты, а левый край кадра (карман) — пуст
+        let rest = left.pill_left(left.pill_width(), 1.0) as usize;
+        let mid = h as usize / 2 * w as usize;
+        assert!(px[(mid + rest - 2) * 4 + 3] == 0, "карман у кромки пуст");
+        assert!(
+            px[(mid + rest + 2) * 4 + 3] > 0x80,
+            "корпус начинается от покоя"
+        );
+        assert!(px[(mid + rest + 13) * 4 + 3] > 0x80);
+        assert!(px[mid * 4 + 3] == 0);
+    }
+
+    #[test]
+    fn text_metrics_are_pixels_not_font_units() {
+        // Метрики ab_glyph — в дизайн-единицах шрифта; если перемножать их с
+        // PxScale напрямую, advance символа выходит ~20 000 пикселей и от всей
+        // строки остаётся первая буква. Проверка на этом и ломается регрессия.
+        let Some(font) = load_font() else {
+            return; // шрифта нет — проверять не на чем
+        };
+        let width = render::text_width(&font, "MMMM", ab_glyph::PxScale::from(14.0));
+        assert!(
+            width > 20.0 && width < 90.0,
+            "ширина «MMMM» при 14 px получилась {width} — метрики снова в единицах шрифта"
+        );
+    }
+
+    #[test]
+    fn panel_frame_draws_its_labels() {
+        let Some(font) = load_font() else {
+            return;
+        };
+        let settings = Settings {
+            min_level: 0.35,
+            model: "/m/ggml-medium-q5_0.bin".into(),
+            models: vec!["/m/ggml-medium-q5_0.bin".into()],
+            ..Settings::default()
+        };
+        let keys = panel::buttons(&settings, true, Edge::Bottom);
+        let canvas = render::paint_panel(
+            render::PANEL_W,
+            render::PANEL_SURFACE_H,
+            0,
+            1.0,
+            false,
+            "dicta · запись 0:03",
+            "порог 0.40 — сохранено",
+            "Ctrl+Alt+V — открыть/закрыть",
+            &keys,
+            Some(&font),
+        );
+        let px = canvas.pixels();
+        let ink = |x0: usize, y0: usize, x1: usize, y1: usize| -> usize {
+            let mut n = 0;
+            for y in y0..y1 {
+                for x in x0..x1 {
+                    let i = (y * render::PANEL_W as usize + x) * 4;
+                    let (r, g, b) = (px[i], px[i + 1], px[i + 2]);
+                    if r.max(g).max(b) > 90 {
+                        n += 1;
+                    }
+                }
+            }
+            n
+        };
+        // заголовок, все три ряда кнопок и обе строки снизу должны иметь чернила
+        for (name, x0, y0, x1, y1) in [
+            ("заголовок", 10usize, 10usize, 300, 28),
+            ("ряд записи", 12, 36, 136, 58),
+            ("ряд режимов", 12, 70, 260, 92),
+            ("ряд значений", 20, 104, 240, 126),
+            ("результат", 10, 129, 510, 143),
+            ("подсказка", 10, 141, 510, 155),
+        ] {
+            assert!(ink(x0, y0, x1, y1) > 60, "{name}: подписи не отрисованы");
+        }
+    }
+
+    #[test]
+    fn vertical_panel_draws_the_same_buttons_turned() {
+        let Some(font) = load_font() else {
+            return;
+        };
+        let settings = Settings::default();
+        let keys = panel::buttons(&settings, true, Edge::Left);
+        let left = Placement::new(Edge::Left);
+        let (w, h) = (left.panel_width(), left.panel_height());
+        let canvas = render::paint_panel(
+            w,
+            h,
+            left.panel_origin(1.0).0,
+            1.0,
+            true,
+            "dicta · запись 0:03",
+            "порог 0.40 — сохранено",
+            "левая грань",
+            &keys,
+            Some(&font),
+        );
+        let px = canvas.pixels();
+        // корпус панели лежит вдоль кадра: его середина непрозрачна от верха до низа
+        let column = (left.panel_origin(1.0).0 + (render::PANEL_H / 2) as i32) as usize;
+        let mut dark_rows = 0;
+        for y in 0..h as usize {
+            let i = (y * w as usize + column) * 4;
+            if px[i + 3] > 0x80 {
+                dark_rows += 1;
+            }
+        }
+        assert!(
+            dark_rows > h as usize / 2,
+            "корпус вертикальной панели отрисован только на {dark_rows} строк из {h}"
+        );
+    }
 }

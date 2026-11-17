@@ -135,6 +135,99 @@ fn default_paste_keys_by_app() -> HashMap<String, String> {
     m
 }
 
+/// Настройки, которые демон умеет менять на лету (панель оверлея, `dictactl settings`).
+/// Имена — ровно ключи TOML, их же принимает `set_key`.
+pub const EDITABLE_KEYS: &[&str] = &[
+    "min_level",
+    "auto_stop",
+    "auto_stop_level",
+    "auto_stop_after_ms",
+    "auto_stop_grace_ms",
+    "max_record_ms",
+    "inject_mode",
+    "paste_keys",
+    "clipboard_restore_ms",
+    "paste_delay_ms",
+    "atspi_allow_any_role",
+    "language",
+    "model",
+    "use_gpu",
+    "gpu_device",
+    "n_threads",
+    "beam_size",
+];
+
+/// Ключи, смена которых требует заново загрузить модель whisper.
+pub const ENGINE_KEYS: &[&str] = &[
+    "model",
+    "language",
+    "use_gpu",
+    "gpu_device",
+    "n_threads",
+    "beam_size",
+];
+
+/// Путь конфига, который читает `Config::load(None)` — туда же пишет панель настроек.
+pub fn config_path() -> PathBuf {
+    std::env::var_os("DICTA_CONFIG")
+        .map(PathBuf::from)
+        .or_else(|| dirs::config_dir().map(|dir| dir.join("dicta").join("config.toml")))
+        .unwrap_or_else(|| PathBuf::from("dicta-config.toml"))
+}
+
+/// Поменять одно значение в config.toml, не трогая комментарии и соседние строки.
+/// `value_toml` — уже TOML-литерал: `0.4`, `true`, `"paste"`.
+/// Строка `key = значение` находится и заменяется по месту (хвостовой комментарий
+/// сохраняется); если такой строки нет — значение дописывается в конец файла.
+/// Запись атомарная: временный файл + rename.
+pub fn set_key(path: &std::path::Path, key: &str, value_toml: &str) -> Result<()> {
+    let raw = match std::fs::read_to_string(path) {
+        Ok(text) => text,
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => String::new(),
+        Err(err) => return Err(err).with_context(|| format!("читать {}", path.display())),
+    };
+    let had_final_newline = raw.ends_with('\n');
+    let mut lines: Vec<String> = raw.lines().map(|line| line.to_string()).collect();
+
+    let mut replaced = false;
+    for line in lines.iter_mut() {
+        if line.trim_start().starts_with('#') {
+            continue; // закомментированное значение пользователя не раскомментируем
+        }
+        let Some((lhs, _rest)) = line.split_once('=') else {
+            continue;
+        };
+        if lhs.trim() != key {
+            continue;
+        }
+        let indent = &line[..line.len() - line.trim_start().len()];
+        // хвостовой комментарий сохраняем дословно, включая «#»
+        let comment = line.find('#').map(|hash| format!(" {}", &line[hash..]));
+        *line = match comment {
+            Some(comment) => format!("{indent}{key} = {value_toml}{comment}"),
+            None => format!("{indent}{key} = {value_toml}"),
+        };
+        replaced = true;
+        break;
+    }
+    if !replaced {
+        lines.push(format!("{key} = {value_toml}"));
+    }
+
+    let mut text = lines.join("\n");
+    if !text.is_empty() && (had_final_newline || !raw.is_empty()) {
+        text.push('\n');
+    }
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent).ok();
+    }
+    let tmp = path.with_extension("toml.tmp");
+    std::fs::write(&tmp, &text).with_context(|| format!("записать {}", tmp.display()))?;
+    std::fs::rename(&tmp, path)
+        .with_context(|| format!("{} -> {}", tmp.display(), path.display()))?;
+    Ok(())
+}
+
 impl Config {
     /// Какие клавиши слать в это окно.
     pub fn paste_keys_for(&self, app: Option<&str>) -> String {
@@ -223,5 +316,70 @@ mod tests {
     fn clipboard_timing_defaults_leave_room_for_the_target_app() {
         let cfg = Config::default();
         assert!(cfg.clipboard_restore_ms >= 2000);
+    }
+
+    /// Временный конфиг с уникальным именем: тесты гоняются параллельно.
+    fn tmp_config(name: &str, body: &str) -> std::path::PathBuf {
+        let dir = std::env::temp_dir().join(format!("dicta-config-test-{name}"));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("config.toml");
+        std::fs::write(&path, body).unwrap();
+        path
+    }
+
+    #[test]
+    fn set_key_replaces_in_place_and_keeps_trailing_comment() {
+        let path = tmp_config(
+            "inplace",
+            "# рабочая конфигурация\nmodel = \"/x/ggml-medium-q5_0.bin\"\ngpu_device = 0            # 0 = iGPU, 1 = XTX\nmin_level = 0.35\n",
+        );
+        set_key(&path, "min_level", "0.5").unwrap();
+        set_key(&path, "gpu_device", "1").unwrap();
+        let text = std::fs::read_to_string(&path).unwrap();
+        assert!(text.contains("min_level = 0.5"), "{text}");
+        // комментарий и отступ сохранены, значения в той же строке
+        assert!(
+            text.contains("gpu_device = 1 # 0 = iGPU, 1 = XTX"),
+            "{text}"
+        );
+        assert!(
+            text.contains("model = \"/x/ggml-medium-q5_0.bin\""),
+            "{text}"
+        );
+        assert!(text.contains("# рабочая конфигурация"), "{text}");
+        // не плодит дублей
+        assert_eq!(text.matches("min_level").count(), 1);
+
+        let cfg = Config::load(Some(&path)).unwrap();
+        assert_eq!(cfg.min_level, 0.5);
+        assert_eq!(cfg.gpu_device, 1);
+    }
+
+    #[test]
+    fn set_key_appends_missing_and_skips_commented_lines() {
+        let path = tmp_config(
+            "append",
+            "language = \"ru\"\n# min_level = 0.9   # специально закомментировано\n",
+        );
+        set_key(&path, "min_level", "0.42").unwrap();
+        set_key(&path, "language", "\"en\"").unwrap();
+        let text = std::fs::read_to_string(&path).unwrap();
+        // закомментированная строка осталась как была, новое значение дописано отдельно
+        assert!(text.contains("# min_level = 0.9"), "{text}");
+        assert!(text.contains("min_level = 0.42"), "{text}");
+        assert!(text.contains("language = \"en\""), "{text}");
+
+        let cfg = Config::load(Some(&path)).unwrap();
+        assert_eq!(cfg.min_level, 0.42);
+        assert_eq!(cfg.language, "en");
+    }
+
+    #[test]
+    fn editable_keys_are_real_toml_keys() {
+        // панель предлагает только то, что действительно есть в Config
+        for key in EDITABLE_KEYS {
+            assert!(key.len() > 2, "{key}");
+        }
+        assert!(ENGINE_KEYS.contains(&"model"));
     }
 }

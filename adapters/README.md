@@ -18,8 +18,9 @@ systemctl --user start 'dicta-probe@konsole.service' && tail /tmp/dicta-probe.lo
 ```
 
 Юниты: `dictad.service` (демон + оверлей), `dicta-toggle.service` и шаблонный
-`dicta-toggle@<окно>.service`, `dicta-cancel.service` (`@`-вариант), `dicta-probe.service`
-(`@`-вариант) — проверка без распознавания и вставки.
+`dicta-toggle@<окно>.service`, `dicta-cancel.service` (`@`-вариант), `dicta-panel.service`
+(открыть/закрыть панель настроек), `dicta-probe.service` (`@`-вариант) — проверка без
+распознавания и вставки.
 
 Шаблонный юнит нужен, чтобы демон знал, в какое окно вставлять: `dicta-toggle@konsole.service`
 -> `dictactl toggle --app konsole` -> `paste_keys_by_app` -> `Shift+Insert`.
@@ -40,16 +41,17 @@ DICTA_SELFTEST=1 DICTA_UNIT=dicta-probe.service ./install.sh   # то же, но
 KWin 6 в скриптах не имеет `spawn()`, поэтому скрипт зовёт `callDBus` на
 `org.freedesktop.systemd1 Manager.StartUnit("dicta-toggle@<окно>.service")`, а имя окна берёт
 из `workspace.activeWindow` (`appId` / `resourceClass`). Ключ — `Alt+V`
-(Meta+V в Plasma 6 занят историей буфера обмена; сменить: `DICTA_KEY='Ctrl+Alt+V' ./install.sh`),
+(Meta+V в Plasma 6 занят историей буфера обмена; сменить: `DICTA_KEY='Meta+D' ./install.sh`),
 отмена без клавиши по умолчанию
-(`DICTA_CANCEL_KEY='Meta+Shift+Escape' ./install.sh`). Удаление: `./uninstall.sh`.
+(`DICTA_CANCEL_KEY='Meta+Shift+Escape' ./install.sh`), панель настроек — `Ctrl+Alt+V`
+(`DICTA_PANEL_KEY='Ctrl+Alt+S' ./install.sh`). Удаление: `./uninstall.sh`.
 
 Проверка установки (без нажатия клавиш):
 
 ```bash
-journalctl --user -b 0 | grep dicta-hotkey        # "toggle 'Alt+V' -> ok"
+journalctl --user -b 0 | grep dicta-hotkey        # "toggle 'Alt+V' -> ok, panel 'Ctrl+Alt+V' -> ok"
 busctl --user call org.kde.kglobalaccel /component/kwin org.kde.kglobalaccel.Component shortcutNames \
-    | tr ' ' '\n' | grep -i dicta                 # dicta-toggle, dicta-cancel
+    | tr ' ' '\n' | grep -i dicta                 # dicta-toggle, dicta-cancel, dicta-panel
 tail /tmp/dicta-probe.log                          # если ставил DICTA_SELFTEST=1
 ```
 
@@ -92,17 +94,19 @@ source = ~/projects/dicta/adapters/hyprland/dicta.conf
 ```
 
 В файле уже есть `bind = SUPER, V, exec, dictactl toggle --app "$(hyprctl activewindow -j | jq -r .class)"`
-— так демон знает, что фокусное окно терминал, и берёт `Shift+Insert`.
+— так демон знает, что фокусное окно терминал, и берёт `Shift+Insert`. Там же
+`bind = SUPER SHIFT, S, exec, dictactl panel` — панель настроек.
 
 ## 4. Sway / wlroots-подобные, у которых есть bindsym
 
 `include ~/projects/dicta/adapters/sway/dicta.conf` — там `bindsym $mod+v` с
-`swaymsg -t get_tree | jq` для имени фокусного окна.
+`swaymsg -t get_tree | jq` для имени фокусного окна и `bindsym $mod+Shift+s` для панели.
 
 ## 5. Quickshell
 
 `quickshell/dicta.qml` — `ShellShortcut` + `Process.exec`, имя окна берётся из
 `Focus.window.active?.appId`; вставляется в существующую конфигурацию Quickshell.
+Три шортката: `dictaToggle`, `dictaCancel`, `dictaPanel`.
 
 ## 6. GNOME (Wayland)
 

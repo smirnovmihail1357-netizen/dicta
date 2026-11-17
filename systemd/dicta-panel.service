@@ -1,0 +1,9 @@
+[Unit]
+# клавишу жмут часто: не считать это «повторными сбоями»
+StartLimitIntervalSec=0
+Description=Dicta: показать или скрыть панель настроек
+
+[Service]
+Type=oneshot
+# панель держит демон, оверлей только рисует то, что ответил демон
+ExecStart=%h/.local/bin/dictactl panel

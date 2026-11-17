@@ -91,6 +91,18 @@ enum Command {
     },
     /// Сообщить демону-обёртке, какое окно сейчас фокусное (для ~/.cache/dicta/focus)
     FocusReport { app: String },
+    /// Показать или спрятать панель настроек оверлея (клавиша Ctrl+Alt+V)
+    Panel {
+        /// Явно: show или hide. Без параметра — переключить
+        #[arg(long)]
+        state: Option<String>,
+    },
+    /// Настройки демона: показать (`settings`) или изменить (`settings min_level 0.4`).
+    /// Изменение применяется сразу и сохраняется в config.toml.
+    Settings {
+        key: Option<String>,
+        value: Option<String>,
+    },
 }
 
 fn ask_json(socket: &std::path::Path, payload: &str) -> Result<String> {
@@ -134,6 +146,10 @@ fn ask(socket: &std::path::Path, cmd: &str, app: Option<&str>) -> Result<String>
     let mut line = String::new();
     reader.read_line(&mut line)?;
     Ok(line.trim().to_string())
+}
+
+fn json_quote(value: &str) -> String {
+    format!("\"{}\"", value.replace('\\', "\\\\").replace('"', "\\\""))
 }
 
 fn main() -> Result<()> {
@@ -261,6 +277,32 @@ fn main() -> Result<()> {
             dicta_core::focus::write_focus_cache(&app)?;
             println!("{}", dicta_core::focus::focus_cache_path().display());
         }
+        Command::Panel { state } => {
+            let payload = match state.as_deref() {
+                Some("show") | Some("on") | Some("true") => "{\"cmd\":\"panel\",\"on\":true}\n",
+                Some("hide") | Some("off") | Some("false") => "{\"cmd\":\"panel\",\"on\":false}\n",
+                _ => "{\"cmd\":\"panel\"}\n",
+            };
+            println!("{}", ask_json(&cfg.socket, payload)?);
+        }
+        Command::Settings { key, value } => match (key, value) {
+            (None, _) => println!("{}", ask_json(&cfg.socket, "{\"cmd\":\"settings\"}\n")?),
+            (Some(key), Some(value)) => {
+                let payload = format!(
+                    "{{\"cmd\":\"set\",\"key\":{},\"value\":{}}}\n",
+                    json_quote(&key),
+                    json_quote(&value)
+                );
+                println!("{}", ask_json(&cfg.socket, &payload)?);
+            }
+            (Some(key), None) => {
+                eprintln!(
+                        "нужно и значение: dictactl settings {key} <новое>\n\
+                         например: dictactl settings min_level 0.4 | auto_stop off | model /путь/ggml-small-q5_1.bin"
+                    );
+                std::process::exit(2);
+            }
+        },
         Command::PasteKeys => {
             let app = dicta_core::focus::active_app(cli.app.as_deref());
             let keys = cfg.paste_keys_for(app.as_deref());
