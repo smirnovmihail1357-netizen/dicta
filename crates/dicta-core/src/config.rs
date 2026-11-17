@@ -58,6 +58,8 @@ pub struct Config {
     pub paste_delay_ms: u64,
 
     /// Автоматически заканчивать запись, когда долго тихо (VAD-остановка).
+    /// По умолчанию выключено: запись закрывается только горячей клавишей (или `dictactl stop`).
+    /// Пороги тишины при этом сохраняются в конфиге и включаются по клику в панели настроек.
     pub auto_stop: bool,
     /// Уровень ниже этого значения считается тишиной (шкала как в `speech_level`).
     pub auto_stop_level: f32,
@@ -90,7 +92,7 @@ impl Default for Config {
             paste_keys_by_app: default_paste_keys_by_app(),
             clipboard_restore_ms: 2500,
             paste_delay_ms: 150,
-            auto_stop: true,
+            auto_stop: false,
             auto_stop_level: 0.22,
             auto_stop_after_ms: 1500,
             auto_stop_grace_ms: 1200,

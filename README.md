@@ -70,10 +70,11 @@ dictactl infer --timing speech.wav    # recognition only, no injection
 If dictation keeps being skipped, tune `min_level` (0.35 default): 0.25 = more sensitive,
 0.6 = stricter. The gate uses the loudest 300 ms window, not the average.
 
-Recording stops itself when the microphone goes quiet (`auto_stop = true`, default): the
-level monitor doubles as a watchdog and closes the recording after `auto_stop_after_ms`
-of silence, with a `auto_stop_grace_ms` grace period at the start and a `max_record_ms`
-hard ceiling.
+By default a recording is closed only by the hotkey (`auto_stop = false`) — silence never
+ends it. Set `auto_stop = true` if you want the daemon to close the recording itself: the
+level monitor doubles as a watchdog and stops after `auto_stop_after_ms` of silence, with an
+`auto_stop_grace_ms` grace period at the start. The `max_record_ms` hard ceiling applies
+either way.
 
 ## Injection without a clipboard (`inject_mode = "atspi"`)
 
@@ -175,10 +176,10 @@ Settings panel: `Ctrl+Alt+V` (KWin), `SUPER SHIFT, S` (Hyprland), `$mod+Shift+s`
 
 ## Status
 
-Working today: capture, recognition (Vulkan and CPU), silence gate, silence-based auto-stop
-(VAD), hallucination filter, clipboard+uinput injection with per-app key combos, AT-SPI2
-injection (no clipboard, no synthesised keystrokes), layer-shell overlay, KWin/hotkey chain,
-systemd units.
+Working today: capture, recognition (Vulkan and CPU), silence gate, optional silence-based
+auto-stop (VAD, off by default), hallucination filter, clipboard+uinput injection with
+per-app key combos, AT-SPI2 injection (no clipboard, no synthesised keystrokes),
+layer-shell overlay, KWin/hotkey chain, systemd units.
 
 Not done: an end-to-end AT-SPI insertion check against a real focused input field (on the
 development machine Firefox reports `focused` on its document node, not on a field), Qt
