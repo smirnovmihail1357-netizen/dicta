@@ -44,7 +44,7 @@ impl Default for Settings {
             inject_mode: "paste".into(),
             // 0 как «неизвестно»: панель тогда не показывает число
             min_level: 0.0,
-            auto_stop: true,
+            auto_stop: false,
             auto_stop_level: 0.22,
             auto_stop_after_ms: 1500,
             auto_stop_grace_ms: 1200,
@@ -103,20 +103,41 @@ fn row(y: u32, specs: &[(&'static str, String, u32, Tone)]) -> Vec<Button> {
     let total: u32 = specs.iter().map(|(_, _, w, _)| *w).sum();
     let gaps = PANEL_GAP_X * (specs.len() as u32 - 1);
     let space = PANEL_W - 2 * PANEL_PAD;
-    // свободное место делим поровну между кнопками — метки не липнут друг к другу
-    let slack = space.saturating_sub(total + gaps) / specs.len() as u32;
+    let avail = space.saturating_sub(gaps);
+    // Заявленные ширины — пожелание. Влезает — делим остаток поровну (метки не липнут
+    // друг к другу); не влезает — сжимаем пропорционально пожеланию. Без сжатия последние
+    // кнопки ряда уезжают за край окна и в них нельзя попасть: ряд «модель/клавиши/край/
+    // закрыть» просил 220 + 130 + 96 + 96 = 542 px при 476 доступных.
+    let widths: Vec<u32> = if total > avail {
+        let mut w: Vec<u32> = specs
+            .iter()
+            .map(|(_, _, width, _)| (*width as u64 * avail as u64 / total as u64) as u32)
+            .collect();
+        let mut rest = avail - w.iter().sum::<u32>();
+        for width in w.iter_mut() {
+            if rest == 0 {
+                break;
+            }
+            *width += 1;
+            rest -= 1;
+        }
+        w
+    } else {
+        let slack = (avail - total) / specs.len() as u32;
+        specs.iter().map(|(_, _, width, _)| *width + slack).collect()
+    };
     let mut x = PANEL_PAD;
     let mut out = Vec::new();
-    for (id, label, w, tone) in specs {
+    for ((id, label, _, tone), width) in specs.iter().zip(widths.iter()) {
         out.push(Button {
             id,
             label: label.clone(),
             x,
             y,
-            w: w + slack,
+            w: *width,
             tone: *tone,
         });
-        x += w + slack + PANEL_GAP_X;
+        x += *width + PANEL_GAP_X;
     }
     out
 }
@@ -359,8 +380,8 @@ mod tests {
         // ряд записи (5) + ряд режимов (4) + ряд значений (5: модель, клавиши, край, закрыть…)
         assert_eq!(buttons.len(), 13);
         let space = PANEL_W - 2 * PANEL_PAD;
-        // ряды: 5 кнопок, 4 кнопки, 3 кнопки
-        for (row, len) in [(0usize, 5), (5, 4), (9, 3)] {
+        // ряды: 5 кнопок, 4 кнопки, 4 кнопки (модель, клавиши, край, закрыть)
+        for (row, len) in [(0usize, 5), (5, 4), (9, 4)] {
             let group = &buttons[row..row + len];
             let last = group.last().unwrap();
             assert!(

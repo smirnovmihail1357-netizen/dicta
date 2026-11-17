@@ -197,30 +197,32 @@ impl Placement {
         self.thickness() + render::REST_GAP + render::HEADROOM
     }
 
-    /// Ширина окна панели: карман (PANEL_TRAVEL) плюс ряд кнопок, кончающийся на HEADROOM
-    /// от дальнего края, — ровно PANEL_SURFACE_H. Если пилюлю сдвинули вдоль стороны, окно
-    /// растёт на этот сдвиг, иначе панель уедет за его край.
+    /// Ширина окна панели: вдоль стороны — столько, сколько занимает ряд кнопок (PANEL_W),
+    /// поперёк — карман (PANEL_TRAVEL) плюс HEADROOM, то есть PANEL_SURFACE_H. Окно обязано
+    /// вмещать весь ряд: иначе последние кнопки каждого ряда обрезаются по краю окна.
     pub fn panel_width(self) -> u32 {
         match self.edge {
-            Edge::Bottom | Edge::Top => render::PANEL_SURFACE_H,
-            // вдоль края окно панели то же, что у горизонтальной стороны: карман плюс корпус;
-            // сдвиг пилюли вдоль стороны добавляет столько же запаса
-            Edge::Left | Edge::Right => {
-                let base = render::PANEL_TRAVEL + render::HEADROOM;
-                if self.cross() > 0 {
-                    base + self.cross() as u32
-                } else {
-                    base
-                }
-            }
+            // низ/верх: ряд кнопок идёт по x, поэтому по x окно — PANEL_W
+            Edge::Bottom | Edge::Top => render::PANEL_W,
+            // лево/право: по x лежит карман плюс толщина ряда
+            Edge::Left | Edge::Right => self.panel_across(),
         }
     }
 
     pub fn panel_height(self) -> u32 {
         match self.edge {
-            Edge::Bottom | Edge::Top => render::PANEL_SURFACE_H,
+            Edge::Bottom | Edge::Top => self.panel_across(),
             Edge::Left | Edge::Right => render::PANEL_W,
         }
+    }
+
+    /// Размер окна поперёк стороны: карман панели (путь подъёма) плюс HEADROOM.
+    /// Именно эта величина — «каdr», из которого `panel_coord` считает координату выезда:
+    /// `slide` и `flip` дают покой корпуса на расстоянии PANEL_BELOW от кромки при любом
+    /// её значении, поэтому сдвиг пилюли вдоль стороны окно не меняет (маргины носят окно
+    /// целиком вместе с рядом: сдвиг уходит в маргин, а не в размер).
+    fn panel_across(self) -> u32 {
+        render::PANEL_TRAVEL + render::HEADROOM
     }
 
     /// Маргины окна панели: та же сторона и то же смещение, что у пилюли — ряд кнопок
@@ -287,10 +289,13 @@ impl Placement {
     }
 
     /// Верхний левый угол корпуса панели в координатах её поверхности.
+    /// Кадр для `panel_coord` — размер окна поперёк стороны: для низа/верха это высота,
+    /// для лева/права ширина (там подъём идёт по горизонтали).
     pub fn panel_origin(self, reveal: f32) -> (i32, i32) {
+        let across = self.panel_across();
         match self.edge {
-            Edge::Bottom | Edge::Top => (0, self.panel_coord(self.panel_width(), reveal)),
-            Edge::Left | Edge::Right => (self.panel_coord(self.panel_width(), reveal), 0),
+            Edge::Bottom | Edge::Top => (0, self.panel_coord(across, reveal)),
+            Edge::Left | Edge::Right => (self.panel_coord(across, reveal), 0),
         }
     }
 
@@ -592,11 +597,37 @@ mod tests {
         assert_eq!(p.panel_margins(), p.margins);
         let p = Placement::new(Edge::Bottom).with_along(48).with_cross(-70);
         assert_eq!(p.panel_margins(), (0, 0, 48, -70));
-        // ряд кнопок кончается низом корпуса: окно ровно по карману плюс корпус
+        // окно панели меряется так же, как окно пилюли: вдоль стороны — длина ряда (PANEL_W),
+        // поперёк — карман плюс корпус (PANEL_SURFACE_H)
+        assert_eq!(Placement::new(Edge::Top).panel_width(), render::PANEL_W);
         assert_eq!(
-            Placement::new(Edge::Top).panel_width(),
+            Placement::new(Edge::Top).panel_height(),
             render::PANEL_SURFACE_H
         );
+    }
+
+    /// Регрессия на обрезанные ряды: на любой стороне окно панели обязано вместить корпус
+    /// целиком и каждую кнопку (раньше для низа/верха окно было 220 px широким вместо
+    /// PANEL_W, и последние кнопки каждого ряда уезжали за край окна).
+    #[test]
+    fn panel_window_holds_every_button_on_every_side() {
+        for edge in Edge::all() {
+            let p = Placement::new(edge).with_along(24).with_cross(-120);
+            let (w, h) = (p.panel_width(), p.panel_height());
+            let origin = p.panel_origin(1.0);
+            let vertical = !edge.horizontal();
+            let keys = crate::panel::buttons(&crate::panel::Settings::default(), false, edge);
+            assert!(!keys.is_empty(), "{edge:?}: пустой ряд кнопок");
+            for b in &keys {
+                let (x, y, bw, bh) = button_rect(b, origin, vertical);
+                assert!(
+                    x >= 0 && y >= 0 && (x + bw as i32) <= w as i32 && (y + bh as i32) <= h as i32,
+                    "{}: кнопка {} ({x},{y} {bw}x{bh}) не влезает в окно {w}x{h}",
+                    edge.as_str(),
+                    b.id
+                );
+            }
+        }
     }
 
     #[test]
