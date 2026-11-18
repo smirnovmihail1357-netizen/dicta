@@ -60,17 +60,6 @@ impl Edge {
         [Edge::Bottom, Edge::Right, Edge::Top, Edge::Left]
     }
 
-    /// Противоположная сторона: куда попадает оверлей, который протащили сквозь
-    /// экран насквозь.
-    pub fn opposite(self) -> Edge {
-        match self {
-            Edge::Bottom => Edge::Top,
-            Edge::Top => Edge::Bottom,
-            Edge::Left => Edge::Right,
-            Edge::Right => Edge::Left,
-        }
-    }
-
     /// Следующая сторона по часовой: кнопка «край» проходит все четыре за четыре клика.
     pub fn next(self) -> Edge {
         match self {
@@ -355,8 +344,8 @@ pub fn along_delta(edge: Edge, dx: i32, dy: i32) -> i32 {
 
 /// Приращение мыши поперёк данной стороны, положительное — наружу от экрана
 /// (вниз для нижней, вверх для верхней, влево для левой, вправо для правой).
-/// Отрицательное — внутрь экрана: столько протащили пилюлю к противоположной
-/// грани, и именно эта величина решает, пора ли переезжать.
+/// Отрицательное — внутрь экрана: столько протащили пилюлю от своей грани,
+/// и именно эта величина решает, пора ли переезжать.
 pub fn across_delta(edge: Edge, dx: i32, dy: i32) -> i32 {
     match edge {
         Edge::Bottom => dy,
@@ -364,6 +353,39 @@ pub fn across_delta(edge: Edge, dx: i32, dy: i32) -> i32 {
         Edge::Left => -dx,
         Edge::Right => dx,
     }
+}
+
+/// Сколько внутрь экрана должна пройти мышь, чтобы пилюля переехала на другую
+/// грань. Смысл порога: пока курсор едет вдоль своей стороны, пилюля следует за
+/// ним и остаётся под курсором — переезд начинается только когда курсор
+/// заметно отделился от своей грани.
+pub const EDGE_SWITCH_PX: i32 = 48;
+
+/// Куда переезжать с грани `edge`, если мышь прошла (sum_dx, sum_dy) по экрану
+/// и `across` — накопленное приращение поперёк стороны (отрицательное = внутрь
+/// экрана). `None` — не переезжать: курсор ещё не отделился от своей грани.
+///
+/// Цель — по доминирующей экранной оси пути: тянут от нижней грани вверх —
+/// верхняя грань; от левой — по диагонали вверх и вправо — верхняя (вертикаль
+/// доминирует), вправо — правая. Поэтому с боковой грани можно уехать и на
+/// верхнюю, и на нижнюю, а не только на противоположную.
+pub fn pull_target(edge: Edge, sum_dx: i32, sum_dy: i32, across: i32) -> Option<Edge> {
+    if across > -EDGE_SWITCH_PX {
+        return None;
+    }
+    let (dx, dy) = (sum_dx as i64, sum_dy as i64);
+    let target = if dy.unsigned_abs() * 4 > dx.unsigned_abs() * 5 {
+        if sum_dy < 0 {
+            Edge::Top
+        } else {
+            Edge::Bottom
+        }
+    } else if sum_dx < 0 {
+        Edge::Left
+    } else {
+        Edge::Right
+    };
+    (target != edge).then_some(target)
 }
 
 /// Координата корпуса при доле `reveal`: 0 = целиком за кромкой экрана, 1 = на своём месте.
@@ -668,14 +690,6 @@ mod tests {
         assert_eq!(p.cross(), 0);
     }
 
-    #[test]
-    fn opposite_edge_is_the_far_side_of_the_screen() {
-        assert_eq!(Edge::Bottom.opposite(), Edge::Top);
-        assert_eq!(Edge::Top.opposite(), Edge::Bottom);
-        assert_eq!(Edge::Left.opposite(), Edge::Right);
-        assert_eq!(Edge::Right.opposite(), Edge::Left);
-    }
-
     /// Как on_motion делит приращение мыши: вдоль своей стороны едет пилюля,
     /// поперёк — решает, пора ли переезжать (отрицательное = внутрь экрана).
     #[test]
@@ -712,6 +726,34 @@ mod tests {
         let moved = Placement::new(Edge::Right).shifted_along(-300);
         assert_eq!(moved.edge, Edge::Right);
         assert_eq!(moved.cross(), -300);
+    }
+
+    /// Цель переезда — доминирующая экранная ось пути: с боковой грани можно
+    /// уехать на верхнюю и нижнюю, а не только на противоположную. Переезд
+    /// начинается, только когда курсор отделился от своей грани внутрь экрана.
+    #[test]
+    fn pull_target_follows_the_dominant_screen_axis() {
+        // от нижней грани вверх — верхняя грань
+        assert_eq!(pull_target(Edge::Bottom, 10, -60, -60), Some(Edge::Top));
+        // от левой грани по диагонали вверх (вертикаль доминирует) — верхняя,
+        // а не зеркальная правая
+        assert_eq!(pull_target(Edge::Left, 50, -120, -50), Some(Edge::Top));
+        // от левой вниз по диагонали — нижняя
+        assert_eq!(pull_target(Edge::Left, 50, 120, -50), Some(Edge::Bottom));
+        // от левой почти горизонтально — правая (противоположная)
+        assert_eq!(pull_target(Edge::Left, 120, -30, -120), Some(Edge::Right));
+        // от правой вверх по диагонали — верхняя
+        assert_eq!(pull_target(Edge::Right, -50, -120, -50), Some(Edge::Top));
+        // от верхней вниз — нижняя
+        assert_eq!(pull_target(Edge::Top, -8, 70, -70), Some(Edge::Bottom));
+
+        // курсор не отделился от грани (меньше EDGE_SWITCH_PX внутрь) — не едем
+        assert_eq!(pull_target(Edge::Bottom, 0, -30, -30), None);
+        assert_eq!(pull_target(Edge::Left, 40, -200, -40), None);
+        // наружу от своей грани — тем более остаёмся
+        assert_eq!(pull_target(Edge::Bottom, 0, 90, 90), None);
+        // граница доминирования 5/4: равные компоненты — горизонтальная цель
+        assert_eq!(pull_target(Edge::Bottom, -60, -60, -60), Some(Edge::Left));
     }
 
     #[test]
