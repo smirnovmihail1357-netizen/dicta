@@ -60,6 +60,17 @@ impl Edge {
         [Edge::Bottom, Edge::Right, Edge::Top, Edge::Left]
     }
 
+    /// Противоположная сторона: куда попадает оверлей, который протащили сквозь
+    /// экран насквозь.
+    pub fn opposite(self) -> Edge {
+        match self {
+            Edge::Bottom => Edge::Top,
+            Edge::Top => Edge::Bottom,
+            Edge::Left => Edge::Right,
+            Edge::Right => Edge::Left,
+        }
+    }
+
     /// Следующая сторона по часовой: кнопка «край» проходит все четыре за четыре клика.
     pub fn next(self) -> Edge {
         match self {
@@ -323,51 +334,35 @@ impl Placement {
         }
     }
 
-    /// Куда потащили пилюлю: новое положение по смещению мыши (в координатах экрана).
-    ///
-    /// Правило одно для всех сторон: тянешь к границе монитора — оверлей переезжает на эту
-    /// сторону; тянешь вдоль своей границы — просто едет вдоль неё.
-    pub fn dragged(self, dx: f64, dy: f64) -> Self {
-        self.dragged_px(dx.round() as i32, dy.round() as i32)
+    /// Сдвинуться вдоль своей стороны на столько пикселей, на сколько двинулась
+    /// мышь (вправо для низа/верха, вниз для лева/права). Приращение, а не
+    /// накопленный сдвиг: после переезда на другую сторону система координат
+    /// поверхности меняется, и накопленный сдвиг от точки нажатия теряет смысл.
+    pub fn shifted_along(self, px: i32) -> Self {
+        self.with_cross(self.cross() + px)
     }
+}
 
-    /// То же, но в целых пикселях (так удобнее проверять).
-    pub fn dragged_px(self, dx: i32, dy: i32) -> Self {
-        if dx == 0 && dy == 0 {
-            return self;
-        }
-        match self.target_edge(dx, dy) {
-            // переезд: тянули к другой границе экрана
-            Some(edge) if edge != self.edge => self.with_edge(edge),
-            None => self,
-            // движение вдоль своей стороны — сдвиг; наружу за свою кромку — стоя на месте
-            Some(_) => self.with_cross(self.cross() + along_axis(self.edge, dx, dy)),
-        }
+/// Приращение мыши вдоль данной стороны: низ/верх меряют по x, лево/право — по y.
+/// Наружу за свою кромку пилюля не едет — та компонента учитывается отдельно
+/// (`across_delta`), а здесь только сдвиг вдоль.
+pub fn along_delta(edge: Edge, dx: i32, dy: i32) -> i32 {
+    match edge {
+        Edge::Bottom | Edge::Top => dx,
+        Edge::Left | Edge::Right => dy,
     }
+}
 
-    /// Сторона монитора, к которой смотрит это перемещение мыши: вверх по экрану — верхняя,
-    /// вправо — правая. Движение вдоль своей стороны (низ/верх меряют по x, лево/право — по
-    /// y) возвращает текущую сторону: оно меняет смещение, а не сторону.
-    pub fn target_edge(&self, dx: i32, dy: i32) -> Option<Edge> {
-        if dx == 0 && dy == 0 {
-            return None;
-        }
-        // Порог маленький: достаточно лёгкого рывка к границе, но дрожание мыши в пару
-        // пикселей сторону не меняет.
-        const MIN: i32 = 4;
-        if dx.abs() >= dy.abs() {
-            if dx > MIN {
-                return Some(Edge::Right);
-            }
-            if dx < -MIN {
-                return Some(Edge::Left);
-            }
-        } else if dy > MIN {
-            return Some(Edge::Bottom);
-        } else if dy < -MIN {
-            return Some(Edge::Top);
-        }
-        Some(self.edge)
+/// Приращение мыши поперёк данной стороны, положительное — наружу от экрана
+/// (вниз для нижней, вверх для верхней, влево для левой, вправо для правой).
+/// Отрицательное — внутрь экрана: столько протащили пилюлю к противоположной
+/// грани, и именно эта величина решает, пора ли переезжать.
+pub fn across_delta(edge: Edge, dx: i32, dy: i32) -> i32 {
+    match edge {
+        Edge::Bottom => dy,
+        Edge::Top => -dy,
+        Edge::Left => -dx,
+        Edge::Right => dx,
     }
 }
 
@@ -389,18 +384,6 @@ fn slide(canvas: u32, travel: u32, reveal: f32) -> i32 {
 /// так, что HEADROOM достаётся дальнему краю.
 fn flip(canvas: u32, coord: i32, thickness: u32) -> i32 {
     canvas as i32 - coord - thickness as i32
-}
-
-/// Компонента перемещения вдоль данной стороны: низ/верх меряют по x, лево/право — по y.
-/// Движение наружу (влево для левой стороны, вправо для правой) даёт 0: за кромкой экрана
-/// композитор ничего не показывает, так что там пилюля стоит, а не едет.
-fn along_axis(edge: Edge, dx: i32, dy: i32) -> i32 {
-    match edge {
-        Edge::Bottom | Edge::Top => dx,
-        Edge::Left if dx < 0 => 0,
-        Edge::Right if dx > 0 => 0,
-        Edge::Left | Edge::Right => dy,
-    }
 }
 
 /// Прямоугольник кнопки в координатах горизонтальной панели. `origin` — верхний
@@ -686,58 +669,49 @@ mod tests {
     }
 
     #[test]
-    fn dragging_across_the_screen_changes_the_side() {
-        let bottom = Placement::default();
-        // тянули вверх через весь экран — верхняя сторона
-        assert_eq!(bottom.dragged_px(0, -600).edge, Edge::Top);
-        // вправо и чуть вниз — правая сторона
-        assert_eq!(bottom.dragged_px(320, 40).edge, Edge::Right);
-        let right = Placement::new(Edge::Right);
-        // от правой границы влево через весь экран — левая сторона
-        assert_eq!(right.dragged_px(-260, 10).edge, Edge::Left);
-        // вниз по экрану — нижняя сторона
-        assert_eq!(right.dragged_px(40, 400).edge, Edge::Bottom);
-        // вверх по экрану — верхняя, с любой стороны
-        assert_eq!(
-            Placement::new(Edge::Left).dragged_px(-10, -300).edge,
-            Edge::Top
-        );
+    fn opposite_edge_is_the_far_side_of_the_screen() {
+        assert_eq!(Edge::Bottom.opposite(), Edge::Top);
+        assert_eq!(Edge::Top.opposite(), Edge::Bottom);
+        assert_eq!(Edge::Left.opposite(), Edge::Right);
+        assert_eq!(Edge::Right.opposite(), Edge::Left);
+    }
+
+    /// Как on_motion делит приращение мыши: вдоль своей стороны едет пилюля,
+    /// поперёк — решает, пора ли переезжать (отрицательное = внутрь экрана).
+    #[test]
+    fn deltas_split_the_pointer_movement() {
+        // нижняя сторона: вправо — вдоль, вниз — наружу, вверх — внутрь экрана
+        assert_eq!(along_delta(Edge::Bottom, 30, 0), 30);
+        assert_eq!(across_delta(Edge::Bottom, 0, 25), 25);
+        assert_eq!(across_delta(Edge::Bottom, 0, -25), -25);
+        // верхняя: наружу — вверх (отрицательный dy)
+        assert_eq!(across_delta(Edge::Top, 0, -25), 25);
+        // левая: наружу — влево, вдоль — вниз
+        assert_eq!(across_delta(Edge::Left, -25, 0), 25);
+        assert_eq!(along_delta(Edge::Left, 0, 40), 40);
+        // правая: наружу — вправо, вдоль — вниз
+        assert_eq!(across_delta(Edge::Right, 25, 0), 25);
+        assert_eq!(along_delta(Edge::Right, 0, -40), -40);
     }
 
     #[test]
-    fn dragging_outward_or_along_the_side_only_shifts_it() {
+    fn shifting_along_keeps_the_side_and_moves_the_cross() {
         let p = Placement::new(Edge::Bottom).with_cross(10);
-        // вдоль нижней кромки: рывок вправо — это правая граница экрана, сторона меняется
-        let moved = p.dragged_px(70, 2);
-        assert_eq!(moved.edge, Edge::Right);
-        assert_eq!(moved.cross(), 0);
-        // за свою кромку наружу (вниз) — остаёмся снизу и не сдвигаемся вдоль неё
-        let moved = p.dragged_px(0, 90);
+        let moved = p.shifted_along(70);
         assert_eq!(moved.edge, Edge::Bottom);
-        assert_eq!(moved.cross(), 10);
-        // левая сторона: рывок влево — это её кромка экрана, остаёмся слева и не едем
+        assert_eq!(moved.cross(), 80);
+        // наружу за свою кромку поперёк пилюля не едет — только вдоль
         let left = Placement::new(Edge::Left).with_cross(10);
-        let moved = left.dragged_px(-90, 0);
+        let moved = left.shifted_along(30);
         assert_eq!(moved.edge, Edge::Left);
-        assert_eq!(moved.cross(), 10);
-        // вниз по экрану от левой стороны — переезд на нижнюю
-        let moved = left.dragged_px(0, 300);
-        assert_eq!(moved.edge, Edge::Bottom);
-        // дрожание меньше порога — сторона не меняется
-        assert_eq!(left.dragged_px(2, 1).edge, Edge::Left);
-        // ноль — ничего не происходит
-        assert_eq!(p.dragged_px(0, 0), p);
-    }
-
-    #[test]
-    fn drag_is_rounded_to_pixels() {
-        // движение вниз от нижней кромки остаётся снизу, сдвиг вдоль неё округлён до пикселя
-        let p = Placement::default().dragged(3.4, 12.6);
-        assert_eq!(p.edge, Edge::Bottom);
-        assert_eq!(p.cross(), 3);
-        // движение вверх — уже верхняя сторона
-        let p = Placement::default().dragged(3.4, -12.6);
-        assert_eq!(p.edge, Edge::Top);
+        assert_eq!(moved.cross(), 40);
+        // сдвиг ограничен тем же пределом, что и явное смещение
+        let far = Placement::new(Edge::Bottom).shifted_along(99_000);
+        assert_eq!(far.cross(), CROSS_LIMIT);
+        // вниз по экрану от левой стороны — это вдоль, а не переезд
+        let moved = Placement::new(Edge::Right).shifted_along(-300);
+        assert_eq!(moved.edge, Edge::Right);
+        assert_eq!(moved.cross(), -300);
     }
 
     #[test]
@@ -877,7 +851,7 @@ mod tests {
         assert_eq!(UiConfig::from_placement(&p).placement(), p);
 
         // и после переезда на другую сторону: тянули влево — левая сторона
-        let moved = UiConfig::from_placement(&p.dragged_px(-400, 30));
+        let moved = UiConfig::from_placement(&p.with_edge(Edge::Left));
         save(&path, &moved).unwrap();
         assert_eq!(load(&path).edge, Some(Edge::Left));
     }

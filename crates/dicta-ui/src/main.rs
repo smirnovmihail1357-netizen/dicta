@@ -63,6 +63,11 @@ const IDLE_MS: u64 = 50;
 /// Сколько пикселей надо утащить пилюлю, чтобы движение стало «перестановкой»,
 /// а не обычным кликом по ней.
 const DRAG_THRESHOLD: i32 = 60;
+/// Сколько пикселей внутрь экрана должна пройти мышь, чтобы пилюля переехала на
+/// противоположную грань. Больше порога втягивания в перетаскивание и с
+/// доминированием поперечной компоненты (см. on_motion) — чтобы переезд не
+/// случался от дрожи и не гонял пилюлю между гранями.
+const EDGE_SWITCH_PX: i32 = 48;
 
 fn debug_on() -> bool {
     std::env::var("DICTA_DEBUG").is_ok()
@@ -601,6 +606,9 @@ fn run() -> Result<()> {
         ui_path,
         press_origin: None,
         dragged: false,
+        drag_from: (0.0, 0.0),
+        drag_sum: (0, 0),
+        drag_switched: false,
     };
 
     let mut next_draw = Instant::now();
@@ -794,6 +802,15 @@ struct Ui {
     press_origin: Option<(f64, f64)>,
     /// это движение уже стало перетаскиванием: по отпусканию не считаем его «кликом = стоп»
     dragged: bool,
+    /// последняя точка мыши в этом перетаскивании: приращения считаем от неё, а не от
+    /// точки нажатия — после переезда на другую сторону координаты поверхности меняются
+    drag_from: (f64, f64),
+    /// сколько протащили внутрь экрана (первая компонента — вдоль своей стороны,
+    /// вторая — поперёк, отрицательное = к противоположной грани)
+    drag_sum: (i32, i32),
+    /// переезд уже случился в этом перетаскивании: дальше двигаемся только вдоль новой
+    /// стороны, не гоняя оверлей туда-сюда между гранями
+    drag_switched: bool,
 }
 
 /// Якорь и размер поверхности пилюли по стороне. Поверхность длиннее пилюли на
@@ -952,10 +969,14 @@ impl Ui {
         // Клик по пилюле = «закончить и вставить», но только если его не тащили.
         self.press_origin = Some((x, y));
         self.dragged = false;
+        self.drag_from = (x, y);
+        self.drag_sum = (0, 0);
+        self.drag_switched = false;
     }
 
-    /// Отпустили пилюлю: дотащили до другой стороны — переезжаем и запоминаем; иначе
-    /// это был обычный клик = стоп.
+    /// Отпустили пилюлю. Всё, что решало перетаскивание, уже применено в
+    /// on_motion — здесь остаётся только отличить клик («остановить и вставить»)
+    /// от перетаскивания.
     fn on_release(&mut self, event: &PointerEvent, x: f64, y: f64) {
         if event.surface.id() != self.layer.wl_surface().id() {
             return;
@@ -970,37 +991,63 @@ impl Ui {
         {
             // Клик по пилюле = «закончить и вставить».
             let _ = ask_command(&dicta_core_socket_path_static(), "stop");
-            return;
         }
-        self.move_to(moved.0, moved.1);
     }
 
-    /// Движение с зажатой кнопкой: после DRAG_THRESHOLD пилюля считает, что её тащат,
-    /// и переставляется на ту сторону экрана, куда смотрит движение.
+    /// Движение с зажатой кнопкой. После DRAG_THRESHOLD пилюля считает, что её
+    /// тащат, и делает две разные вещи:
+    ///
+    /// - тянут внутрь экрана (к противоположной грани) на EDGE_SWITCH_PX и
+    ///   заметно сильнее, чем вдоль своей стороны, — один раз за перетаскивание
+    ///   переезжает на ту грань. «Один раз» и гистерезис — это гистерезис от
+    ///   мерцания: раньше каждая итерация решала заново по накопленному сдвигу,
+    ///   а после переезда система координат поверхности меняется, и пилюля
+    ///   начинала прыгать между гранями.
+    /// - иначе едет вдоль своей стороны ровно на приращение мыши: пилюля
+    ///   следует за курсором, вместо того чтобы разгоняться от повторного
+    ///   применения накопленного сдвига.
     fn on_motion(&mut self, x: f64, y: f64) {
         let Some((ox, oy)) = self.press_origin else {
             return;
         };
-        let dx = x - ox;
-        let dy = y - oy;
-        if !self.dragged && dx.abs() < DRAG_THRESHOLD as f64 && dy.abs() < DRAG_THRESHOLD as f64 {
+        if !self.dragged
+            && (x - ox).abs() < DRAG_THRESHOLD as f64
+            && (y - oy).abs() < DRAG_THRESHOLD as f64
+        {
             return;
         }
-        self.dragged = true;
-        self.move_to(dx, dy);
-    }
+        // приращение от последнего события: после переезда на другую сторону
+        // координаты приходят уже в системе нового окна, и суммарный сдвиг от
+        // точки нажатия больше не имеет смысла
+        let (dx, dy) = (x - self.drag_from.0, y - self.drag_from.1);
+        self.drag_from = (x, y);
+        if !self.dragged {
+            self.dragged = true;
+            self.drag_sum = (0, 0);
+        } else if dx == 0.0 && dy == 0.0 {
+            return;
+        }
+        let edge = self.placement.edge;
+        let along = edge::along_delta(edge, dx.round() as i32, dy.round() as i32);
+        let across = edge::across_delta(edge, dx.round() as i32, dy.round() as i32);
+        self.drag_sum = (self.drag_sum.0 + along, self.drag_sum.1 + across);
 
-    /// Переставить оверлей по смещению мыши и сохранить: в следующий раз он встанет туда же.
-    fn move_to(&mut self, dx: f64, dy: f64) {
-        let next = self.placement.dragged(dx, dy);
-        // Переезд на другую сторону — смещение вдоль неё начинается заново, а отступ
-        // от края сохраняется; сдвиг вдоль своей стороны остаётся сдвигом.
-        let placement = if next.edge != self.placement.edge {
-            Placement::new(next.edge).with_along(self.placement.along())
-        } else {
-            next
-        };
-        self.apply_placement(placement);
+        if !self.drag_switched {
+            let (sum_along, sum_across) = self.drag_sum;
+            // тянут внутрь экрана, и поперёк — сильнее, чем вдоль (5/4): диагональ
+            // не должна опрокидывать пилюлю на соседнюю грань
+            if sum_across <= -EDGE_SWITCH_PX && -(sum_across * 4) > sum_along.abs() * 5 {
+                self.drag_switched = true;
+                self.drag_sum = (0, 0);
+                self.apply_placement(self.placement.with_edge(edge.opposite()));
+                return;
+            }
+        }
+        // вдоль своей стороны — приращение, округлённое до пикселя
+        let next = self.placement.shifted_along(along);
+        if next != self.placement {
+            self.apply_placement(next);
+        }
     }
 
     /// Переставить оверлей на заданную сторону (кнопка «край» в панели настроек).
