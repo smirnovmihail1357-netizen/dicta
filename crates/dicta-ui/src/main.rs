@@ -562,6 +562,24 @@ fn run() -> Result<()> {
     panel_layer.set_keyboard_interactivity(KeyboardInteractivity::None);
     panel_layer.commit();
 
+    // Ореол места фиксации: показывается только во время перетаскивания, когда
+    // курсор подносят к грани монитора. Клавиатура не нужна, клики не ловит
+    // (пустая input region), пока не нарисован — на экране его нет вовсе.
+    let hint_surface = compositor.create_surface(&qh);
+    let hint_layer = layer_shell.create_layer_surface(
+        &qh,
+        hint_surface.clone(),
+        layer_kind(),
+        Some("dicta-hint"),
+        None,
+    );
+    hint_layer.set_keyboard_interactivity(KeyboardInteractivity::None);
+    {
+        let region = compositor.wl_compositor().create_region(&qh, ());
+        hint_surface.set_input_region(Some(&region));
+        region.destroy();
+    }
+
     let pool = SlotPool::new(
         (SURF_W * SURF_H).max(render::PANEL_W * render::PANEL_SURFACE_H) as usize * 4,
         &shm,
@@ -602,8 +620,11 @@ fn run() -> Result<()> {
         press_origin: None,
         dragged: false,
         drag_from: (0.0, 0.0),
-        drag_sum: (0, 0),
-        drag_switched: false,
+        screen: None,
+        dock_hint: None,
+        hint_drawn: None,
+        hint_layer,
+        hint_surface,
     };
 
     let mut next_draw = Instant::now();
@@ -621,6 +642,7 @@ fn run() -> Result<()> {
             if ui.dirty || now >= next_draw {
                 ui.draw_pill(&qh);
                 ui.draw_panel(&qh);
+                ui.draw_hint(&qh);
                 ui.dirty = false;
                 next_draw = now + Duration::from_millis(if animating { FRAME_MS } else { POLL_MS });
             }
@@ -800,12 +822,17 @@ struct Ui {
     /// последняя точка мыши в этом перетаскивании: приращения считаем от неё, а не от
     /// точки нажатия — после переезда на другую сторону координаты поверхности меняются
     drag_from: (f64, f64),
-    /// сколько протащили внутрь экрана (первая компонента — вдоль своей стороны,
-    /// вторая — поперёк, отрицательное = к противоположной грани)
-    drag_sum: (i32, i32),
-    /// переезд уже случился в этом перетаскивании: дальше двигаемся только вдоль новой
-    /// стороны, не гоняя оверлей туда-сюда между гранями
-    drag_switched: bool,
+    /// размер экрана в логических пикселях (первый wl_output, который его сообщил):
+    /// по нему курсор во время перетаскивания переводится в координаты экрана
+    screen: Option<(i32, i32)>,
+    /// грань-кандидат, к которой поднесли пилюлю (None = курсор не у грани):
+    /// здесь рисуется ореол места фиксации, а по отпусканию она закрепляется
+    dock_hint: Option<Placement>,
+    /// какой ореол уже отрисован: перерисовываем только при смене места
+    hint_drawn: Option<Placement>,
+    /// поверхность ореола: то же окно, что у пилюли, на грани-кандидате
+    hint_layer: LayerSurface,
+    hint_surface: wl_surface::WlSurface,
 }
 
 /// Якорь и размер поверхности пилюли по стороне. Поверхность длиннее пилюли на
@@ -882,8 +909,12 @@ impl OutputHandler for Ui {
     fn output_state(&mut self) -> &mut OutputState {
         &mut self.output_state
     }
-    fn new_output(&mut self, _c: &Connection, _q: &QueueHandle<Self>, _o: wl_output::WlOutput) {}
-    fn update_output(&mut self, _c: &Connection, _q: &QueueHandle<Self>, _o: wl_output::WlOutput) {}
+    fn new_output(&mut self, _c: &Connection, _q: &QueueHandle<Self>, o: wl_output::WlOutput) {
+        self.remember_screen(&o);
+    }
+    fn update_output(&mut self, _c: &Connection, _q: &QueueHandle<Self>, o: wl_output::WlOutput) {
+        self.remember_screen(&o);
+    }
     fn output_destroyed(
         &mut self,
         _c: &Connection,
@@ -965,8 +996,23 @@ impl Ui {
         self.press_origin = Some((x, y));
         self.dragged = false;
         self.drag_from = (x, y);
-        self.drag_sum = (0, 0);
-        self.drag_switched = false;
+        self.dock_hint = None;
+    }
+
+    /// Запомнить размер экрана, о котором рассказал wl_output: по нему курсор
+    /// во время перетаскивания переводится в координаты экрана и ищется
+    /// грань-кандидат для фиксации.
+    fn remember_screen(&mut self, o: &wl_output::WlOutput) {
+        if let Some((w, h)) = self
+            .output_state
+            .info(o)
+            .and_then(|i| i.logical_size)
+            .filter(|&(w, h)| w > 0 && h > 0)
+        {
+            if self.screen != Some((w, h)) {
+                self.screen = Some((w, h));
+            }
+        }
     }
 
     /// Отпустили пилюлю. Всё, что решало перетаскивание, уже применено в
@@ -987,21 +1033,27 @@ impl Ui {
             // Клик по пилюле = «закончить и вставить».
             let _ = ask_command(&dicta_core_socket_path_static(), "stop");
         }
+        // Перетаскивание кончилось: курсор поднесён к грани — закрепляем пилюлю
+        // там, где показывал ореол; не поднесён — остаёмся на месте (сдвиг
+        // вдоль своей стороны уже применён по ходу движения).
+        if let Some(target) = self.dock_hint.take() {
+            self.apply_placement(target);
+        }
+        if self.hint_drawn.is_some() {
+            self.dirty = true; // убрать ореол с экрана
+        }
     }
 
     /// Движение с зажатой кнопкой. После DRAG_THRESHOLD пилюля считает, что её
-    /// тащат, и делает две разные вещи:
+    /// тащат, и делает две вещи:
     ///
-    /// - курсор отделяется от своей грани внутрь экрана на EDGE_SWITCH_PX —
-    ///   один раз за перетаскивание пилюля переезжает на грань, к которой
-    ///   смотрит путь (доминирующая экранная ось: тянут вверх — верхняя грань,
-    ///   по диагонали — ближняя к пути). «Один раз» — гистерезис от мерцания:
-    ///   раньше каждая итерация решала заново по накопленному сдвигу, а после
-    ///   переезда система координат поверхности меняется, и пилюля начинала
-    ///   прыгать между гранями.
-    /// - иначе едет вдоль своей стороны ровно на приращение мыши: пилюля
-    ///   следует за курсором, вместо того чтобы разгоняться от повторного
-    ///   применения накопленного сдвига.
+    /// - едет вдоль своей стороны ровно на приращение мыши (следует за
+    ///   курсором) и не выезжает за края экрана;
+    /// - считает курсор в координатах экрана (локальная точка окна плюс позиция
+    ///   окна) и, если он поднесён к грани монитора (DOCK_SNAP_PX), показывает
+    ///   ореол места будущей фиксации на этой грани — по отпусканию пилюля
+    ///   закрепится там. До отпускания ничего не переезжает, поэтому мерцать
+    ///   нечему: ореол просто идёт за курсором вдоль грани.
     fn on_motion(&mut self, x: f64, y: f64) {
         let Some((ox, oy)) = self.press_origin else {
             return;
@@ -1019,30 +1071,50 @@ impl Ui {
         self.drag_from = (x, y);
         if !self.dragged {
             self.dragged = true;
-            self.drag_sum = (0, 0);
         } else if dx == 0.0 && dy == 0.0 {
             return;
         }
         let edge = self.placement.edge;
         let (ix, iy) = (dx.round() as i32, dy.round() as i32);
         let along = edge::along_delta(edge, ix, iy);
-        let across = edge::across_delta(edge, ix, iy);
-        // суммы — в экранных осях: по ним выбирается грань, к которой тянут
-        self.drag_sum = (self.drag_sum.0 + ix, self.drag_sum.1 + iy);
 
-        if !self.drag_switched {
-            let (sum_dx, sum_dy) = self.drag_sum;
-            if let Some(target) = edge::pull_target(edge, sum_dx, sum_dy, across) {
-                self.drag_switched = true;
-                self.drag_sum = (0, 0);
-                self.apply_placement(self.placement.with_edge(target));
-                return;
-            }
+        // вдоль своей стороны — приращение, округлённое до пикселя, и в пределах
+        // экрана: пилюля не должна уезжать за угол монитора
+        let screen_along = self
+            .screen
+            .map(|(w, h)| if edge.horizontal() { w } else { h });
+        let mut next = self.placement.shifted_along(along);
+        if let Some(dim) = screen_along {
+            next = next.clamped_cross(dim);
         }
-        // вдоль своей стороны — приращение, округлённое до пикселя
-        let next = self.placement.shifted_along(along);
         if next != self.placement {
             self.apply_placement(next);
+        }
+
+        // грань-кандидат: курсор поднесён к грани монитора. Ореол места
+        // закрепления рисуется поверх, сама пилюля переезжает по отпусканию.
+        let hint = self.screen.and_then(|screen| {
+            let (cx, cy) = edge::cursor_abs(&self.placement, self.width, self.height, screen, x, y);
+            // своя грань кандидатом не бывает: ореол не должен рисоваться
+            // поверх самой пилюли, когда её оттягивают наружу
+            edge::nearest_edge(cx, cy, screen)
+                .filter(|target| *target != edge)
+                .map(|edge| {
+                // пилюля встанет на новой грани по положению курсора вдоль неё
+                let (cursor_along, dim) = if edge.horizontal() {
+                    (cx, screen.0)
+                } else {
+                    (cy, screen.1)
+                };
+                Placement::new(edge)
+                    .with_along(self.placement.along())
+                    .with_cross(cursor_along - dim / 2)
+                    .clamped_cross(dim)
+            })
+        });
+        if hint != self.dock_hint {
+            self.dock_hint = hint;
+            self.dirty = true; // показать/подвинуть/убрать ореол
         }
     }
 
@@ -1103,6 +1175,11 @@ impl LayerShellHandler for Ui {
         _serial: u32,
     ) {
         let given = configure.new_size;
+        if layer.wl_surface().id() == self.hint_layer.wl_surface().id() {
+            // Ореол: размер задан явно вместе с положением; перерисовка не нужна —
+            // главный цикл сам рисует его по смене dock_hint.
+            return;
+        }
         if layer.wl_surface().id() == self.panel_layer.wl_surface().id() {
             // Панель: размер задан явно, перерисовываем только если композитор его поменял.
             if given != (0, 0) && given != (self.panel_width, self.panel_height) {
@@ -1328,6 +1405,43 @@ impl Ui {
                 self.panel_keys.len()
             );
         }
+    }
+
+    /// Ореол места фиксации на грани-кандидате: то же окно и то же положение,
+    /// что будет у пилюли, — контур корпуса и свечение вокруг. Рисуется только
+    /// при смене места; когда кандидат пропадает (курсор ушёл от грани),
+    /// поверхность очищается отсоединением буфера.
+    fn draw_hint(&mut self, _q: &QueueHandle<Self>) {
+        if self.first_configure {
+            return;
+        }
+        let Some(p) = self.dock_hint else {
+            if self.hint_drawn.take().is_some() {
+                self.hint_surface.attach(None, 0, 0);
+                self.hint_surface.commit();
+            }
+            return;
+        };
+        if self.hint_drawn == Some(p) {
+            return;
+        }
+        // то же окно, что у пилюли на этой грани: якорь, маргины, размер
+        apply_placement(&self.hint_layer, p);
+        let (w, h) = (p.pill_width(), p.pill_height());
+        let stride = (w * 4) as i32;
+        let Ok((buffer, mem)) =
+            self.pool
+                .create_buffer(w as i32, h as i32, stride, wl_shm::Format::Argb8888)
+        else {
+            return;
+        };
+        let rect = p.pill_rect(w, h, 1.0);
+        let canvas = render::paint_dock_hint(w, h, rect, 0.9);
+        canvas.write_into(mem);
+        self.hint_surface.damage_buffer(0, 0, w as i32, h as i32);
+        let _ = buffer.attach_to(&self.hint_surface);
+        self.hint_layer.commit();
+        self.hint_drawn = Some(p);
     }
 
     fn draw_pill(&mut self, q: &QueueHandle<Self>) {

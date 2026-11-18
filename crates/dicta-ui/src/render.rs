@@ -436,6 +436,53 @@ impl Canvas {
         }
         out
     }
+
+    /// Контур скруглённого прямоугольника толщиной `thickness`: кольцо между
+    /// внешней и внутренней скруглённой границей. Блендинг не умеет «вырезать»,
+    /// поэтому рисуем попиксельно, без суперсэмплинга — контур в 2 px и так
+    /// гладкий.
+    pub fn round_ring(
+        &mut self,
+        x0: u32,
+        y0: i32,
+        w: u32,
+        h: u32,
+        r: u32,
+        thickness: u32,
+        color: u32,
+    ) {
+        if y0 < 0 {
+            let lost = (-y0) as u32;
+            if lost >= h {
+                return;
+            }
+            self.round_ring(x0, 0, w, h - lost, r, thickness, color);
+            return;
+        }
+        let y_end = (y0 as u32).saturating_add(h).min(self.h);
+        let x_end = x0.saturating_add(w).min(self.w);
+        let a = (color >> 24) & 0xFF;
+        let t = thickness as f32;
+        for y in (y0 as u32)..y_end {
+            for x in x0..x_end {
+                let (px, py) = (x as f32 + 0.5, y as f32 + 0.5);
+                let inside_outer =
+                    rounded_inside(px, py, x0 as f32, y0 as f32, w as f32, h as f32, r as f32);
+                let inside_inner = rounded_inside(
+                    px,
+                    py,
+                    x0 as f32 + t,
+                    y0 as f32 + t,
+                    w as f32 - 2.0 * t,
+                    h as f32 - 2.0 * t,
+                    (r as f32 - t).max(0.0),
+                );
+                if inside_outer && !inside_inner {
+                    self.blend(x, y, (color & 0x00FF_FFFF) | (a << 24));
+                }
+            }
+        }
+    }
     /// Прилепить другой кадр поверх этого (для контрольного снимка: пилюля + панель).
     pub fn blit(&mut self, src: &Canvas, x: i32, y: i32) {
         for sy in 0..src.h as i32 {
@@ -490,6 +537,40 @@ pub fn rounded_inside(px: f32, py: f32, x0: f32, y0: f32, w: f32, h: f32, r: f32
 
 pub fn argb(a: u8, r: u8, g: u8, b: u8) -> u32 {
     ((a as u32) << 24) | ((r as u32) << 16) | ((g as u32) << 8) | (b as u32)
+}
+
+/// Ореол места будущей фиксации: контур корпуса пилюли на грани-кандидате и
+/// мягкое свечение вокруг него. Рисуется поверх рабочего стола во время
+/// перетаскивания, когда курсор подошёл к грани монитора (DOCK_SNAP_PX).
+/// `rect` — прямоугольник корпуса пилюли в покое (`Placement::pill_rect`),
+/// обе ориентации дают его в координатах окна.
+pub fn paint_dock_hint(w: u32, h: u32, rect: (i32, i32, u32, u32), alpha: f32) -> Canvas {
+    let mut c = Canvas::new(w, h);
+    let k = alpha.clamp(0.0, 1.0);
+    let (x, y, bw, bh) = rect;
+    // свечение: расширяющиеся полупрозрачные контуры вокруг места фиксации
+    for (grow, a) in [(9u32, 14u8), (6, 30), (3, 60)] {
+        c.round_ring(
+            (x - grow as i32).max(0) as u32,
+            (y - grow as i32).max(0),
+            bw + grow * 2,
+            bh + grow * 2,
+            (bh + grow * 2) / 2,
+            2,
+            fade(argb(a, 0x89, 0xB4, 0xFA), k),
+        );
+    }
+    // сам контур — там, где встанет корпус пилюли
+    c.round_ring(
+        x.max(0) as u32,
+        y,
+        bw,
+        bh,
+        bh / 2,
+        2,
+        fade(argb(0xD8, 0xEF, 0xF6, 0xFF), k),
+    );
+    c
 }
 
 /// Умножить альфу цвета на k (0..=1) — для фейда вместе с подъёмом.

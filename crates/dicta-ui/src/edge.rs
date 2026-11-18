@@ -330,6 +330,16 @@ impl Placement {
     pub fn shifted_along(self, px: i32) -> Self {
         self.with_cross(self.cross() + px)
     }
+
+    /// Уложить смещение так, чтобы окно пилюли (SURF_W вдоль стороны) целиком
+    /// осталось на экране: центр окна не дальше половины экрана от центра
+    /// стороны. Слишком короткий экран — пилюля встаёт по центру.
+    pub fn clamped_cross(self, screen_along: i32) -> Self {
+        let slack = (screen_along - render::SURF_W as i32) / 2;
+        // экран длиннее окна — центр окна гуляет в пределах ±slack;
+        // короче — пилюля встаёт по центру стороны
+        self.with_cross(self.cross().clamp(-slack.max(0), slack.max(0)))
+    }
 }
 
 /// Приращение мыши вдоль данной стороны: низ/верх меряют по x, лево/право — по y.
@@ -342,50 +352,47 @@ pub fn along_delta(edge: Edge, dx: i32, dy: i32) -> i32 {
     }
 }
 
-/// Приращение мыши поперёк данной стороны, положительное — наружу от экрана
-/// (вниз для нижней, вверх для верхней, влево для левой, вправо для правой).
-/// Отрицательное — внутрь экрана: столько протащили пилюлю от своей грани,
-/// и именно эта величина решает, пора ли переезжать.
-pub fn across_delta(edge: Edge, dx: i32, dy: i32) -> i32 {
-    match edge {
-        Edge::Bottom => dy,
-        Edge::Top => -dy,
-        Edge::Left => -dx,
-        Edge::Right => dx,
+/// Расстояние до грани монитора, внутри которого перетаскиваемая пилюля считает,
+/// что её несут к этой грани: в этой зоне показывается ореол места будущей
+/// фиксации, а по отпусканию мыши пилюля закрепляется на ней. «Почти к грани».
+pub const DOCK_SNAP_PX: i32 = 32;
+
+/// Грань, к которой курсор ближе всего, — если он в DOCK_SNAP_PX от неё. В
+/// углу экрана побеждает ближе лежащая грань.
+pub fn nearest_edge(cx: i32, cy: i32, screen: (i32, i32)) -> Option<Edge> {
+    let (w, h) = screen;
+    let dist = |e: Edge| match e {
+        Edge::Left => cx,
+        Edge::Right => w - cx,
+        Edge::Top => cy,
+        Edge::Bottom => h - cy,
+    };
+    let best = Edge::all()
+        .into_iter()
+        .min_by_key(|e| dist(*e))
+        .expect("стороны не пусты");
+    (dist(best) <= DOCK_SNAP_PX).then_some(best)
+}
+
+/// Позиция окна пилюли на экране: якорь на своей грани, вдоль неё окно
+/// центрировано и сдвинуто маргинами (cross — вдоль, along — от грани внутрь).
+pub fn window_origin(p: &Placement, w: u32, h: u32, screen: (i32, i32)) -> (i32, i32) {
+    let (sw, sh) = screen;
+    let (t, r, b, l) = p.margins;
+    match p.edge {
+        Edge::Bottom => ((sw - w as i32) / 2 + l, sh - h as i32 - b),
+        Edge::Top => ((sw - w as i32) / 2 + l, t),
+        Edge::Left => (l, (sh - h as i32) / 2 + t),
+        Edge::Right => (sw - w as i32 - r, (sh - h as i32) / 2 + t),
     }
 }
 
-/// Сколько внутрь экрана должна пройти мышь, чтобы пилюля переехала на другую
-/// грань. Смысл порога: пока курсор едет вдоль своей стороны, пилюля следует за
-/// ним и остаётся под курсором — переезд начинается только когда курсор
-/// заметно отделился от своей грани.
-pub const EDGE_SWITCH_PX: i32 = 48;
-
-/// Куда переезжать с грани `edge`, если мышь прошла (sum_dx, sum_dy) по экрану
-/// и `across` — накопленное приращение поперёк стороны (отрицательное = внутрь
-/// экрана). `None` — не переезжать: курсор ещё не отделился от своей грани.
-///
-/// Цель — по доминирующей экранной оси пути: тянут от нижней грани вверх —
-/// верхняя грань; от левой — по диагонали вверх и вправо — верхняя (вертикаль
-/// доминирует), вправо — правая. Поэтому с боковой грани можно уехать и на
-/// верхнюю, и на нижнюю, а не только на противоположную.
-pub fn pull_target(edge: Edge, sum_dx: i32, sum_dy: i32, across: i32) -> Option<Edge> {
-    if across > -EDGE_SWITCH_PX {
-        return None;
-    }
-    let (dx, dy) = (sum_dx as i64, sum_dy as i64);
-    let target = if dy.unsigned_abs() * 4 > dx.unsigned_abs() * 5 {
-        if sum_dy < 0 {
-            Edge::Top
-        } else {
-            Edge::Bottom
-        }
-    } else if sum_dx < 0 {
-        Edge::Left
-    } else {
-        Edge::Right
-    };
-    (target != edge).then_some(target)
+/// Курсор в координатах экрана: локальная точка окна пилюли плюс позиция окна.
+/// Работает и когда курсор ушёл с окна (неявный захват): локальные координаты
+/// просто выходят за его пределы.
+pub fn cursor_abs(p: &Placement, w: u32, h: u32, screen: (i32, i32), x: f64, y: f64) -> (i32, i32) {
+    let (ox, oy) = window_origin(p, w, h, screen);
+    (ox + x.round() as i32, oy + y.round() as i32)
 }
 
 /// Координата корпуса при доле `reveal`: 0 = целиком за кромкой экрана, 1 = на своём месте.
@@ -690,21 +697,14 @@ mod tests {
         assert_eq!(p.cross(), 0);
     }
 
-    /// Как on_motion делит приращение мыши: вдоль своей стороны едет пилюля,
-    /// поперёк — решает, пора ли переезжать (отрицательное = внутрь экрана).
+    /// Как on_motion делит приращение мыши: вдоль своей стороны едет пилюля.
     #[test]
     fn deltas_split_the_pointer_movement() {
-        // нижняя сторона: вправо — вдоль, вниз — наружу, вверх — внутрь экрана
+        // нижняя/верхняя сторона меряет вдоль по x
         assert_eq!(along_delta(Edge::Bottom, 30, 0), 30);
-        assert_eq!(across_delta(Edge::Bottom, 0, 25), 25);
-        assert_eq!(across_delta(Edge::Bottom, 0, -25), -25);
-        // верхняя: наружу — вверх (отрицательный dy)
-        assert_eq!(across_delta(Edge::Top, 0, -25), 25);
-        // левая: наружу — влево, вдоль — вниз
-        assert_eq!(across_delta(Edge::Left, -25, 0), 25);
+        assert_eq!(along_delta(Edge::Top, -20, 5), -20);
+        // левая/правая — по y
         assert_eq!(along_delta(Edge::Left, 0, 40), 40);
-        // правая: наружу — вправо, вдоль — вниз
-        assert_eq!(across_delta(Edge::Right, 25, 0), 25);
         assert_eq!(along_delta(Edge::Right, 0, -40), -40);
     }
 
@@ -728,32 +728,65 @@ mod tests {
         assert_eq!(moved.cross(), -300);
     }
 
-    /// Цель переезда — доминирующая экранная ось пути: с боковой грани можно
-    /// уехать на верхнюю и нижнюю, а не только на противоположную. Переезд
-    /// начинается, только когда курсор отделился от своей грани внутрь экрана.
+    /// Прилипание: грань-кандидат — та, к которой курсор поднесли ближе
+    /// DOCK_SNAP_PX; в углу побеждает ближе лежащая грань.
     #[test]
-    fn pull_target_follows_the_dominant_screen_axis() {
-        // от нижней грани вверх — верхняя грань
-        assert_eq!(pull_target(Edge::Bottom, 10, -60, -60), Some(Edge::Top));
-        // от левой грани по диагонали вверх (вертикаль доминирует) — верхняя,
-        // а не зеркальная правая
-        assert_eq!(pull_target(Edge::Left, 50, -120, -50), Some(Edge::Top));
-        // от левой вниз по диагонали — нижняя
-        assert_eq!(pull_target(Edge::Left, 50, 120, -50), Some(Edge::Bottom));
-        // от левой почти горизонтально — правая (противоположная)
-        assert_eq!(pull_target(Edge::Left, 120, -30, -120), Some(Edge::Right));
-        // от правой вверх по диагонали — верхняя
-        assert_eq!(pull_target(Edge::Right, -50, -120, -50), Some(Edge::Top));
-        // от верхней вниз — нижняя
-        assert_eq!(pull_target(Edge::Top, -8, 70, -70), Some(Edge::Bottom));
+    fn nearest_edge_wins_where_the_cursor_is_closest() {
+        let screen = (1920, 1080);
+        // курсор в центре — никакого кандидата
+        assert_eq!(nearest_edge(960, 540, screen), None);
+        // поднесли к левой грани — левая
+        assert_eq!(nearest_edge(20, 540, screen), Some(Edge::Left));
+        // к верхней — верхняя (это и был недоступный «вверх»)
+        assert_eq!(nearest_edge(960, 25, screen), Some(Edge::Top));
+        assert_eq!(nearest_edge(960, 1080 - 30, screen), Some(Edge::Bottom));
+        assert_eq!(nearest_edge(1900, 540, screen), Some(Edge::Right));
+        // в углу побеждает ближе лежащая грань
+        assert_eq!(nearest_edge(10, 4, screen), Some(Edge::Top));
+        assert_eq!(nearest_edge(4, 10, screen), Some(Edge::Left));
+        // ровно на границе зоны (32 px) — кандидат ещё есть
+        assert_eq!(nearest_edge(32, 540, screen), Some(Edge::Left));
+        assert_eq!(nearest_edge(33, 540, screen), None);
+    }
 
-        // курсор не отделился от грани (меньше EDGE_SWITCH_PX внутрь) — не едем
-        assert_eq!(pull_target(Edge::Bottom, 0, -30, -30), None);
-        assert_eq!(pull_target(Edge::Left, 40, -200, -40), None);
-        // наружу от своей грани — тем более остаёмся
-        assert_eq!(pull_target(Edge::Bottom, 0, 90, 90), None);
-        // граница доминирования 5/4: равные компоненты — горизонтальная цель
-        assert_eq!(pull_target(Edge::Bottom, -60, -60, -60), Some(Edge::Left));
+    /// Курсор в координатах экрана: локальная точка окна пилюли плюс позиция
+    /// самого окна (якорь на грани, центр вдоль неё, маргины cross/along).
+    #[test]
+    fn cursor_maps_from_window_to_screen() {
+        let screen = (1920, 1080);
+        // пилюля на нижней грани, смещена влево на 100, отступ от грани 48:
+        // окно 520x54, левый край (1920-520)/2 - 100 = 600, верх 1080-54-48 = 978
+        let p = Placement::new(Edge::Bottom).with_cross(-100).with_along(48);
+        let (ox, oy) = window_origin(&p, render::SURF_W, render::SURF_H, screen);
+        assert_eq!((ox, oy), (600, 978));
+        assert_eq!(
+            cursor_abs(&p, render::SURF_W, render::SURF_H, screen, 10.0, 5.0),
+            (610, 983)
+        );
+        // левая грань: вдоль — вниз, окно центрировано по вертикали
+        let p = Placement::new(Edge::Left).with_cross(-200);
+        let (ox, oy) = window_origin(&p, render::SURF_H, render::SURF_W, screen);
+        assert_eq!(ox, 0); // along = 0: окно прижато к грани
+        assert_eq!(oy, (1080 - render::SURF_W as i32) / 2 - 200);
+    }
+
+    /// Смещение вдоль грани не должно уводить окно пилюли за экран.
+    #[test]
+    fn cross_is_clamped_to_the_screen() {
+        let p = Placement::new(Edge::Bottom)
+            .shifted_along(90_000)
+            .clamped_cross(1920);
+        // окно 520: центр может отъехать от центра экрана на (1920-520)/2 = 700
+        assert_eq!(p.cross(), 700);
+        let p = Placement::new(Edge::Right)
+            .shifted_along(-90_000)
+            .clamped_cross(1080);
+        assert_eq!(p.cross(), -(1080 - render::SURF_W as i32) / 2);
+        // экран короче окна — пилюля встаёт по центру
+        let p = Placement::new(Edge::Bottom)
+            .with_cross(120)
+            .clamped_cross(400);
+        assert_eq!(p.cross(), 0);
     }
 
     #[test]
