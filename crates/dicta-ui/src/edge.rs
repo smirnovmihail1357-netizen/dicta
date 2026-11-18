@@ -171,6 +171,16 @@ impl Placement {
         Placement::new(edge).with_along(self.along())
     }
 
+    /// Как повёрнут кадр панели на этой стороне: левая грань — по часовой,
+    /// правая — против, горизонтальные — не повёрнуты.
+    pub fn turn(self) -> Option<render::Turn> {
+        match self.edge {
+            Edge::Left => Some(render::Turn::Cw),
+            Edge::Right => Some(render::Turn::Ccw),
+            Edge::Bottom | Edge::Top => None,
+        }
+    }
+
     /// Толщина полосы оверлея: горизонтальной стороны — высота, вертикальной — ширина.
     pub fn thickness(self) -> u32 {
         render::PILL_H
@@ -393,40 +403,57 @@ fn along_axis(edge: Edge, dx: i32, dy: i32) -> i32 {
     }
 }
 
-/// Прямоугольник кнопки в координатах поверхности панели. `origin` — верхний левый угол
-/// корпуса. На вертикальных сторонах ряд кнопок идёт вдоль края (по y), а сами кнопки —
-/// поперёк него (по x), поэтому координаты кнопки меняются местами.
-pub fn button_rect(b: &render::Button, origin: (i32, i32), vertical: bool) -> (i32, i32, u32, u32) {
-    if vertical {
-        (
-            origin.0 + b.y as i32,
-            origin.1 + b.x as i32,
-            render::PANEL_BTN_H,
-            b.w,
-        )
-    } else {
-        (
-            origin.0 + b.x as i32,
-            origin.1 + b.y as i32,
-            b.w,
-            render::PANEL_BTN_H,
-        )
+/// Прямоугольник кнопки в координатах горизонтальной панели. `origin` — верхний
+/// левый угол корпуса (сдвиг выезда). Вертикальные грани используют ту же
+/// разметку: их окно — повёрнутый кадр, а клики возвращает `unturn`.
+pub fn button_rect(b: &render::Button, origin: (i32, i32)) -> (i32, i32, u32, u32) {
+    (
+        origin.0 + b.x as i32,
+        origin.1 + b.y as i32,
+        b.w,
+        render::PANEL_BTN_H,
+    )
+}
+
+/// Кнопка под точкой (x, y) в координатах горизонтальной панели.
+pub fn button_at(keys: &[render::Button], x: f64, y: f64, origin: (i32, i32)) -> Option<usize> {
+    let (x, y) = (x as i32, y as i32);
+    keys.iter().position(|b| {
+        let (bx, by, bw, bh) = button_rect(b, origin);
+        x >= bx && x < bx + bw as i32 && y >= by && y < by + bh as i32
+    })
+}
+
+/// Точка клика на панели в координатах горизонтальной разметки. Вертикальная
+/// грань показывает повёрнутый на 90° кадр: клик приходит в системе окна
+/// (поперёк × вдоль), а кнопки размечены в системе горизонтальной панели
+/// (`PANEL_W × PANEL_SURFACE_H`) — точка возвращается туда.
+pub fn unturn(edge: Edge, x: f64, y: f64) -> (f64, f64) {
+    match edge {
+        Edge::Left => (y, render::PANEL_SURFACE_H as f64 - 1.0 - x),
+        Edge::Right => (render::PANEL_W as f64 - 1.0 - y, x),
+        Edge::Bottom | Edge::Top => (x, y),
     }
 }
 
-/// Кнопка под точкой (x, y) в координатах поверхности панели.
-pub fn button_at(
+/// Кнопка под точкой клика при любом положении панели. Горизонтальная сторона
+/// берёт разметку как есть; вертикальная сначала возвращает точку из повёрнутого
+/// окна. `origin` — скользящее начало корпуса (`panel_origin`): для вертикальной
+/// стороны это координата поперёк окна, для горизонтальной — верх корпуса.
+pub fn button_at_turned(
     keys: &[render::Button],
     x: f64,
     y: f64,
+    p: &Placement,
     origin: (i32, i32),
-    vertical: bool,
 ) -> Option<usize> {
-    let (x, y) = (x as i32, y as i32);
-    keys.iter().position(|b| {
-        let (bx, by, bw, bh) = button_rect(b, origin, vertical);
-        x >= bx && x < bx + bw as i32 && y >= by && y < by + bh as i32
-    })
+    match p.turn() {
+        None => button_at(keys, x, y, origin),
+        Some(turn) => {
+            let (sx, sy) = unturn(p.edge, x, y);
+            button_at(keys, sx, sy, (0, turn.src_oy(origin.0)))
+        }
+    }
 }
 
 /// Положение оверлея на диске. Отдельно от `config.toml`: тот файл читает и пишет демон,
@@ -607,26 +634,45 @@ mod tests {
     }
 
     /// Регрессия на обрезанные ряды: на любой стороне окно панели обязано вместить корпус
-    /// целиком и каждую кнопку (раньше для низа/верха окно было 220 px широким вместо
-    /// PANEL_W, и последние кнопки каждого ряда уезжали за край окна).
+    /// целиком и каждую кнопку. Вертикальная сторона показывает повёрнутый кадр
+    /// горизонтальной панели: если кнопка влезает в горизонтальную разметку, она влезает
+    /// и в повёрнутое окно, поэтому проверяем разметку и совпадение размеров окна.
     #[test]
     fn panel_window_holds_every_button_on_every_side() {
         for edge in Edge::all() {
             let p = Placement::new(edge).with_along(24).with_cross(-120);
-            let (w, h) = (p.panel_width(), p.panel_height());
-            let origin = p.panel_origin(1.0);
-            let vertical = !edge.horizontal();
             let keys = crate::panel::buttons(&crate::panel::Settings::default(), false, edge);
             assert!(!keys.is_empty(), "{edge:?}: пустой ряд кнопок");
+            // скользящее начало корпуса в горизонтальной разметке
+            let origin = (
+                0,
+                match p.turn() {
+                    Some(turn) => turn.src_oy(p.panel_origin(1.0).0),
+                    None => p.panel_origin(1.0).1,
+                },
+            );
+            let (w, h) = (render::PANEL_W as i32, render::PANEL_SURFACE_H as i32);
             for b in &keys {
-                let (x, y, bw, bh) = button_rect(b, origin, vertical);
+                let (x, y, bw, bh) = button_rect(b, origin);
                 assert!(
-                    x >= 0 && y >= 0 && (x + bw as i32) <= w as i32 && (y + bh as i32) <= h as i32,
-                    "{}: кнопка {} ({x},{y} {bw}x{bh}) не влезает в окно {w}x{h}",
+                    x >= 0 && y >= 0 && (x + bw as i32) <= w && (y + bh as i32) <= h,
+                    "{}: кнопка {} ({x},{y} {bw}x{bh}) не влезает в разметку {w}x{h}",
                     edge.as_str(),
                     b.id
                 );
             }
+            // окно стороны совпадает с кадром: горизонтальная сторона — прямая
+            // разметка, вертикальная — её поворот на 90°
+            let window = match p.turn() {
+                None => (render::PANEL_W, render::PANEL_SURFACE_H),
+                Some(_) => (render::PANEL_SURFACE_H, render::PANEL_W),
+            };
+            assert_eq!(
+                (p.panel_width(), p.panel_height()),
+                window,
+                "{}: окно панели не совпадает с кадром разметки",
+                edge.as_str()
+            );
         }
     }
 
@@ -785,22 +831,28 @@ mod tests {
             close.x as f64 + 10.0,
             origin.1 as f64 + close.y as f64 + 10.0,
             origin,
-            false,
         );
         assert_eq!(index.map(|i| keys[i].id), Some("close"));
 
-        // вертикально: те же кнопки, но ряд стал колонкой — координаты меняются местами
-        let origin = (render::HEADROOM as i32, 0);
-        let index = button_at(
-            &keys,
-            origin.0 as f64 + close.y as f64 + 10.0,
-            close.x as f64 + 10.0,
-            origin,
-            true,
-        );
+        // вертикально (левая грань): клик приходит в системе повёрнутого окна,
+        // button_at_turned возвращает его в разметку — и попадает в ту же кнопку
+        let p = Placement::new(Edge::Left);
+        let oy = p.panel_origin(1.0).0;
+        let src_oy = render::Turn::Cw.src_oy(oy);
+        let cx = close.x as f64 + close.w as f64 / 2.0;
+        let cy = src_oy as f64 + close.y as f64 + 10.0;
+        // обратный поворот к unturn: dst(x, y) = src(y, PANEL_SURFACE_H - 1 - x)
+        let (dx, dy) = (render::PANEL_SURFACE_H as f64 - 1.0 - cy, cx);
+        let index = button_at_turned(&keys, dx, dy, &p, (oy, 0));
         assert_eq!(index.map(|i| keys[i].id), Some("close"));
-        // мимо корпуса — ничего
-        assert_eq!(button_at(&keys, 2.0, 2.0, origin, true), None);
+        // мимо корпуса (карман у кромки) — ничего
+        assert_eq!(button_at_turned(&keys, 2.0, 2.0, &p, (oy, 0)), None);
+        // и правая грань: там поворот против часовой, точка возвращается зеркально
+        let p = Placement::new(Edge::Right);
+        let oy = p.panel_origin(1.0).0;
+        let (dx, dy) = (cy, render::PANEL_W as f64 - 1.0 - cx);
+        let index = button_at_turned(&keys, dx, dy, &p, (oy, 0));
+        assert_eq!(index.map(|i| keys[i].id), Some("close"));
     }
 
     #[test]

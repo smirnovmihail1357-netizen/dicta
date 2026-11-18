@@ -378,7 +378,7 @@ fn preview(dir: &Path) -> Result<()> {
             render::PANEL_SURFACE_H,
             Placement::new(Edge::Bottom).panel_coord(render::PANEL_SURFACE_H, reveal),
             0.5 + 0.5 * reveal,
-            false,
+            None,
             "dicta · запись 0:03",
             "порог 0.40 — сохранено в ~/.config/dicta/config.toml",
             "Ctrl+Alt+V — открыть/закрыть · клик по кнопке = применить · удержать и потащить к краю — переставить",
@@ -402,14 +402,10 @@ fn preview(dir: &Path) -> Result<()> {
             placement.panel_height(),
             if vertical { origin.0 } else { origin.1 },
             1.0,
-            vertical,
+            placement.turn(),
             "dicta · запись 0:03",
             "порог 0.40 — сохранено в ~/.config/dicta/config.toml",
-            if vertical {
-                "ряд кнопок идёт вдоль края экрана"
-            } else {
-                "Ctrl+Alt+V — открыть/закрыть · клик по кнопке = применить"
-            },
+            "Ctrl+Alt+V — открыть/закрыть · клик по кнопке = применить · удержать и потащить к краю — переставить",
             &panel::buttons(&settings, true, edge),
             font.as_ref(),
         );
@@ -435,7 +431,7 @@ fn preview(dir: &Path) -> Result<()> {
         render::PANEL_SURFACE_H,
         Placement::new(Edge::Bottom).panel_coord(render::PANEL_SURFACE_H, 1.0),
         1.0,
-        false,
+        None,
         "dicta · запись 0:03",
         "порог 0.40 — сохранено в ~/.config/dicta/config.toml",
         "Ctrl+Alt+V — открыть/закрыть · клик по кнопке = применить",
@@ -943,13 +939,7 @@ impl Ui {
     fn on_press(&mut self, event: &PointerEvent, x: f64, y: f64) {
         if event.surface.id() == self.panel_surface.id() {
             let origin = self.placement.panel_origin(self.panel_reveal.value);
-            let index = edge::button_at(
-                &self.panel_keys,
-                x,
-                y,
-                origin,
-                !self.placement.edge.horizontal(),
-            );
+            let index = edge::button_at_turned(&self.panel_keys, x, y, &self.placement, origin);
             if let Some(index) = index {
                 let id = self.panel_keys[index].id;
                 self.press(id);
@@ -1231,16 +1221,10 @@ impl Ui {
             return;
         }
         let header = format!("dicta · {}", state);
-        // Подсказка: на вертикальной стороне она идёт столбцом вниз по корпусу, поэтому
-        // короткая — длинная не влезает между заголовком и низом панели.
+        // Подсказка одна на все стороны: вертикальная грань показывает повёрнутый
+        // кадр горизонтальной панели, так что длинная строка влезает и там.
         let hint = if settings.reloading {
-            if vertical {
-                "модель загружается…"
-            } else {
-                "модель загружается: порог и авто-стоп менять можно, смену модели повтори после загрузки"
-            }
-        } else if vertical {
-            "клик = применить"
+            "модель загружается: порог и авто-стоп менять можно, смену модели повтори после загрузки"
         } else {
             "Ctrl+Alt+V — открыть/закрыть · клик по кнопке = применить · удержать пилюлю и потащить к краю — переставить"
         };
@@ -1251,7 +1235,7 @@ impl Ui {
             height,
             if vertical { origin.0 } else { origin.1 },
             alpha,
-            vertical,
+            self.placement.turn(),
             &header,
             &notice,
             hint,
@@ -1656,7 +1640,7 @@ mod tests {
             render::PANEL_SURFACE_H,
             0,
             1.0,
-            false,
+            None,
             "dicta · запись 0:03",
             "порог 0.40 — сохранено",
             "Ctrl+Alt+V — открыть/закрыть",
@@ -1699,12 +1683,13 @@ mod tests {
         let keys = panel::buttons(&settings, true, Edge::Left);
         let left = Placement::new(Edge::Left);
         let (w, h) = (left.panel_width(), left.panel_height());
+        let oy = left.panel_origin(1.0).0;
         let canvas = render::paint_panel(
             w,
             h,
-            left.panel_origin(1.0).0,
+            oy,
             1.0,
-            true,
+            left.turn(),
             "dicta · запись 0:03",
             "порог 0.40 — сохранено",
             "левая грань",
@@ -1713,7 +1698,7 @@ mod tests {
         );
         let px = canvas.pixels();
         // корпус панели лежит вдоль кадра: его середина непрозрачна от верха до низа
-        let column = (left.panel_origin(1.0).0 + (render::PANEL_H / 2) as i32) as usize;
+        let column = (oy + (render::PANEL_H / 2) as i32) as usize;
         let mut dark_rows = 0;
         for y in 0..h as usize {
             let i = (y * w as usize + column) * 4;
@@ -1725,8 +1710,8 @@ mod tests {
             dark_rows > h as usize / 2,
             "корпус вертикальной панели отрисован только на {dark_rows} строк из {h}"
         );
-        // внутри каждой кнопки обязан быть текст: подпись складывается столбцом вниз по
-        // длине кнопки, и бюджет у неё — длина, а не толщина (иначе остаётся один символ)
+        // внутри каждой кнопки обязан быть текст: панель — повёрнутый кадр
+        // горизонтальной, подписи остаются строками и не режутся в столбик
         let bright = |x0: usize, y0: usize, x1: usize, y1: usize| -> usize {
             let mut n = 0;
             for y in y0..y1 {
@@ -1739,16 +1724,43 @@ mod tests {
             }
             n
         };
-        let ox = left.panel_origin(1.0).0 as usize;
-        for (name, key) in [("запись", &keys[0]), ("авто-стоп", &keys[5]), ("закрыть", &keys[12])] {
-            let x0 = ox + key.y as usize;
-            let y0 = key.x as usize;
-            let n = bright(x0 + 4, y0 + 2, x0 + render::PANEL_BTN_H as usize - 2, y0 + key.w as usize - 2);
+        // прямоугольник кнопки в системе повёрнутого окна: разметка живёт в
+        // горизонтальной панели (src_oy + key.y по вертикали), поворот переносит
+        // её в полосу поперёк кадра, координата вдоль — по y
+        let src_oy = render::Turn::Cw.src_oy(oy);
+        let turned = |key: &render::Button| -> (usize, usize, usize, usize) {
+            let sy0 = (src_oy + key.y as i32) as usize;
+            let sy1 = sy0 + render::PANEL_BTN_H as usize;
+            (
+                (render::PANEL_SURFACE_H as usize - 1 - (sy1 - 1)),
+                key.x as usize,
+                (render::PANEL_SURFACE_H as usize - 1 - sy0 + 1),
+                key.x as usize + key.w as usize,
+            )
+        };
+        for (name, key) in [
+            ("запись", &keys[0]),
+            ("авто-стоп", &keys[5]),
+            ("закрыть", &keys[12]),
+        ] {
+            let (x0, y0, x1, y1) = turned(key);
+            let n = bright(x0 + 4, y0 + 2, x1 - 2, y1 - 2);
             assert!(n > 25, "кнопка {name} без подписи: светлых пикселей {n}");
         }
-        // заголовок и ответ демона — в своих свободных полосах поперёк корпуса
-        assert!(bright(ox + 8, 12, ox + 30, 300) > 40, "заголовок не отрисован");
-        assert!(bright(ox + 128, 12, ox + 150, 300) > 40, "строка ответа демона не отрисована");
+        // заголовок (вверху разметки) и ответ демона (внизу) после поворота —
+        // свободные полосы у дальнего и ближнего края корпуса
+        let head_x0 =
+            (render::PANEL_SURFACE_H as usize - 1 - (src_oy as usize + 28)).max((oy + 2) as usize);
+        assert!(
+            bright(head_x0, 12, head_x0 + 20, 300) > 40,
+            "заголовок не отрисован"
+        );
+        let note_y = 129usize + src_oy as usize;
+        let note_x0 = (render::PANEL_SURFACE_H as usize - 1 - (note_y + 13)).max((oy + 2) as usize);
+        assert!(
+            bright(note_x0, 12, note_x0 + 20, 400) > 40,
+            "строка ответа демона не отрисована"
+        );
     }
 
     #[test]
@@ -1791,7 +1803,7 @@ mod tests {
                     p.panel_height(),
                     if vertical { origin.0 } else { origin.1 },
                     1.0,
-                    vertical,
+                    p.turn(),
                     "dicta · запись 0:03",
                     "порог 0.40 — сохранено",
                     "клик = применить",

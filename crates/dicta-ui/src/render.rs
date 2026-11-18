@@ -89,17 +89,81 @@ pub struct Button {
     pub tone: Tone,
 }
 
+/// В какую сторону повёрнут кадр панели на вертикальной грани монитора.
+/// Левая грань — по часовой стрелке, правая — против: карман, в котором панель
+/// прячет пилюлю, в обоих случаях остаётся у кромки экрана.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Turn {
+    Cw,
+    Ccw,
+}
+
+impl Turn {
+    /// Координата `oy` горизонтальной разметки (как у нижней стороны), из которой
+    /// поворот получает заданное положение корпуса на вертикальной грани.
+    /// `oy` здесь — то же скользящее начало, что передаёт main.rs: покой левой
+    /// стороны (54) превращается в покой горизонтальной панели (8), скрытое за
+    /// кромкой положение (-158) — в «целиком за дальним краем» (220).
+    pub fn src_oy(self, oy: i32) -> i32 {
+        match self {
+            Turn::Ccw => oy,
+            Turn::Cw => PANEL_SURFACE_H as i32 - PANEL_H as i32 - oy,
+        }
+    }
+}
+
 /// Панель настроек: корпус, заголовок, кнопки, строка результата и подсказка.
-/// `vertical = false` — сторона снизу/сверху: ряды кнопок идут по горизонтали.
-/// `vertical = true` — сторона слева/справа: те же кнопки развёрнуты на 90° (ряд
-/// становится колонкой, подпись читается сверху вниз). `oy` — верх корпуса для
-/// горизонтальной панели и её левый край для вертикальной.
+/// `turn = None` — горизонтальная сторона (низ/верх): ряды кнопок идут по
+/// горизонтали, `oy` — верх корпуса.
+/// `turn = Some(_)` — сторона слева/справа: та же панель, повёрнутая на 90°
+/// целиком. Рисуем обычную горизонтальную и поворачиваем готовый кадр: подписи
+/// остаются строками и не обрезаются, а корпус после поворота ложится в ту же
+/// полосу `[oy, oy + PANEL_H]` поперёк окна, в которую его клала прежняя
+/// разметка, — анимация выезда и область кликов в main.rs не меняются.
 pub fn paint_panel(
     w: u32,
     h: u32,
     oy: i32,
     alpha: f32,
-    vertical: bool,
+    turn: Option<Turn>,
+    header: &str,
+    notice: &str,
+    hint: &str,
+    keys: &[Button],
+    font: Option<&FontRef<'static>>,
+) -> Canvas {
+    let Some(turn) = turn else {
+        return paint_flat(w, h, oy, alpha, header, notice, hint, keys, font);
+    };
+    let src = paint_flat(
+        PANEL_W,
+        PANEL_SURFACE_H,
+        turn.src_oy(oy),
+        alpha,
+        header,
+        notice,
+        hint,
+        keys,
+        font,
+    );
+    let out = src.rotated(matches!(turn, Turn::Cw));
+    debug_assert_eq!(
+        (out.w, out.h),
+        (w, h),
+        "повёрнутый кадр {}x{} не совпал с окном {w}x{h}",
+        out.w,
+        out.h
+    );
+    out
+}
+
+/// Горизонтальная панель настроек: корпус, заголовок, кнопки, строка результата
+/// и подсказка. Вертикальная грань использует её как есть — с поворотом кадра.
+fn paint_flat(
+    w: u32,
+    h: u32,
+    oy: i32,
+    alpha: f32,
     header: &str,
     notice: &str,
     hint: &str,
@@ -108,165 +172,70 @@ pub fn paint_panel(
 ) -> Canvas {
     let k = alpha.clamp(0.0, 1.0);
     let mut c = Canvas::new(w, h);
-    if vertical {
-        // корпус той же толщины PANEL_H, только вдоль высоты кадра
-        c.round_rect(
-            (oy + 2).max(0) as u32,
-            0,
-            PANEL_H - 4,
-            h,
-            14,
-            fade(argb(0xF2, 0x14, 0x16, 0x1A), k),
-        );
-        // светлая кромка вдоль края — панель не должна выглядеть ещё одной пилюлей
-        c.rect(
-            (oy + 3).max(0) as u32,
-            14,
-            1,
-            h - 28,
-            fade(argb(0x40, 0x8B, 0x93, 0x9E), k),
-        );
-    } else {
-        c.round_rect(
-            0,
-            oy + 2,
-            w,
-            PANEL_H - 4,
-            14,
-            fade(argb(0xF2, 0x14, 0x16, 0x1A), k),
-        );
-        // тонкая светлая кромка сверху — панель не должна выглядеть ещё одной пилюлей
-        c.rect(14, oy + 3, w - 28, 1, fade(argb(0x40, 0x8B, 0x93, 0x9E), k));
-    }
+    c.round_rect(
+        0,
+        oy + 2,
+        w,
+        PANEL_H - 4,
+        14,
+        fade(argb(0xF2, 0x14, 0x16, 0x1A), k),
+    );
+    // тонкая светлая кромка сверху — панель не должна выглядеть ещё одной пилюлей
+    c.rect(14, oy + 3, w - 28, 1, fade(argb(0x40, 0x8B, 0x93, 0x9E), k));
 
     let Some(font) = font else { return c };
-    // Поперёк вертикального корпуса кнопки занимают полосу [oy+34, oy+128]: слева от них
-    // остаются 32 px под заголовок и подсказку, справа 26 px под строку ответа демона.
-    // Вниз по корпусу — вся его длина, и каждый столбец обязан в неё влезть.
-    let head_room = (h as f32 - 24.0) * 0.55;
-    let note_x = oy as f32 + 130.0;
-    let mut head_len = 0usize;
-    if vertical {
-        // заголовок — вдоль корпуса
-        head_len = text_column(
-            &mut c,
-            font,
-            header,
-            oy as f32 + 10.0,
-            12.0,
-            15.0,
-            head_room,
-            fade(argb(0xFF, 0xE8, 0xEC, 0xF2), k),
-        );
-    } else {
-        text(
-            &mut c,
-            font,
-            header,
-            PANEL_PAD as f32,
-            oy as f32 + 10.0,
-            PxScale::from(15.0),
-            fade(argb(0xFF, 0xE8, 0xEC, 0xF2), k),
-        );
-    }
+    text(
+        &mut c,
+        font,
+        header,
+        PANEL_PAD as f32,
+        oy as f32 + 10.0,
+        PxScale::from(15.0),
+        fade(argb(0xFF, 0xE8, 0xEC, 0xF2), k),
+    );
 
     let scale = PxScale::from(14.0);
     for key in keys {
-        if vertical {
-            // ряд становится колонкой: координата вдоль панели — это y, а ширина кнопки — высота
-            let x = oy + key.y as i32;
-            let y = key.x as i32;
-            c.round_rect(
-                x.max(0) as u32,
-                y,
-                PANEL_BTN_H,
-                key.w,
-                9,
-                fade(key.tone.fill(), k),
-            );
-            // бюджет подписи — по длине кнопки: символы столбцом идут вниз, а не вширь
-            let label = fit_vertical(&key.label, key.w as f32 - 12.0, 14.0);
-            let lines = label.chars().count() as f32;
-            let y0 = y as f32 + ((key.w as f32 - lines * 14.0) / 2.0).max(6.0);
-            for (i, ch) in label.chars().enumerate() {
-                text(
-                    &mut c,
-                    font,
-                    &format!("{ch}"),
-                    x as f32 + 8.0,
-                    y0 + i as f32 * 14.0,
-                    scale,
-                    fade(key.tone.text(), k),
-                );
-            }
-        } else {
-            let y = oy + key.y as i32;
-            c.round_rect(key.x, y, key.w, PANEL_BTN_H, 9, fade(key.tone.fill(), k));
-            let label = fit_text(font, &key.label, key.w as f32 - 12.0, scale);
-            let width = text_width(font, &label, scale);
-            let x = key.x as f32 + (key.w as f32 - width) / 2.0;
-            text(
-                &mut c,
-                font,
-                &label,
-                x,
-                y as f32 + 6.0,
-                scale,
-                fade(key.tone.text(), k),
-            );
-        }
+        let y = oy + key.y as i32;
+        c.round_rect(key.x, y, key.w, PANEL_BTN_H, 9, fade(key.tone.fill(), k));
+        let label = fit_text(font, &key.label, key.w as f32 - 12.0, scale);
+        let width = text_width(font, &label, scale);
+        let x = key.x as f32 + (key.w as f32 - width) / 2.0;
+        text(
+            &mut c,
+            font,
+            &label,
+            x,
+            y as f32 + 6.0,
+            scale,
+            fade(key.tone.text(), k),
+        );
     }
 
-    if vertical {
-        // ответ демона — правее кнопок, своим столбцом вдоль корпуса
-        text_column(
-            &mut c,
-            font,
-            notice,
-            note_x,
-            12.0,
-            13.0,
-            h as f32 - 24.0,
-            fade(argb(0xFF, 0xC8, 0xCB, 0xD2), k),
-        );
-        // подсказка — тем же столбцом сразу под заголовком
-        let hint_y = 12.0 + 15.0 * head_len as f32 + 16.0;
-        text_column(
-            &mut c,
-            font,
-            hint,
-            oy as f32 + 10.0,
-            hint_y,
-            12.0,
-            (h as f32 - 8.0 - hint_y).max(0.0),
-            fade(argb(0xFF, 0x77, 0x7E, 0x88), k),
-        );
-    } else {
-        if !notice.is_empty() {
-            let scale = PxScale::from(13.0);
-            let line = fit_text(font, notice, (w - 2 * PANEL_PAD) as f32, scale);
-            text(
-                &mut c,
-                font,
-                &line,
-                PANEL_PAD as f32,
-                oy as f32 + 129.0,
-                scale,
-                fade(argb(0xFF, 0xC8, 0xCB, 0xD2), k),
-            );
-        }
-        let scale = PxScale::from(12.0);
-        let line = fit_text(font, hint, (w - 2 * PANEL_PAD) as f32, scale);
+    if !notice.is_empty() {
+        let scale = PxScale::from(13.0);
+        let line = fit_text(font, notice, (w - 2 * PANEL_PAD) as f32, scale);
         text(
             &mut c,
             font,
             &line,
             PANEL_PAD as f32,
-            oy as f32 + 141.0,
+            oy as f32 + 129.0,
             scale,
-            fade(argb(0xFF, 0x77, 0x7E, 0x88), k),
+            fade(argb(0xFF, 0xC8, 0xCB, 0xD2), k),
         );
     }
+    let scale = PxScale::from(12.0);
+    let line = fit_text(font, hint, (w - 2 * PANEL_PAD) as f32, scale);
+    text(
+        &mut c,
+        font,
+        &line,
+        PANEL_PAD as f32,
+        oy as f32 + 141.0,
+        scale,
+        fade(argb(0xFF, 0x77, 0x7E, 0x88), k),
+    );
     c
 }
 
@@ -275,46 +244,6 @@ pub fn text_width(font: &FontRef<'static>, s: &str, scale: PxScale) -> f32 {
     s.chars()
         .map(|ch| font.h_advance_unscaled(font.glyph_id(ch)) * fx)
         .sum()
-}
-
-/// Подпись внутри вертикальной кнопки: символы складываются столбцом вниз по ДЛИНЕ
-/// кнопки, поэтому бюджет считаем по длине (`key.w`), а не по толщине (`PANEL_BTN_H`).
-fn fit_vertical(s: &str, room: f32, step: f32) -> String {
-    let all: Vec<char> = s.chars().collect();
-    let max = (room / step).floor().max(0.0) as usize;
-    if all.len() <= max {
-        return s.to_string();
-    }
-    if max <= 1 {
-        return String::new();
-    }
-    all.iter().take(max - 1).collect::<String>() + "…"
-}
-
-/// Столбец текста вдоль корпуса: символы идут вниз с шагом `step` (он же масштаб шрифта)
-/// и занимают не больше длины `room`. Возвращает число поставленных символов.
-fn text_column(
-    c: &mut Canvas,
-    font: &FontRef<'static>,
-    s: &str,
-    x: f32,
-    y: f32,
-    step: f32,
-    room: f32,
-    color: u32,
-) -> usize {
-    let all: Vec<char> = s.chars().collect();
-    let max = (room / step).floor().max(0.0) as usize;
-    let taken = all.len().min(max.max(1));
-    let scale = PxScale::from(step);
-    for (i, ch) in all.iter().take(taken).enumerate() {
-        text(c, font, &format!("{ch}"), x, y + step * i as f32, scale, color);
-    }
-    // обрезку отмечаем «…» на последнем занятом месте, а не сверх длины столбца
-    if taken < all.len() {
-        text(c, font, "…", x, y + step * (taken - 1) as f32, scale, color);
-    }
-    taken
 }
 
 /// Обрезать подпись по ширину кнопки, оставив многоточие.
@@ -489,6 +418,23 @@ impl Canvas {
 
     pub fn write_into(&self, canvas: &mut [u8]) {
         canvas.copy_from_slice(&self.px);
+    }
+
+    /// Кадр, повёрнутый на 90°: по часовой (`cw = true`, левая грань) или против
+    /// (правая грань). Поворот переносит и корпус, и текст: панель вертикальной
+    /// грани — это её горизонтальный кадр, уложенный боком, без переразметки.
+    pub fn rotated(&self, cw: bool) -> Canvas {
+        let (w, h) = (self.w as usize, self.h as usize);
+        let mut out = Canvas::new(h as u32, w as u32);
+        for y in 0..h {
+            for x in 0..w {
+                let si = (y * w + x) * 4;
+                let (dx, dy) = if cw { (h - 1 - y, x) } else { (y, w - 1 - x) };
+                let di = (dy * h + dx) * 4;
+                out.px[di..di + 4].copy_from_slice(&self.px[si..si + 4]);
+            }
+        }
+        out
     }
     /// Прилепить другой кадр поверх этого (для контрольного снимка: пилюля + панель).
     pub fn blit(&mut self, src: &Canvas, x: i32, y: i32) {
@@ -726,7 +672,12 @@ pub fn paint_vertical(
     // `cx as u32 - 4` превращалось в вычитание из нуля по u32 (паника). Считаем в i32.
     let cx_i = ox + (PILL_H / 2) as i32;
     if recording {
-        c.circle(cx_i.max(0) as u32, 18, 5, fade(argb(0xFF, 0xE5, 0x4B, 0x4B), k));
+        c.circle(
+            cx_i.max(0) as u32,
+            18,
+            5,
+            fade(argb(0xFF, 0xE5, 0x4B, 0x4B), k),
+        );
     } else {
         // «сканер» при распознавании: голова со шлейфом идёт сверху вниз
         let period = 14;

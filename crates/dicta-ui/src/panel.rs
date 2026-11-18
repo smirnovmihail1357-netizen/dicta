@@ -124,7 +124,10 @@ fn row(y: u32, specs: &[(&'static str, String, u32, Tone)]) -> Vec<Button> {
         w
     } else {
         let slack = (avail - total) / specs.len() as u32;
-        specs.iter().map(|(_, _, width, _)| *width + slack).collect()
+        specs
+            .iter()
+            .map(|(_, _, width, _)| *width + slack)
+            .collect()
     };
     let mut x = PANEL_PAD;
     let mut out = Vec::new();
@@ -418,14 +421,13 @@ mod tests {
         let shifted = Placement::new(Edge::Bottom).panel_coord(crate::render::PANEL_SURFACE_H, 0.0);
         assert_eq!(shifted, crate::render::PANEL_SURFACE_H as i32);
         assert_eq!(
-            button_at(&buttons, cx, (close.y + 10) as f64 + 20.0, (0, 20), false)
-                .map(|i| buttons[i].id),
+            button_at(&buttons, cx, (close.y + 10) as f64 + 20.0, (0, 20)).map(|i| buttons[i].id),
             Some("close")
         );
         // мимо кнопок — ничего не выбираем
-        assert_eq!(button_at(&buttons, 4.0, 4.0 + 20.0, (0, 20), false), None);
+        assert_eq!(button_at(&buttons, 4.0, 4.0 + 20.0, (0, 20)), None);
         // выше верха панели кликов нет: y меньше верха корпуса наружу не ловится
-        assert_eq!(button_at(&buttons, cx, 10.0, (0, 20), false), None);
+        assert_eq!(button_at(&buttons, cx, 10.0, (0, 20)), None);
     }
 
     #[test]
