@@ -563,44 +563,6 @@ fn run() -> Result<()> {
     panel_layer.set_keyboard_interactivity(KeyboardInteractivity::None);
     panel_layer.commit();
 
-    // Ореол места фиксации: показывается только во время перетаскивания, когда
-    // курсор подносят к грани монитора. Клавиатура не нужна, клики не ловит
-    // (пустая input region), пока не нарисован — на экране его нет вовсе.
-    let hint_surface = compositor.create_surface(&qh);
-    let hint_layer = layer_shell.create_layer_surface(
-        &qh,
-        hint_surface.clone(),
-        layer_kind(),
-        Some("dicta-hint"),
-        None,
-    );
-    hint_layer.set_keyboard_interactivity(KeyboardInteractivity::None);
-    {
-        let region = compositor.wl_compositor().create_region(&qh, ());
-        hint_surface.set_input_region(Some(&region));
-        region.destroy();
-    }
-
-    // Орб — кружок у курсора во время перетаскивания: якорь верхний левый угол,
-    // окно ставится маргинами под курсор. Кликов не ловит, до перетаскивания
-    // на экране его нет вовсе.
-    let orb_surface = compositor.create_surface(&qh);
-    let orb_layer = layer_shell.create_layer_surface(
-        &qh,
-        orb_surface.clone(),
-        layer_kind(),
-        Some("dicta-orb"),
-        None,
-    );
-    orb_layer.set_keyboard_interactivity(KeyboardInteractivity::None);
-    orb_layer.set_anchor(Anchor::TOP | Anchor::LEFT);
-    orb_layer.set_size(render::ORB_W, render::ORB_W);
-    {
-        let region = compositor.wl_compositor().create_region(&qh, ());
-        orb_surface.set_input_region(Some(&region));
-        region.destroy();
-    }
-
     // пул с запасом: одновременно живут пилюля, панель, ореол и орб
     let pool = SlotPool::new(
         (SURF_W * SURF_H)
@@ -651,10 +613,13 @@ fn run() -> Result<()> {
         hint_drawn: None,
         hint_configured: false,
         pill_output: None,
-        hint_layer,
-        hint_surface,
-        orb_layer,
-        orb_surface,
+        layer_shell,
+        compositor_state: compositor,
+        drag_output: None,
+        hint_layer: None,
+        hint_surface: None,
+        orb_layer: None,
+        orb_surface: None,
         orb_configured: false,
         orb_alpha: 0.0,
     };
@@ -675,7 +640,7 @@ fn run() -> Result<()> {
                 ui.draw_pill(&qh);
                 ui.draw_panel(&qh);
                 ui.draw_hint(&qh);
-                ui.draw_orb();
+                ui.draw_orb(&qh);
                 ui.dirty = false;
                 next_draw = now + Duration::from_millis(if animating { FRAME_MS } else { POLL_MS });
             }
@@ -872,14 +837,23 @@ struct Ui {
     /// выход, на котором стоит пилюля (surface_enter): его геометрия —
     /// авторитетная для зон прилипания; второй монитор её не перезапишет
     pill_output: Option<wl_output::WlOutput>,
-    /// поверхность ореола: то же окно, что у пилюли, на грани-кандидате
-    hint_layer: LayerSurface,
-    hint_surface: wl_surface::WlSurface,
+    /// способ создавать новые слой-поверхности: нужен для ленивых ореола и орба
+    layer_shell: LayerShell,
+    /// он же для wl_surface: sctk сам ведёт их диспетчеризацию
+    compositor_state: CompositorState,
+    /// выход, на котором созданы поверхности перетаскивания (выход пилюли):
+    /// если пилюля переедет на другой экран, они будут пересозданы
+    drag_output: Option<wl_output::WlOutput>,
+    /// поверхность ореола: то же окно, что у пилюли, на грани-кандидате.
+    /// None — ещё не создана: она ленивая, потому что привязывается к выходу
+    /// пилюли, который становится известен только после surface_enter
+    hint_layer: Option<LayerSurface>,
+    hint_surface: Option<wl_surface::WlSurface>,
     /// орб — интерфейс, собранный в кружок у курсора во время перетаскивания:
     /// маленькое окно (ORB_W), якорится к верхнему левому углу и ставится
     /// маргинами под курсор — двигается без перерисовки
-    orb_layer: LayerSurface,
-    orb_surface: wl_surface::WlSurface,
+    orb_layer: Option<LayerSurface>,
+    orb_surface: Option<wl_surface::WlSurface>,
     /// орб прошёл первый configure (протокольный танец layer-shell)
     orb_configured: bool,
     /// фейд-ин орба: от нуля к единице за несколько кадров
@@ -1285,7 +1259,12 @@ impl LayerShellHandler for Ui {
         _serial: u32,
     ) {
         let given = configure.new_size;
-        if layer.wl_surface().id() == self.orb_layer.wl_surface().id() {
+        if self
+            .orb_layer
+            .as_ref()
+            .map(|l| l.wl_surface().id() == layer.wl_surface().id())
+            .unwrap_or(false)
+        {
             // Орб: первый configure открывает дорогу буферу; позицию он получает
             // маргинами по ходу движения, размер фиксирован.
             if !self.orb_configured {
@@ -1294,7 +1273,12 @@ impl LayerShellHandler for Ui {
             }
             return;
         }
-        if layer.wl_surface().id() == self.hint_layer.wl_surface().id() {
+        if self
+            .hint_layer
+            .as_ref()
+            .map(|l| l.wl_surface().id() == layer.wl_surface().id())
+            .unwrap_or(false)
+        {
             // Ореол: первый configure — сигнал, что буфер теперь можно цеплять.
             // Дальше размер задан явно вместе с положением; перерисовка не нужна —
             // главный цикл сам рисует его по смене dock_hint.
@@ -1538,10 +1522,21 @@ impl Ui {
     /// что будет у пилюли, — контур корпуса и свечение вокруг. Рисуется только
     /// при смене места; когда кандидат пропадает (курсор ушёл от грани),
     /// поверхность очищается отсоединением буфера.
-    fn draw_hint(&mut self, _q: &QueueHandle<Self>) {
+    /// Ореол места фиксации на грани-кандидате: то же окно и то же положение,
+    /// что будет у пилюли, — контур корпуса и свечение вокруг. Поверхность
+    /// ленивая: создаётся на выходе пилюли при первом перетаскивании (выход
+    /// известен только после surface_enter, а ореол без него уедет на чужой
+    /// экран). Рисуется только при смене места; когда кандидат пропадает,
+    /// поверхность гасится.
+    fn draw_hint(&mut self, q: &QueueHandle<Self>) {
         if self.first_configure {
             return;
         }
+        if self.hint_layer.is_none() && !self.ensure_drag_layers(q, true) {
+            return;
+        }
+        let hint_layer = self.hint_layer.clone().unwrap();
+        let hint_surface = self.hint_surface.clone().unwrap();
         let Some(p) = self.dock_hint else {
             // Скрытие. Нулевой буфер не просто прячет: по спецификации он
             // АНМАПИТ поверхность и возвращает её в состояние «только что
@@ -1563,13 +1558,13 @@ impl Ui {
                         return;
                     };
                     mem.fill(0);
-                    self.hint_surface.damage_buffer(0, 0, w as i32, h as i32);
-                    let _ = buffer.attach_to(&self.hint_surface);
-                    self.hint_layer.commit();
+                    hint_surface.damage_buffer(0, 0, w as i32, h as i32);
+                    let _ = buffer.attach_to(&hint_surface);
+                    hint_layer.commit();
                 }
             } else if self.hint_drawn.take().is_some() || self.hint_configured {
-                self.hint_surface.attach(None, 0, 0);
-                self.hint_surface.commit();
+                hint_surface.attach(None, 0, 0);
+                hint_surface.commit();
                 self.hint_configured = false;
             }
             return;
@@ -1581,12 +1576,12 @@ impl Ui {
             // layer-shell требует configure до первого буфера: показываем
             // геометрию пустым коммитом и ждём ответа композитора — буфер
             // прицепит следующий кадр, когда configure придёт
-            apply_placement(&self.hint_layer, p);
-            self.hint_layer.commit();
+            apply_placement(&hint_layer, p);
+            hint_layer.commit();
             return;
         }
         // то же окно, что у пилюли на этой грани: якорь, маргины, размер
-        apply_placement(&self.hint_layer, p);
+        apply_placement(&hint_layer, p);
         let (w, h) = (p.pill_width(), p.pill_height());
         let stride = (w * 4) as i32;
         let Ok((buffer, mem)) =
@@ -1599,9 +1594,9 @@ impl Ui {
         let rect = p.pill_rect(w, h, 1.0);
         let canvas = render::paint_dock_hint(w, h, rect, 0.9);
         canvas.write_into(mem);
-        self.hint_surface.damage_buffer(0, 0, w as i32, h as i32);
-        let _ = buffer.attach_to(&self.hint_surface);
-        self.hint_layer.commit();
+        hint_surface.damage_buffer(0, 0, w as i32, h as i32);
+        let _ = buffer.attach_to(&hint_surface);
+        hint_layer.commit();
         self.hint_drawn = Some(p);
     }
 
@@ -1609,7 +1604,7 @@ impl Ui {
     /// перетаскивание (dragged), ставится маргинами ровно под курсор (двигается
     /// без перерисовки буфера) и дышит кольцом; в зоне прилипания кольцо
     /// загорается и обрастает свечением. По отпусканию анмапится.
-    fn draw_orb(&mut self) {
+    fn draw_orb(&mut self, q: &QueueHandle<Self>) {
         if self.first_configure {
             return;
         }
@@ -1617,23 +1612,30 @@ impl Ui {
             // перетаскивания нет: орб уходит целиком (анмап + сброс танца,
             // следующее появление начнёт с честного пустого commit'а)
             if self.orb_configured {
-                self.orb_surface.attach(None, 0, 0);
-                self.orb_surface.commit();
+                if let Some(orb_surface) = self.orb_surface.clone() {
+                    orb_surface.attach(None, 0, 0);
+                    orb_surface.commit();
+                }
                 self.orb_configured = false;
                 self.orb_alpha = 0.0;
             }
             return;
         }
+        if self.orb_layer.is_none() && !self.ensure_drag_layers(q, false) {
+            return;
+        }
+        let orb_layer = self.orb_layer.clone().unwrap();
+        let orb_surface = self.orb_surface.clone().unwrap();
         let Some(screen) = self.screen else { return };
         let Some((x, y)) = self.grab_at else { return };
         let (cx, cy) = edge::cursor_abs(&self.placement, self.width, self.height, screen, x, y);
         // окно центрируется на курсоре: маргины от верхнего левого угла экрана
         let (mx, my) = (cx - render::ORB_HALF, cy - render::ORB_HALF);
-        self.orb_layer.set_margin(my, 0, 0, mx);
+        orb_layer.set_margin(my, 0, 0, mx);
         if !self.orb_configured {
             // начальный танец layer-shell: геометрия пустым коммитом,
             // буфер — после configure
-            self.orb_layer.commit();
+            orb_layer.commit();
             return;
         }
         // фейд-ин: от нуля к единице за несколько кадров
@@ -1659,9 +1661,53 @@ impl Ui {
             return;
         };
         canvas.write_into(mem);
-        self.orb_surface.damage_buffer(0, 0, w as i32, w as i32);
-        let _ = buffer.attach_to(&self.orb_surface);
-        self.orb_layer.commit();
+        orb_surface.damage_buffer(0, 0, w as i32, w as i32);
+        let _ = buffer.attach_to(&orb_surface);
+        orb_layer.commit();
+    }
+
+    /// Создать недостающие поверхности перетаскивания (ореол и/или орб) на
+    /// выходе пилюли: всё прилипание живёт в координатах её экрана, и без
+    /// привязки композитор разложил бы их по своему «текущему» выходу — на
+    /// двух мониторах это уводит орб и ореол на чужой экран.
+    fn ensure_drag_layers(&mut self, q: &QueueHandle<Self>, hint: bool) -> bool {
+        let Some(output) = self.pill_output.clone() else {
+            return false;
+        };
+        if hint && self.hint_layer.is_some() || !hint && self.orb_layer.is_some() {
+            return true;
+        }
+        let surface = self.compositor_state.create_surface(q);
+        let (namespace, anchor_or) = if hint {
+            ("dicta-hint", None)
+        } else {
+            ("dicta-orb", Some(Anchor::TOP | Anchor::LEFT))
+        };
+        let layer = self.layer_shell.create_layer_surface(
+            q,
+            surface.clone(),
+            layer_kind(),
+            Some(namespace),
+            Some(&output),
+        );
+        layer.set_keyboard_interactivity(KeyboardInteractivity::None);
+        if let Some(anchor) = anchor_or {
+            layer.set_anchor(anchor);
+            layer.set_size(render::ORB_W, render::ORB_W);
+        }
+        // кликов эти поверхности никогда не ловят
+        let region = self.compositor.create_region(q, ());
+        surface.set_input_region(Some(&region));
+        region.destroy();
+        if hint {
+            self.hint_layer = Some(layer);
+            self.hint_surface = Some(surface);
+        } else {
+            self.orb_layer = Some(layer);
+            self.orb_surface = Some(surface);
+        }
+        self.drag_output = Some(output);
+        true
     }
 
     fn draw_pill(&mut self, q: &QueueHandle<Self>) {
