@@ -623,6 +623,7 @@ fn run() -> Result<()> {
         screen: None,
         dock_hint: None,
         hint_drawn: None,
+        hint_configured: false,
         pill_output: None,
         hint_layer,
         hint_surface,
@@ -831,6 +832,9 @@ struct Ui {
     dock_hint: Option<Placement>,
     /// какой ореол уже отрисован: перерисовываем только при смене места
     hint_drawn: Option<Placement>,
+    /// композитор прислал первый configure ореолу: только после него можно
+    /// прицеплять буфер (иначе protocol error и разрыв соединения)
+    hint_configured: bool,
     /// выход, на котором стоит пилюля (surface_enter): его геометрия —
     /// авторитетная для зон прилипания; второй монитор её не перезапишет
     pill_output: Option<wl_output::WlOutput>,
@@ -1233,8 +1237,13 @@ impl LayerShellHandler for Ui {
     ) {
         let given = configure.new_size;
         if layer.wl_surface().id() == self.hint_layer.wl_surface().id() {
-            // Ореол: размер задан явно вместе с положением; перерисовка не нужна —
+            // Ореол: первый configure — сигнал, что буфер теперь можно цеплять.
+            // Дальше размер задан явно вместе с положением; перерисовка не нужна —
             // главный цикл сам рисует его по смене dock_hint.
+            if !self.hint_configured {
+                self.hint_configured = true;
+                self.dirty = true;
+            }
             return;
         }
         if layer.wl_surface().id() == self.panel_layer.wl_surface().id() {
@@ -1480,6 +1489,14 @@ impl Ui {
             return;
         };
         if self.hint_drawn == Some(p) {
+            return;
+        }
+        if !self.hint_configured {
+            // layer-shell требует configure до первого буфера: показываем
+            // геометрию пустым коммитом и ждём ответа композитора — буфер
+            // прицепит следующий кадр, когда configure придёт
+            apply_placement(&self.hint_layer, p);
+            self.hint_layer.commit();
             return;
         }
         // то же окно, что у пилюли на этой грани: якорь, маргины, размер
