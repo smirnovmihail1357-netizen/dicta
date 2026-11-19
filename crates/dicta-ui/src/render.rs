@@ -269,6 +269,9 @@ pub struct Scene {
     pub recording: bool,
     pub seconds: f32,
     pub frame: u32,
+    /// Курсор в координатах окна пилюли, пока кнопка зажата: вокруг него
+    /// рисуется пульсирующий кружок — видно, что захват распознан.
+    pub grab: Option<(f64, f64)>,
 }
 
 /// Пружинное появление: быстро вверх, лёгкое превышение, мягкая усадка на место.
@@ -396,6 +399,34 @@ impl Canvas {
                     let a = (a_src * cov / 4.0).min(255.0) as u32;
                     self.blend(x, y, (color & 0x00FF_FFFF) | (a << 24));
                 }
+            }
+        }
+    }
+
+    /// Тонкое кольцо радиусом `r` вокруг точки: покрытие убывает от центра
+    /// толщины к краям. Точка может лежать вне кадра — кольцо обрежется.
+    pub fn ring(&mut self, cx: f32, cy: f32, r: f32, thickness: f32, color: u32) {
+        let a = (color >> 24) & 0xFF;
+        let lo = (r - thickness).max(0.0).floor() as i32;
+        let hi = (r + thickness).ceil() as i32;
+        for dy in lo..=hi {
+            for dx in lo..=hi {
+                let px = cx + dx as f32;
+                let py = cy + dy as f32;
+                if px < 0.0 || py < 0.0 {
+                    continue;
+                }
+                let (px, py) = (px as u32, py as u32);
+                if px >= self.w || py >= self.h {
+                    continue;
+                }
+                let dist = ((dx * dx + dy * dy) as f32).sqrt();
+                let cover = 1.0 - ((dist - r).abs() / thickness).clamp(0.0, 1.0);
+                if cover <= 0.0 {
+                    continue;
+                }
+                let alpha = ((a as f32) * cover) as u32;
+                self.blend(px, py, (color & 0x00FF_FFFF) | (alpha << 24));
             }
         }
     }
@@ -716,7 +747,22 @@ pub fn paint(
         );
     }
 
+    paint_grab(&mut c, scene, k);
     c
+}
+
+/// Кружок захвата: кнопка зажата — вокруг курсора дышит кольцо, и видно, что
+/// захват распознан и пилюлю можно тащить. Курсор может уйти за кадр во время
+/// перетаскивания — кольцо просто скроется за краем.
+fn paint_grab(c: &mut Canvas, scene: &Scene, k: f32) {
+    let Some((gx, gy)) = scene.grab else { return };
+    let (gx, gy) = (gx as f32, gy as f32);
+    // пульс: радиус гуляет вокруг 14 px с периодом ~1.6 с при кадре каждые 100 мс
+    let pulse = (scene.frame as f32 * 0.4).sin();
+    let r = 14.0 + 2.5 * pulse;
+    c.ring(gx, gy, r, 2.0, fade(argb(0xD0, 0x89, 0xB4, 0xFA), k));
+    // и точка в центре — где именно курсор
+    c.ring(gx, gy, 1.5, 1.5, fade(argb(0xD0, 0xEF, 0xF6, 0xFF), k));
 }
 
 /// Вертикальная пилюля (сторона слева/справа): тот же набор, разложенный сверху вниз.
@@ -849,6 +895,7 @@ pub fn paint_vertical(
         scale,
         fade(argb(0xFF, 0x9A, 0xA0, 0xA8), k),
     );
+    paint_grab(&mut c, scene, k);
     c
 }
 

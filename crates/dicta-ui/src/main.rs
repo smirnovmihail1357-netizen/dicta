@@ -293,6 +293,7 @@ fn preview(dir: &Path) -> Result<()> {
         recording: true,
         seconds: 3.4,
         frame: 0,
+        grab: Some((260.0, 20.0)),
     };
     let levels: Vec<f32> = (0..render::WAVE_LEN)
         .map(|i| {
@@ -618,6 +619,7 @@ fn run() -> Result<()> {
         placement,
         ui_path,
         press_origin: None,
+        grab_at: None,
         dragged: false,
         drag_from: (0.0, 0.0),
         screen: None,
@@ -819,6 +821,9 @@ struct Ui {
     ui_path: std::path::PathBuf,
     /// куда указала мышь в момент нажатия на пилюлю (None = не держим ничего)
     press_origin: Option<(f64, f64)>,
+    /// курсор в координатах окна пилюли, пока кнопка зажата: вокруг него рисуется
+    /// пульсирующий кружок — видно, что захват распознан и за ним можно тащить
+    grab_at: Option<(f64, f64)>,
     /// это движение уже стало перетаскиванием: по отпусканию не считаем его «кликом = стоп»
     dragged: bool,
     /// последняя точка мыши в этом перетаскивании: приращения считаем от неё, а не от
@@ -1023,6 +1028,8 @@ impl Ui {
         }
         // Клик по пилюле = «закончить и вставить», но только если его не тащили.
         self.press_origin = Some((x, y));
+        self.grab_at = Some((x, y));
+        self.dirty = true; // кружок захвата вокруг курсора
         self.dragged = false;
         self.drag_from = (x, y);
         self.dock_hint = None;
@@ -1075,8 +1082,11 @@ impl Ui {
         if let Some(target) = self.dock_hint.take() {
             self.apply_placement(target);
         }
-        if self.hint_drawn.is_some() {
+        if self.hint_drawn.is_some() || self.hint_configured {
             self.dirty = true; // убрать ореол с экрана
+        }
+        if self.grab_at.take().is_some() {
+            self.dirty = true; // убрать кружок захвата
         }
     }
 
@@ -1105,6 +1115,7 @@ impl Ui {
         // точки нажатия больше не имеет смысла
         let (dx, dy) = (x - self.drag_from.0, y - self.drag_from.1);
         self.drag_from = (x, y);
+        self.grab_at = Some((x, y));
         if !self.dragged {
             self.dragged = true;
         } else if dx == 0.0 && dy == 0.0 {
@@ -1482,9 +1493,34 @@ impl Ui {
             return;
         }
         let Some(p) = self.dock_hint else {
-            if self.hint_drawn.take().is_some() {
+            // Скрытие. Нулевой буфер не просто прячет: по спецификации он
+            // АНМАПИТ поверхность и возвращает её в состояние «только что
+            // создана» — следующее появление обязано повторить начальный
+            // танец (пустой commit, configure, буфер), поэтому сбрасываем и
+            // флаг. Во время перетаскивания вместо анмапа рисуем прозрачный
+            // буфер: соседние кандидаты у зоны не должны гонять танец заново
+            // на каждой смене стороны — от этого ореол мерцал бы на границах.
+            if self.press_origin.is_some() {
+                if let Some(prev) = self.hint_drawn.take() {
+                    let (w, h) = (prev.pill_width(), prev.pill_height());
+                    let stride = (w * 4) as i32;
+                    let Ok((buffer, mem)) = self.pool.create_buffer(
+                        w as i32,
+                        h as i32,
+                        stride,
+                        wl_shm::Format::Argb8888,
+                    ) else {
+                        return;
+                    };
+                    mem.fill(0);
+                    self.hint_surface.damage_buffer(0, 0, w as i32, h as i32);
+                    let _ = buffer.attach_to(&self.hint_surface);
+                    self.hint_layer.commit();
+                }
+            } else if self.hint_drawn.take().is_some() || self.hint_configured {
                 self.hint_surface.attach(None, 0, 0);
                 self.hint_surface.commit();
+                self.hint_configured = false;
             }
             return;
         };
@@ -1580,6 +1616,7 @@ impl Ui {
             recording: self.shown.state == "recording",
             seconds: self.shown.seconds,
             frame: self.frame,
+            grab: self.grab_at,
         };
         let hist: Vec<f32> = self
             .shared
@@ -1763,6 +1800,7 @@ mod tests {
             recording: true,
             seconds: 1.0,
             frame: 0,
+            grab: None,
         };
         let bottom = Placement::new(Edge::Bottom);
         let canvas = paint(
@@ -1784,6 +1822,7 @@ mod tests {
             recording: true,
             seconds: 1.0,
             frame: 0,
+            grab: None,
         };
         let bottom = Placement::new(Edge::Bottom);
         let canvas = paint(
@@ -1812,6 +1851,7 @@ mod tests {
             recording: true,
             seconds: 1.0,
             frame: 0,
+            grab: None,
         };
         let left = Placement::new(Edge::Left);
         let (w, h) = (left.pill_width(), left.pill_height());
@@ -2010,6 +2050,7 @@ mod tests {
                     recording: reveal > 0.5,
                     seconds: 3.0,
                     frame: 7,
+                    grab: None,
                 };
                 let pill = paint(
                     p.pill_width(),
