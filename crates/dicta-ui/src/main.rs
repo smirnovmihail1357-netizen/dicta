@@ -9,6 +9,7 @@
 //! пружинным overshoot'ом) и уходит обратно за неё. Геометрия стороны — в `edge.rs`,
 //! картинка — в `render.rs`.
 
+mod drag;
 mod edge;
 mod panel;
 mod render;
@@ -62,7 +63,6 @@ const FRAME_MS: u64 = 16;
 const IDLE_MS: u64 = 50;
 /// Сколько пикселей надо утащить пилюлю, чтобы движение стало «перестановкой»,
 /// а не обычным кликом по ней.
-const DRAG_THRESHOLD: i32 = 60;
 
 fn debug_on() -> bool {
     std::env::var("DICTA_DEBUG").is_ok()
@@ -604,13 +604,8 @@ fn run() -> Result<()> {
         panel_rest_sig: None,
         placement,
         ui_path,
-        press_origin: None,
-        grab_at: None,
-        drag_along: 0,
-        dragged: false,
-        drag_from: (0.0, 0.0),
+        drag: drag::Drag::new(),
         screen: None,
-        dock_hint: None,
         hint_drawn: None,
         hint_configured: false,
         pill_output: None,
@@ -814,27 +809,12 @@ struct Ui {
     placement: Placement,
     /// файл, в который положение сохраняется, чтобы следующий запуск встал туда же
     ui_path: std::path::PathBuf,
-    /// куда указала мышь в момент нажатия на пилюлю (None = не держим ничего)
-    press_origin: Option<(f64, f64)>,
-    /// курсор в координатах окна пилюли, пока кнопка зажата: вокруг него рисуется
-    /// пульсирующий кружок — видно, что захват распознан и за ним можно тащить
-    grab_at: Option<(f64, f64)>,
-    /// сколько протащили вдоль своей стороны в этом перетаскивании: применяется
-    /// одним куском по отпусканию — во время drag пилюля собрана в орб и не
-    /// двигается (двигать её на каждом событии — лишние коммиты, и позиция
-    /// орба перестаёт попадать в центр курсора)
-    drag_along: i32,
-    /// это движение уже стало перетаскиванием: по отпусканию не считаем его «кликом = стоп»
-    dragged: bool,
-    /// последняя точка мыши в этом перетаскивании: приращения считаем от неё, а не от
-    /// точки нажатия — после переезда на другую сторону координаты поверхности меняются
-    drag_from: (f64, f64),
+    /// машина перетаскивания: клик/сдвиг/грань-кандидат без примеси Wayland
+    /// (сценарии гоняются юнит-тестами в drag.rs)
+    drag: drag::Drag,
     /// размер экрана в логических пикселях (первый wl_output, который его сообщил):
     /// по нему курсор во время перетаскивания переводится в координаты экрана
     screen: Option<(i32, i32)>,
-    /// грань-кандидат, к которой поднесли пилюлю (None = курсор не у грани):
-    /// здесь рисуется ореол места фиксации, а по отпусканию она закрепляется
-    dock_hint: Option<Placement>,
     /// какой ореол уже отрисован: перерисовываем только при смене места
     hint_drawn: Option<Placement>,
     /// композитор прислал первый configure ореолу: только после него можно
@@ -1045,13 +1025,18 @@ impl Ui {
             return;
         }
         // Клик по пилюле = «закончить и вставить», но только если его не тащили.
-        self.press_origin = Some((x, y));
-        self.grab_at = Some((x, y));
+        self.drag.press(x, y);
         self.dirty = true; // кружок захвата вокруг курсора
-        self.dragged = false;
-        self.drag_from = (x, y);
-        self.drag_along = 0;
-        self.dock_hint = None;
+    }
+
+    /// Снимок мира для машины перетаскивания: где пилюля, какого размера её
+    /// окно и каков экран.
+    fn drag_world(&self) -> drag::World {
+        drag::World {
+            placement: self.placement,
+            window: (self.width, self.height),
+            screen: self.screen,
+        }
     }
 
     /// Запомнить размер экрана, о котором рассказал wl_output: по нему курсор
@@ -1084,145 +1069,39 @@ impl Ui {
         if event.surface.id() != self.layer.wl_surface().id() {
             return;
         }
-        let Some((ox, oy)) = self.press_origin.take() else {
-            return;
-        };
-        let moved = (x - ox, y - oy);
-        if !self.dragged
-            && moved.0.abs() < DRAG_THRESHOLD as f64
-            && moved.1.abs() < DRAG_THRESHOLD as f64
-        {
-            // Клик по пилюле = «закончить и вставить».
-            let _ = ask_command(&dicta_core_socket_path_static(), "stop");
-        }
-        // Перетаскивание кончилось. Пока оно шло, пилюля была собрана в орб и
-        // не двигалась: применяем результат одним куском — курсор у грани
-        // закрепляем там, где показывал ореол; не у грани — накопленный сдвиг
-        // вдоль своей стороны.
-        self.dragged = false;
-        if let Some(target) = self.dock_hint.take() {
-            self.apply_placement(target);
-        } else if self.drag_along != 0 {
-            let dim = self.screen.map(|(w, h)| {
-                if self.placement.edge.horizontal() {
-                    w
-                } else {
-                    h
-                }
-            });
-            let mut slid = self.placement.shifted_along(self.drag_along);
-            if let Some(dim) = dim {
-                slid = slid.clamped_cross(dim);
+        // Машина сама решает, чем кончилось: клик — «остановить и вставить»,
+        // грань — закрепиться, иначе — накопленный сдвиг вдоль своей стороны.
+        match self.drag.release(x, y) {
+            drag::Release::Click => {
+                let _ = ask_command(&dicta_core_socket_path_static(), "stop");
             }
-            self.apply_placement(slid);
+            drag::Release::Dock(target) => self.apply_placement(target),
+            drag::Release::Slide(along) => {
+                let dim = self.screen.map(|(w, h)| {
+                    if self.placement.edge.horizontal() {
+                        w
+                    } else {
+                        h
+                    }
+                });
+                let mut slid = self.placement.shifted_along(along);
+                if let Some(dim) = dim {
+                    slid = slid.clamped_cross(dim);
+                }
+                self.apply_placement(slid);
+            }
+            drag::Release::Nothing => {}
         }
-        self.drag_along = 0;
-        if self.hint_drawn.is_some() || self.hint_configured {
-            self.dirty = true; // убрать ореол с экрана
-        }
-        if self.grab_at.take().is_some() {
-            self.dirty = true; // вернуть пилюлю из орба
-        }
+        // орб уходит, ореол гаснет, пилюля возвращается из кармана
+        self.dirty = true;
     }
 
-    /// Движение с зажатой кнопкой. После DRAG_THRESHOLD пилюля считает, что её
-    /// тащат, и делает две вещи:
-    ///
-    /// - едет вдоль своей стороны ровно на приращение мыши (следует за
-    ///   курсором) и не выезжает за края экрана;
-    /// - считает курсор в координатах экрана (локальная точка окна плюс позиция
-    ///   окна) и, если он поднесён к грани монитора (DOCK_SNAP_PX), показывает
-    ///   ореол места будущей фиксации на этой грани — по отпусканию пилюля
-    ///   закрепится там. До отпускания ничего не переезжает, поэтому мерцать
-    ///   нечему: ореол просто идёт за курсором вдоль грани.
+    /// Движение с зажатой кнопкой: машина копит сдвиг, ищет грань-кандидата
+    /// и ведёт кружок захвата; всё видимое рисует главный цикл по dirty.
     fn on_motion(&mut self, x: f64, y: f64) {
-        let Some((ox, oy)) = self.press_origin else {
-            return;
-        };
-        if !self.dragged
-            && (x - ox).abs() < DRAG_THRESHOLD as f64
-            && (y - oy).abs() < DRAG_THRESHOLD as f64
-        {
-            return;
-        }
-        // приращение от последнего события: после переезда на другую сторону
-        // координаты приходят уже в системе нового окна, и суммарный сдвиг от
-        // точки нажатия больше не имеет смысла
-        let (dx, dy) = (x - self.drag_from.0, y - self.drag_from.1);
-        self.drag_from = (x, y);
-        self.grab_at = Some((x, y));
-        if !self.dragged {
-            self.dragged = true;
-        } else if dx == 0.0 && dy == 0.0 {
-            return;
-        }
-        let edge = self.placement.edge;
-        let (ix, iy) = (dx.round() as i32, dy.round() as i32);
-        // Сдвиг вдоль стороны копим без применения: пилюля сейчас собрана в орб
-        // и невидима, а двигать её окно на каждом событии — лишние коммиты и
-        // увод орба от центра курсора (позиция орба считается от окна пилюли).
-        // Применится одним куском по отпусканию.
-        self.drag_along += edge::along_delta(edge, ix, iy);
-        let screen_along = self
-            .screen
-            .map(|(w, h)| if edge.horizontal() { w } else { h });
-        let next = match screen_along {
-            Some(dim) => self
-                .placement
-                .shifted_along(self.drag_along)
-                .clamped_cross(dim),
-            None => self.placement.shifted_along(self.drag_along),
-        };
-
-        // Грань-кандидат — по одному из двух признаков:
-        //
-        // 1. курсор поднесён к грани монитора (пересёк экран наружу от пилюли);
-        // 2. пилюля упёрлась в конец своей стороны — курсор остаётся внутри
-        //    неё и до зоны у грани сам не доходит, поэтому кандидатом объявляет
-        //    упор: смежная грань у угла, к которому дотащили.
-        // Ореол места закрепления рисуется поверх, сама пилюля переезжает
-        // по отпусканию.
-        let hint = self.screen.and_then(|screen| {
-            let (cx, cy) = edge::cursor_abs(&self.placement, self.width, self.height, screen, x, y);
-            // своя грань кандидатом не бывает: ореол не должен рисоваться
-            // поверх самой пилюли, когда её оттягивают наружу
-            let by_cursor = edge::nearest_edge(cx, cy, screen).filter(|target| *target != edge);
-            let by_corner = screen_along.and_then(|dim| {
-                let slack = (dim - render::SURF_W as i32) / 2;
-                let cross = next.cross();
-                if slack > 0 && cross <= -slack {
-                    Some(edge.adjacent(true))
-                } else if slack > 0 && cross >= slack {
-                    Some(edge.adjacent(false))
-                } else {
-                    None
-                }
-            });
-            by_cursor.or(by_corner).map(|edge| {
-                // пилюля встанет на новой грани по положению курсора вдоль неё
-                let (cursor_along, dim) = if edge.horizontal() {
-                    (cx, screen.0)
-                } else {
-                    (cy, screen.1)
-                };
-                Placement::new(edge)
-                    .with_along(self.placement.along())
-                    .with_cross(cursor_along - dim / 2)
-                    .clamped_cross(dim)
-            })
-        });
-        if hint != self.dock_hint {
-            match (&hint, &self.dock_hint) {
-                (Some(p), _) => eprintln!(
-                    "dicta-ui: кандидат {} (смещение {})",
-                    p.edge.as_str(),
-                    p.cross()
-                ),
-                (None, Some(_)) => eprintln!("dicta-ui: кандидат снят"),
-                (None, None) => {}
-            }
-            self.dock_hint = hint;
-            self.dirty = true; // показать/подвинуть/убрать ореол
+        let world = self.drag_world();
+        if self.drag.motion(x, y, &world) {
+            self.dirty = true;
         }
     }
 
@@ -1365,7 +1244,7 @@ impl Ui {
             (
                 // во время перетаскивания пилюля собирается в орб у курсора:
                 // сама прячется в карман и возвращается по отпусканию
-                !self.dragged
+                !self.drag.is_active()
                     && (always_draw()
                         || shared.status.state == "recording"
                         || shared.status.state == "transcribing"),
@@ -1561,7 +1440,7 @@ impl Ui {
         }
         let hint_layer = self.hint_layer.clone().unwrap();
         let hint_surface = self.hint_surface.clone().unwrap();
-        let Some(p) = self.dock_hint else {
+        let Some(p) = self.drag.hint() else {
             // Скрытие. Нулевой буфер не просто прячет: по спецификации он
             // АНМАПИТ поверхность и возвращает её в состояние «только что
             // создана» — следующее появление обязано повторить начальный
@@ -1569,7 +1448,7 @@ impl Ui {
             // флаг. Во время перетаскивания вместо анмапа рисуем прозрачный
             // буфер: соседние кандидаты у зоны не должны гонять танец заново
             // на каждой смене стороны — от этого ореол мерцал бы на границах.
-            if self.press_origin.is_some() {
+            if self.drag.held() {
                 if let Some(prev) = self.hint_drawn.take() {
                     let (w, h) = (prev.pill_width(), prev.pill_height());
                     let stride = (w * 4) as i32;
@@ -1637,7 +1516,7 @@ impl Ui {
         if self.first_configure {
             return;
         }
-        if !self.dragged {
+        if !self.drag.is_active() {
             // перетаскивания нет: орб уходит целиком (анмап + сброс танца,
             // следующее появление начнёт с честного пустого commit'а)
             if self.orb_configured {
@@ -1656,7 +1535,9 @@ impl Ui {
         let orb_layer = self.orb_layer.clone().unwrap();
         let orb_surface = self.orb_surface.clone().unwrap();
         let Some(screen) = self.screen else { return };
-        let Some((x, y)) = self.grab_at else { return };
+        let Some((x, y)) = self.drag.cursor() else {
+            return;
+        };
         let (cx, cy) = edge::cursor_abs(&self.placement, self.width, self.height, screen, x, y);
         // окно центрируется на курсоре: маргины от верхнего левого угла экрана
         let (mx, my) = (cx - render::ORB_HALF, cy - render::ORB_HALF);
@@ -1678,7 +1559,7 @@ impl Ui {
             self.orb_alpha,
             recording,
             self.frame,
-            self.dock_hint.is_some(),
+            self.drag.hint().is_some(),
         );
         let w = render::ORB_W;
         let stride = (w * 4) as i32;
@@ -1801,7 +1682,7 @@ impl Ui {
             recording: self.shown.state == "recording",
             seconds: self.shown.seconds,
             frame: self.frame,
-            grab: self.grab_at,
+            grab: self.drag.cursor(),
         };
         let hist: Vec<f32> = self
             .shared
