@@ -1092,7 +1092,11 @@ impl Ui {
         let from = self.screen.zip(self.drag.cursor()).map(|(screen, (x, y))| {
             edge::cursor_abs(&self.placement, self.width, self.height, screen, x, y)
         });
-        match self.drag.release(x, y) {
+        let outcome = self.drag.release(x, y);
+        // улёт орба — только после настоящего перетаскивания: клик орб не
+        // показывал, и кружок не должен выплывать из ниоткуда
+        let was_drag = !matches!(outcome, drag::Release::Click);
+        match outcome {
             drag::Release::Click => {
                 let _ = ask_command(&dicta_core_socket_path_static(), "stop");
             }
@@ -1113,10 +1117,15 @@ impl Ui {
             }
             drag::Release::Nothing => {}
         }
-        if let (Some(from), Some(screen)) = (from, self.screen) {
-            let to = edge::body_center(&self.placement, screen);
-            self.orb_depart = Some(Depart { from, to, t: 0.0 });
+        if was_drag {
+            if let (Some(from), Some(screen)) = (from, self.screen) {
+                let to = edge::body_center(&self.placement, screen);
+                self.orb_depart = Some(Depart { from, to, t: 0.0 });
+            }
         }
+        // следующий drag начнётся со свежего pop'а и фейд-ина
+        self.orb_age = 0;
+        self.orb_alpha = 0.0;
         // ореол гаснет, пилюля возвращается из кармана, орб улетает к ней
         self.dirty = true;
     }
@@ -1535,10 +1544,24 @@ impl Ui {
                     let _ = buffer.attach_to(&hint_surface);
                     hint_layer.commit();
                 }
-            } else if self.hint_drawn.take().is_some() || self.hint_configured {
-                hint_surface.attach(None, 0, 0);
-                hint_surface.commit();
-                self.hint_configured = false;
+            } else if let Some(prev) = self.hint_drawn.take() {
+                // Анмап (attach None) возвращает поверхность в состояние «до
+                // configure», и KWin потом не присылает configure заново —
+                // второй раз ореол уже не появлялся. Прячем как пилюлю:
+                // прозрачный буфер, поверхность остаётся замапленной и
+                // настроенной, следующий drag просто рисует поверх.
+                let (w, h) = (prev.pill_width(), prev.pill_height());
+                let stride = (w * 4) as i32;
+                let Ok((buffer, mem)) =
+                    self.pool
+                        .create_buffer(w as i32, h as i32, stride, wl_shm::Format::Argb8888)
+                else {
+                    return;
+                };
+                mem.fill(0);
+                hint_surface.damage_buffer(0, 0, w as i32, h as i32);
+                let _ = buffer.attach_to(&hint_surface);
+                hint_layer.commit();
             }
             return;
         };
@@ -1619,15 +1642,13 @@ impl Ui {
                     return;
                 }
             }
-            // улёт кончился (или его не было): орб уходит целиком
+            // улёт кончился (или его не было): гасим прозрачным буфером,
+            // не анмапом — KWin закрывал анмапнутый орб и не переconfigure'ил
+            // бы его заново; замапленный невидимый орб ничему не мешает
+            // (input region пустая)
             if self.orb_depart.is_none() && self.orb_configured {
-                if let Some(orb_surface) = self.orb_surface.clone() {
-                    orb_surface.attach(None, 0, 0);
-                    orb_surface.commit();
-                }
-                self.orb_configured = false;
-                self.orb_alpha = 0.0;
-                self.orb_age = 0;
+                let canvas = Canvas::new(render::ORB_W, render::ORB_W);
+                self.attach_orb(canvas);
             }
             return;
         }
