@@ -606,6 +606,7 @@ fn run() -> Result<()> {
         ui_path,
         press_origin: None,
         grab_at: None,
+        drag_along: 0,
         dragged: false,
         drag_from: (0.0, 0.0),
         screen: None,
@@ -818,6 +819,11 @@ struct Ui {
     /// курсор в координатах окна пилюли, пока кнопка зажата: вокруг него рисуется
     /// пульсирующий кружок — видно, что захват распознан и за ним можно тащить
     grab_at: Option<(f64, f64)>,
+    /// сколько протащили вдоль своей стороны в этом перетаскивании: применяется
+    /// одним куском по отпусканию — во время drag пилюля собрана в орб и не
+    /// двигается (двигать её на каждом событии — лишние коммиты, и позиция
+    /// орба перестаёт попадать в центр курсора)
+    drag_along: i32,
     /// это движение уже стало перетаскиванием: по отпусканию не считаем его «кликом = стоп»
     dragged: bool,
     /// последняя точка мыши в этом перетаскивании: приращения считаем от неё, а не от
@@ -1044,6 +1050,7 @@ impl Ui {
         self.dirty = true; // кружок захвата вокруг курсора
         self.dragged = false;
         self.drag_from = (x, y);
+        self.drag_along = 0;
         self.dock_hint = None;
     }
 
@@ -1088,17 +1095,33 @@ impl Ui {
             // Клик по пилюле = «закончить и вставить».
             let _ = ask_command(&dicta_core_socket_path_static(), "stop");
         }
-        // Перетаскивание кончилось: курсор поднесён к грани — закрепляем пилюлю
-        // там, где показывал ореол; не поднесён — остаёмся на месте (сдвиг
-        // вдоль своей стороны уже применён по ходу движения).
+        // Перетаскивание кончилось. Пока оно шло, пилюля была собрана в орб и
+        // не двигалась: применяем результат одним куском — курсор у грани
+        // закрепляем там, где показывал ореол; не у грани — накопленный сдвиг
+        // вдоль своей стороны.
+        self.dragged = false;
         if let Some(target) = self.dock_hint.take() {
             self.apply_placement(target);
+        } else if self.drag_along != 0 {
+            let dim = self.screen.map(|(w, h)| {
+                if self.placement.edge.horizontal() {
+                    w
+                } else {
+                    h
+                }
+            });
+            let mut slid = self.placement.shifted_along(self.drag_along);
+            if let Some(dim) = dim {
+                slid = slid.clamped_cross(dim);
+            }
+            self.apply_placement(slid);
         }
+        self.drag_along = 0;
         if self.hint_drawn.is_some() || self.hint_configured {
             self.dirty = true; // убрать ореол с экрана
         }
         if self.grab_at.take().is_some() {
-            self.dirty = true; // убрать кружок захвата
+            self.dirty = true; // вернуть пилюлю из орба
         }
     }
 
@@ -1135,20 +1158,21 @@ impl Ui {
         }
         let edge = self.placement.edge;
         let (ix, iy) = (dx.round() as i32, dy.round() as i32);
-        let along = edge::along_delta(edge, ix, iy);
-
-        // вдоль своей стороны — приращение, округлённое до пикселя, и в пределах
-        // экрана: пилюля не должна уезжать за угол монитора
+        // Сдвиг вдоль стороны копим без применения: пилюля сейчас собрана в орб
+        // и невидима, а двигать её окно на каждом событии — лишние коммиты и
+        // увод орба от центра курсора (позиция орба считается от окна пилюли).
+        // Применится одним куском по отпусканию.
+        self.drag_along += edge::along_delta(edge, ix, iy);
         let screen_along = self
             .screen
             .map(|(w, h)| if edge.horizontal() { w } else { h });
-        let mut next = self.placement.shifted_along(along);
-        if let Some(dim) = screen_along {
-            next = next.clamped_cross(dim);
-        }
-        if next != self.placement {
-            self.apply_placement(next);
-        }
+        let next = match screen_along {
+            Some(dim) => self
+                .placement
+                .shifted_along(self.drag_along)
+                .clamped_cross(dim),
+            None => self.placement.shifted_along(self.drag_along),
+        };
 
         // Грань-кандидат — по одному из двух признаков:
         //
@@ -1569,7 +1593,12 @@ impl Ui {
             }
             return;
         };
-        if self.hint_drawn == Some(p) {
+        if self.hint_configured && self.hint_drawn.as_ref().map(|d| d.edge) == Some(p.edge) {
+            // та же грань, только позиция вдоль неё: двигаем окно маргинами,
+            // буфер не трогаем — картинка ореола от смещения не меняется
+            apply_placement(&hint_layer, p);
+            hint_layer.commit();
+            self.hint_drawn = Some(p);
             return;
         }
         if !self.hint_configured {
