@@ -891,9 +891,14 @@ impl CompositorHandler for Ui {
         &mut self,
         _c: &Connection,
         _q: &QueueHandle<Self>,
-        _s: &wl_surface::WlSurface,
-        _o: &wl_output::WlOutput,
+        s: &wl_surface::WlSurface,
+        o: &wl_output::WlOutput,
     ) {
+        // Пилюля вошла в свой выход: прилипание к граням должно мериться по
+        // экрану, на котором она стоит, а не по последнему приславшему.
+        if s.id() == self.layer.wl_surface().id() {
+            self.remember_screen(o);
+        }
     }
     fn surface_leave(
         &mut self,
@@ -1010,6 +1015,8 @@ impl Ui {
             .filter(|&(w, h)| w > 0 && h > 0)
         {
             if self.screen != Some((w, h)) {
+                // в журнал: без размера экрана прилипание к граням не работает
+                eprintln!("dicta-ui: экран {w}x{h} — прилипание к граням активно");
                 self.screen = Some((w, h));
             }
         }
