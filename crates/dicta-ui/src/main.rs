@@ -1188,7 +1188,39 @@ impl ShmHandler for Ui {
 }
 
 impl LayerShellHandler for Ui {
-    fn closed(&mut self, _c: &Connection, _q: &QueueHandle<Self>, _l: &LayerSurface) {
+    fn closed(&mut self, _c: &Connection, _q: &QueueHandle<Self>, l: &LayerSurface) {
+        // Композитор может закрыть ореол или орб сам — это не повод гасить
+        // приложение: сбрасываем поверхность, при следующем перетаскивании
+        // она лениво создастся заново. Умираем только если закрыли пилюлю:
+        // без неё делать нечего.
+        let id = l.wl_surface().id();
+        if self
+            .orb_layer
+            .as_ref()
+            .map(|s| s.wl_surface().id() == id)
+            .unwrap_or(false)
+        {
+            eprintln!("dicta-ui: орб закрыт композитором — пересоздадим при надобности");
+            self.orb_layer = None;
+            self.orb_surface = None;
+            self.orb_configured = false;
+            self.orb_depart = None;
+            return;
+        }
+        if self
+            .hint_layer
+            .as_ref()
+            .map(|s| s.wl_surface().id() == id)
+            .unwrap_or(false)
+        {
+            eprintln!("dicta-ui: ореол закрыт композитором — пересоздадим при надобности");
+            self.hint_layer = None;
+            self.hint_surface = None;
+            self.hint_configured = false;
+            self.hint_drawn = None;
+            return;
+        }
+        eprintln!("dicta-ui: пилюля закрыта композитором — выходим");
         self.exit = true;
     }
     fn configure(
