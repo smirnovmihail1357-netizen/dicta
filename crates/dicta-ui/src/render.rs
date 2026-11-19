@@ -757,12 +757,62 @@ pub fn paint(
 fn paint_grab(c: &mut Canvas, scene: &Scene, k: f32) {
     let Some((gx, gy)) = scene.grab else { return };
     let (gx, gy) = (gx as f32, gy as f32);
-    // пульс: радиус гуляет вокруг 14 px с периодом ~1.6 с при кадре каждые 100 мс
+    // пульс: радиус гуляет вокруг 19 px с периодом ~1.6 с при кадре каждые 100 мс
     let pulse = (scene.frame as f32 * 0.4).sin();
-    let r = 14.0 + 2.5 * pulse;
-    c.ring(gx, gy, r, 2.0, fade(argb(0xD0, 0x89, 0xB4, 0xFA), k));
+    let r = 19.0 + 3.0 * pulse;
+    // мягкое свечение за кольцом
+    c.ring(gx, gy, r + 6.0, 5.0, fade(argb(0x38, 0x89, 0xB4, 0xFA), k));
+    c.ring(gx, gy, r, 2.5, fade(argb(0xE0, 0x89, 0xB4, 0xFA), k));
     // и точка в центре — где именно курсор
     c.ring(gx, gy, 1.5, 1.5, fade(argb(0xD0, 0xEF, 0xF6, 0xFF), k));
+}
+
+/// Орб: интерфейс, собранный в кружок у курсора во время перетаскивания.
+/// Пилюля прячется в свой карман, а вместо неё за курсором ходит этот кружок:
+/// корпус цвета пилюли с индикатором записи внутри, вокруг — дышащее кольцо;
+/// у грани монитора (в зоне прилипания) кольцо загорается и обрастает свечением
+/// — видно, что отпускание закрепит пилюлю там, где показывает ореол.
+pub const ORB_W: u32 = 96;
+/// Половина окна орба: курсор сидит в его центре.
+pub const ORB_HALF: i32 = 48;
+
+pub fn paint_orb(alpha: f32, recording: bool, frame: u32, docked: bool) -> Canvas {
+    let mut c = Canvas::new(ORB_W, ORB_W);
+    let k = alpha.clamp(0.0, 1.0);
+    let (cx, cy) = (48.0f32, 48.0f32);
+    // корпус: диск цвета пилюли со светлой кромкой
+    c.circle(48, 48, 20, fade(argb(0xE6, 0x18, 0x1A, 0x1E), k));
+    c.ring(cx, cy, 20.0, 1.5, fade(argb(0x60, 0x8B, 0x93, 0x9E), k));
+    // индикатор записи в центре
+    if recording {
+        c.circle(48, 48, 6, fade(argb(0xFF, 0xE5, 0x4B, 0x4B), k));
+    } else {
+        // «сканер»: тихая голубая точка — орб всё ещё слушает
+        let pulse = (frame as f32 * 0.25).sin();
+        c.circle(48, 48, 4, fade(argb(0xFF, 0x89, 0xB4, 0xFA), k));
+        c.ring(
+            cx,
+            cy,
+            11.0 + pulse,
+            1.5,
+            fade(argb(0x70, 0x89, 0xB4, 0xFA), k),
+        );
+    }
+    // дыхание кольца вокруг корпуса
+    let pulse = (frame as f32 * 0.35).sin();
+    let r = 27.0 + 3.0 * pulse;
+    let ring = if docked {
+        argb(0xFF, 0xEF, 0xF6, 0xFF)
+    } else {
+        argb(0xB4, 0x89, 0xB4, 0xFA)
+    };
+    c.ring(cx, cy, r, 2.0, fade(ring, k));
+    // в зоне прилипания — свечение: курсор у грани, отпускай — закрепится
+    if docked {
+        c.ring(cx, cy, r + 7.0, 3.0, fade(argb(0x50, 0x89, 0xB4, 0xFA), k));
+        c.ring(cx, cy, r + 13.0, 4.0, fade(argb(0x28, 0x89, 0xB4, 0xFA), k));
+    }
+    c
 }
 
 /// Вертикальная пилюля (сторона слева/справа): тот же набор, разложенный сверху вниз.

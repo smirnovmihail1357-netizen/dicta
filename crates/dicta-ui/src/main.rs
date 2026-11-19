@@ -581,8 +581,32 @@ fn run() -> Result<()> {
         region.destroy();
     }
 
+    // Орб — кружок у курсора во время перетаскивания: якорь верхний левый угол,
+    // окно ставится маргинами под курсор. Кликов не ловит, до перетаскивания
+    // на экране его нет вовсе.
+    let orb_surface = compositor.create_surface(&qh);
+    let orb_layer = layer_shell.create_layer_surface(
+        &qh,
+        orb_surface.clone(),
+        layer_kind(),
+        Some("dicta-orb"),
+        None,
+    );
+    orb_layer.set_keyboard_interactivity(KeyboardInteractivity::None);
+    orb_layer.set_anchor(Anchor::TOP | Anchor::LEFT);
+    orb_layer.set_size(render::ORB_W, render::ORB_W);
+    {
+        let region = compositor.wl_compositor().create_region(&qh, ());
+        orb_surface.set_input_region(Some(&region));
+        region.destroy();
+    }
+
+    // пул с запасом: одновременно живут пилюля, панель, ореол и орб
     let pool = SlotPool::new(
-        (SURF_W * SURF_H).max(render::PANEL_W * render::PANEL_SURFACE_H) as usize * 4,
+        (SURF_W * SURF_H)
+            .max(render::PANEL_W * render::PANEL_SURFACE_H)
+            .max(render::ORB_W * render::ORB_W) as usize
+            * 12,
         &shm,
     )?;
 
@@ -629,6 +653,10 @@ fn run() -> Result<()> {
         pill_output: None,
         hint_layer,
         hint_surface,
+        orb_layer,
+        orb_surface,
+        orb_configured: false,
+        orb_alpha: 0.0,
     };
 
     let mut next_draw = Instant::now();
@@ -647,6 +675,7 @@ fn run() -> Result<()> {
                 ui.draw_pill(&qh);
                 ui.draw_panel(&qh);
                 ui.draw_hint(&qh);
+                ui.draw_orb();
                 ui.dirty = false;
                 next_draw = now + Duration::from_millis(if animating { FRAME_MS } else { POLL_MS });
             }
@@ -846,6 +875,15 @@ struct Ui {
     /// поверхность ореола: то же окно, что у пилюли, на грани-кандидате
     hint_layer: LayerSurface,
     hint_surface: wl_surface::WlSurface,
+    /// орб — интерфейс, собранный в кружок у курсора во время перетаскивания:
+    /// маленькое окно (ORB_W), якорится к верхнему левому углу и ставится
+    /// маргинами под курсор — двигается без перерисовки
+    orb_layer: LayerSurface,
+    orb_surface: wl_surface::WlSurface,
+    /// орб прошёл первый configure (протокольный танец layer-shell)
+    orb_configured: bool,
+    /// фейд-ин орба: от нуля к единице за несколько кадров
+    orb_alpha: f32,
 }
 
 /// Якорь и размер поверхности пилюли по стороне. Поверхность длиннее пилюли на
@@ -1247,6 +1285,15 @@ impl LayerShellHandler for Ui {
         _serial: u32,
     ) {
         let given = configure.new_size;
+        if layer.wl_surface().id() == self.orb_layer.wl_surface().id() {
+            // Орб: первый configure открывает дорогу буферу; позицию он получает
+            // маргинами по ходу движения, размер фиксирован.
+            if !self.orb_configured {
+                self.orb_configured = true;
+                self.dirty = true;
+            }
+            return;
+        }
         if layer.wl_surface().id() == self.hint_layer.wl_surface().id() {
             // Ореол: первый configure — сигнал, что буфер теперь можно цеплять.
             // Дальше размер задан явно вместе с положением; перерисовка не нужна —
@@ -1308,9 +1355,12 @@ impl Ui {
                 return false;
             };
             (
-                always_draw()
-                    || shared.status.state == "recording"
-                    || shared.status.state == "transcribing",
+                // во время перетаскивания пилюля собирается в орб у курсора:
+                // сама прячется в карман и возвращается по отпусканию
+                !self.dragged
+                    && (always_draw()
+                        || shared.status.state == "recording"
+                        || shared.status.state == "transcribing"),
                 shared.status.panel || panel_always(),
                 shared.status.clone(),
             )
@@ -1543,6 +1593,7 @@ impl Ui {
             self.pool
                 .create_buffer(w as i32, h as i32, stride, wl_shm::Format::Argb8888)
         else {
+            eprintln!("dicta-ui: ореол: буфер не выделился");
             return;
         };
         let rect = p.pill_rect(w, h, 1.0);
@@ -1552,6 +1603,65 @@ impl Ui {
         let _ = buffer.attach_to(&self.hint_surface);
         self.hint_layer.commit();
         self.hint_drawn = Some(p);
+    }
+
+    /// Орб — интерфейс, собранный в кружок у курсора: показывается, пока идёт
+    /// перетаскивание (dragged), ставится маргинами ровно под курсор (двигается
+    /// без перерисовки буфера) и дышит кольцом; в зоне прилипания кольцо
+    /// загорается и обрастает свечением. По отпусканию анмапится.
+    fn draw_orb(&mut self) {
+        if self.first_configure {
+            return;
+        }
+        if !self.dragged {
+            // перетаскивания нет: орб уходит целиком (анмап + сброс танца,
+            // следующее появление начнёт с честного пустого commit'а)
+            if self.orb_configured {
+                self.orb_surface.attach(None, 0, 0);
+                self.orb_surface.commit();
+                self.orb_configured = false;
+                self.orb_alpha = 0.0;
+            }
+            return;
+        }
+        let Some(screen) = self.screen else { return };
+        let Some((x, y)) = self.grab_at else { return };
+        let (cx, cy) = edge::cursor_abs(&self.placement, self.width, self.height, screen, x, y);
+        // окно центрируется на курсоре: маргины от верхнего левого угла экрана
+        let (mx, my) = (cx - render::ORB_HALF, cy - render::ORB_HALF);
+        self.orb_layer.set_margin(my, 0, 0, mx);
+        if !self.orb_configured {
+            // начальный танец layer-shell: геометрия пустым коммитом,
+            // буфер — после configure
+            self.orb_layer.commit();
+            return;
+        }
+        // фейд-ин: от нуля к единице за несколько кадров
+        self.orb_alpha = (self.orb_alpha + 0.25).min(1.0);
+        let recording = self
+            .shared
+            .lock()
+            .map(|s| s.status.state == "recording")
+            .unwrap_or(false);
+        let canvas = render::paint_orb(
+            self.orb_alpha,
+            recording,
+            self.frame,
+            self.dock_hint.is_some(),
+        );
+        let w = render::ORB_W;
+        let stride = (w * 4) as i32;
+        let Ok((buffer, mem)) =
+            self.pool
+                .create_buffer(w as i32, w as i32, stride, wl_shm::Format::Argb8888)
+        else {
+            eprintln!("dicta-ui: орб: буфер не выделился");
+            return;
+        };
+        canvas.write_into(mem);
+        self.orb_surface.damage_buffer(0, 0, w as i32, w as i32);
+        let _ = buffer.attach_to(&self.orb_surface);
+        self.orb_layer.commit();
     }
 
     fn draw_pill(&mut self, q: &QueueHandle<Self>) {
