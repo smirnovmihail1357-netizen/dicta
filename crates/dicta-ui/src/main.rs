@@ -623,6 +623,7 @@ fn run() -> Result<()> {
         screen: None,
         dock_hint: None,
         hint_drawn: None,
+        pill_output: None,
         hint_layer,
         hint_surface,
     };
@@ -830,6 +831,9 @@ struct Ui {
     dock_hint: Option<Placement>,
     /// какой ореол уже отрисован: перерисовываем только при смене места
     hint_drawn: Option<Placement>,
+    /// выход, на котором стоит пилюля (surface_enter): его геометрия —
+    /// авторитетная для зон прилипания; второй монитор её не перезапишет
+    pill_output: Option<wl_output::WlOutput>,
     /// поверхность ореола: то же окно, что у пилюли, на грани-кандидате
     hint_layer: LayerSurface,
     hint_surface: wl_surface::WlSurface,
@@ -897,6 +901,13 @@ impl CompositorHandler for Ui {
         // Пилюля вошла в свой выход: прилипание к граням должно мериться по
         // экрану, на котором она стоит, а не по последнему приславшему.
         if s.id() == self.layer.wl_surface().id() {
+            let name = self
+                .output_state
+                .info(o)
+                .and_then(|i| i.name.clone())
+                .unwrap_or_default();
+            eprintln!("dicta-ui: пилюля на выходе {name}");
+            self.pill_output = Some(o.clone());
             self.remember_screen(o);
         }
     }
@@ -915,17 +926,26 @@ impl OutputHandler for Ui {
         &mut self.output_state
     }
     fn new_output(&mut self, _c: &Connection, _q: &QueueHandle<Self>, o: wl_output::WlOutput) {
-        self.remember_screen(&o);
+        // выход пилюли ещё не известен — берём любой; после surface_enter
+        // обновляет только он сам
+        if self.pill_output.as_ref().map(|p| *p == o).unwrap_or(true) {
+            self.remember_screen(&o);
+        }
     }
     fn update_output(&mut self, _c: &Connection, _q: &QueueHandle<Self>, o: wl_output::WlOutput) {
-        self.remember_screen(&o);
+        if self.pill_output.as_ref().map(|p| *p == o).unwrap_or(true) {
+            self.remember_screen(&o);
+        }
     }
     fn output_destroyed(
         &mut self,
         _c: &Connection,
         _q: &QueueHandle<Self>,
-        _o: wl_output::WlOutput,
+        o: wl_output::WlOutput,
     ) {
+        if self.pill_output.as_ref().map(|p| *p == o).unwrap_or(false) {
+            self.pill_output = None;
+        }
     }
 }
 
@@ -1016,7 +1036,12 @@ impl Ui {
         {
             if self.screen != Some((w, h)) {
                 // в журнал: без размера экрана прилипание к граням не работает
-                eprintln!("dicta-ui: экран {w}x{h} — прилипание к граням активно");
+                let name = self
+                    .output_state
+                    .info(o)
+                    .and_then(|i| i.name.clone())
+                    .unwrap_or_default();
+                eprintln!("dicta-ui: экран {w}x{h} ({name}) — прилипание к граням активно");
                 self.screen = Some((w, h));
             }
         }
@@ -1098,15 +1123,31 @@ impl Ui {
             self.apply_placement(next);
         }
 
-        // грань-кандидат: курсор поднесён к грани монитора. Ореол места
-        // закрепления рисуется поверх, сама пилюля переезжает по отпусканию.
+        // Грань-кандидат — по одному из двух признаков:
+        //
+        // 1. курсор поднесён к грани монитора (пересёк экран наружу от пилюли);
+        // 2. пилюля упёрлась в конец своей стороны — курсор остаётся внутри
+        //    неё и до зоны у грани сам не доходит, поэтому кандидатом объявляет
+        //    упор: смежная грань у угла, к которому дотащили.
+        // Ореол места закрепления рисуется поверх, сама пилюля переезжает
+        // по отпусканию.
         let hint = self.screen.and_then(|screen| {
             let (cx, cy) = edge::cursor_abs(&self.placement, self.width, self.height, screen, x, y);
             // своя грань кандидатом не бывает: ореол не должен рисоваться
             // поверх самой пилюли, когда её оттягивают наружу
-            edge::nearest_edge(cx, cy, screen)
-                .filter(|target| *target != edge)
-                .map(|edge| {
+            let by_cursor = edge::nearest_edge(cx, cy, screen).filter(|target| *target != edge);
+            let by_corner = screen_along.and_then(|dim| {
+                let slack = (dim - render::SURF_W as i32) / 2;
+                let cross = next.cross();
+                if slack > 0 && cross <= -slack {
+                    Some(edge.adjacent(true))
+                } else if slack > 0 && cross >= slack {
+                    Some(edge.adjacent(false))
+                } else {
+                    None
+                }
+            });
+            by_cursor.or(by_corner).map(|edge| {
                 // пилюля встанет на новой грани по положению курсора вдоль неё
                 let (cursor_along, dim) = if edge.horizontal() {
                     (cx, screen.0)
@@ -1120,6 +1161,15 @@ impl Ui {
             })
         });
         if hint != self.dock_hint {
+            match (&hint, &self.dock_hint) {
+                (Some(p), _) => eprintln!(
+                    "dicta-ui: кандидат {} (смещение {})",
+                    p.edge.as_str(),
+                    p.cross()
+                ),
+                (None, Some(_)) => eprintln!("dicta-ui: кандидат снят"),
+                (None, None) => {}
+            }
             self.dock_hint = hint;
             self.dirty = true; // показать/подвинуть/убрать ореол
         }

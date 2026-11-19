@@ -60,6 +60,29 @@ impl Edge {
         [Edge::Bottom, Edge::Right, Edge::Top, Edge::Left]
     }
 
+    /// Смежная грань на конце своей стороны: у низа/верха концы — лево и право,
+    /// у лева/права — верх и низ. Нужно, когда пилюлю дотащили вдоль её грани
+    /// до упора в угол экрана: курсор остаётся внутри пилюли и сам до «зоны у
+    /// грани» не доходит — тогда кандидатом объявляет упор пилюли.
+    pub fn adjacent(self, toward_start: bool) -> Edge {
+        match self {
+            Edge::Bottom | Edge::Top => {
+                if toward_start {
+                    Edge::Left
+                } else {
+                    Edge::Right
+                }
+            }
+            Edge::Left | Edge::Right => {
+                if toward_start {
+                    Edge::Top
+                } else {
+                    Edge::Bottom
+                }
+            }
+        }
+    }
+
     /// Следующая сторона по часовой: кнопка «край» проходит все четыре за четыре клика.
     pub fn next(self) -> Edge {
         match self {
@@ -726,6 +749,20 @@ mod tests {
         let moved = Placement::new(Edge::Right).shifted_along(-300);
         assert_eq!(moved.edge, Edge::Right);
         assert_eq!(moved.cross(), -300);
+    }
+
+    /// Смежные грани: конец стороны низа/верха — лево и право, конец лева/права —
+    /// верх и низ. По упору в угол курсор сам к грани не доходит — нужен упор.
+    #[test]
+    fn adjacent_edge_sits_where_the_side_ends() {
+        assert_eq!(Edge::Bottom.adjacent(true), Edge::Left);
+        assert_eq!(Edge::Bottom.adjacent(false), Edge::Right);
+        assert_eq!(Edge::Top.adjacent(true), Edge::Left);
+        assert_eq!(Edge::Top.adjacent(false), Edge::Right);
+        assert_eq!(Edge::Left.adjacent(true), Edge::Top);
+        assert_eq!(Edge::Left.adjacent(false), Edge::Bottom);
+        assert_eq!(Edge::Right.adjacent(true), Edge::Top);
+        assert_eq!(Edge::Right.adjacent(false), Edge::Bottom);
     }
 
     /// Прилипание: грань-кандидат — та, к которой курсор поднесли ближе
