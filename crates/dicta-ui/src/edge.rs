@@ -410,6 +410,15 @@ pub fn window_origin(p: &Placement, w: u32, h: u32, screen: (i32, i32)) -> (i32,
     }
 }
 
+/// Центр корпуса пилюли в покое на экране: куда прилетает орб при отпускании —
+/// интерфейс «выходит из кружка» ровно там, где встанет пилюля.
+pub fn body_center(p: &Placement, screen: (i32, i32)) -> (i32, i32) {
+    let (w, h) = (p.pill_width(), p.pill_height());
+    let (ox, oy) = window_origin(p, w, h, screen);
+    let (rx, ry, rw, rh) = p.pill_rect(w, h, 1.0);
+    (ox + rx + rw as i32 / 2, oy + ry + rh as i32 / 2)
+}
+
 /// Курсор в координатах экрана: локальная точка окна пилюли плюс позиция окна.
 /// Работает и когда курсор ушёл с окна (неявный захват): локальные координаты
 /// просто выходят за его пределы.
@@ -805,6 +814,24 @@ mod tests {
         let (ox, oy) = window_origin(&p, render::SURF_H, render::SURF_W, screen);
         assert_eq!(ox, 0); // along = 0: окно прижато к грани
         assert_eq!(oy, (1080 - render::SURF_W as i32) / 2 - 200);
+    }
+
+    /// Центр корпуса: у нижней пилюли по центру экрана — на высоте покоя.
+    #[test]
+    fn body_center_is_the_resting_pill_middle() {
+        let screen = (2560, 1440);
+        let p = Placement::new(Edge::Bottom);
+        let (cx, cy) = body_center(&p, screen);
+        assert_eq!(cx, 1280);
+        // покой: REST_GAP (12) от кромки, корпус 34: центр на 12+17 от низа
+        assert_eq!(cy, 1440 - 12 - 17);
+        let p = Placement::new(Edge::Left).with_cross(100);
+        let (cx, cy) = body_center(&p, screen);
+        assert_eq!(cx, 12 + 17);
+        assert_eq!(
+            cy,
+            (1440 - render::SURF_W as i32) / 2 + 100 + render::SURF_W as i32 / 2
+        );
     }
 
     /// Смещение вдоль грани не должно уводить окно пилюли за экран.

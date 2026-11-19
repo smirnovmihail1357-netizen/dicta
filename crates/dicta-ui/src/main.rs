@@ -618,6 +618,8 @@ fn run() -> Result<()> {
         orb_surface: None,
         orb_configured: false,
         orb_alpha: 0.0,
+        orb_age: 0,
+        orb_depart: None,
     };
 
     let mut next_draw = Instant::now();
@@ -844,6 +846,20 @@ struct Ui {
     orb_configured: bool,
     /// фейд-ин орба: от нуля к единице за несколько кадров
     orb_alpha: f32,
+    /// кадров с появления орба: pop-анимация сборки (scale по ease_out_back)
+    orb_age: u32,
+    /// орб улетает к месту закрепления: откуда, куда и доля пути
+    orb_depart: Option<Depart>,
+}
+
+/// Улёт орба при отпускании: кружок скользит к центру будущей пилюли,
+/// сжимаясь и растворяясь на лету — интерфейс «выходит из кружка» на месте.
+#[derive(Debug, Clone, Copy)]
+struct Depart {
+    from: (i32, i32),
+    to: (i32, i32),
+    /// 0 = только что отпустили, 1 = растворился
+    t: f32,
 }
 
 /// Якорь и размер поверхности пилюли по стороне. Поверхность длиннее пилюли на
@@ -1071,6 +1087,11 @@ impl Ui {
         }
         // Машина сама решает, чем кончилось: клик — «остановить и вставить»,
         // грань — закрепиться, иначе — накопленный сдвиг вдоль своей стороны.
+        // Орб при этом не просто исчезает: запоминаем, откуда он улетает
+        // (курсор) — к месту, где встанет пилюля.
+        let from = self.screen.zip(self.drag.cursor()).map(|(screen, (x, y))| {
+            edge::cursor_abs(&self.placement, self.width, self.height, screen, x, y)
+        });
         match self.drag.release(x, y) {
             drag::Release::Click => {
                 let _ = ask_command(&dicta_core_socket_path_static(), "stop");
@@ -1092,16 +1113,33 @@ impl Ui {
             }
             drag::Release::Nothing => {}
         }
-        // орб уходит, ореол гаснет, пилюля возвращается из кармана
+        if let (Some(from), Some(screen)) = (from, self.screen) {
+            let to = edge::body_center(&self.placement, screen);
+            self.orb_depart = Some(Depart { from, to, t: 0.0 });
+        }
+        // ореол гаснет, пилюля возвращается из кармана, орб улетает к ней
         self.dirty = true;
     }
 
     /// Движение с зажатой кнопкой: машина копит сдвиг, ищет грань-кандидата
     /// и ведёт кружок захвата; всё видимое рисует главный цикл по dirty.
+    /// Позицию орба при этом коммитим сразу, не дожидаясь цикла рисования —
+    /// иначе орб отстаёт от курсора на кадр и читается как «ниже курсора».
     fn on_motion(&mut self, x: f64, y: f64) {
         let world = self.drag_world();
-        if self.drag.motion(x, y, &world) {
-            self.dirty = true;
+        if !self.drag.motion(x, y, &world) {
+            return;
+        }
+        self.dirty = true;
+        if self.drag.is_active() && self.orb_configured {
+            if let Some(screen) = self.screen {
+                if let Some(orb_layer) = &self.orb_layer {
+                    let (cx, cy) =
+                        edge::cursor_abs(&self.placement, self.width, self.height, screen, x, y);
+                    orb_layer.set_margin(cy - render::ORB_HALF, 0, 0, cx - render::ORB_HALF);
+                    orb_layer.commit();
+                }
+            }
         }
     }
 
@@ -1516,16 +1554,48 @@ impl Ui {
         if self.first_configure {
             return;
         }
-        if !self.drag.is_active() {
-            // перетаскивания нет: орб уходит целиком (анмап + сброс танца,
-            // следующее появление начнёт с честного пустого commit'а)
-            if self.orb_configured {
+        let active = self.drag.is_active();
+        if !active {
+            // Перетаскивание кончилось. Орб не просто исчезает: он скользит к
+            // месту, где встанет пилюля, сжимаясь и растворяясь на лету, —
+            // интерфейс «выходит из кружка» на месте закрепления.
+            if let Some(depart) = &mut self.orb_depart {
+                depart.t += 1.0 / 14.0;
+                if depart.t >= 1.0 || self.orb_layer.is_none() {
+                    self.orb_depart = None;
+                } else {
+                    let k = render::ease_in_cubic(depart.t);
+                    let lerp = |from: i32, to: i32| -> i32 {
+                        from + ((to - from) as f32 * k).round() as i32
+                    };
+                    let (mx, my) = (
+                        lerp(depart.from.0, depart.to.0) - render::ORB_HALF,
+                        lerp(depart.from.1, depart.to.1) - render::ORB_HALF,
+                    );
+                    if let Some(orb_layer) = &self.orb_layer {
+                        orb_layer.set_margin(my, 0, 0, mx);
+                    }
+                    let canvas = render::paint_orb(
+                        1.0 - depart.t,
+                        1.0 - 0.4 * depart.t,
+                        false,
+                        self.frame,
+                        false,
+                    );
+                    self.attach_orb(canvas);
+                    self.dirty = true; // дорисовать следующий кадр улёта
+                    return;
+                }
+            }
+            // улёт кончился (или его не было): орб уходит целиком
+            if self.orb_depart.is_none() && self.orb_configured {
                 if let Some(orb_surface) = self.orb_surface.clone() {
                     orb_surface.attach(None, 0, 0);
                     orb_surface.commit();
                 }
                 self.orb_configured = false;
                 self.orb_alpha = 0.0;
+                self.orb_age = 0;
             }
             return;
         }
@@ -1548,8 +1618,16 @@ impl Ui {
             orb_layer.commit();
             return;
         }
-        // фейд-ин: от нуля к единице за несколько кадров
-        self.orb_alpha = (self.orb_alpha + 0.25).min(1.0);
+        // появление: pop по ease_out_back — интерфейс «собирается в кружок»
+        // у курсора, вырастая из точки; дальше просто дышит
+        self.orb_age += 1;
+        let spawn = (self.orb_age as f32 / 10.0).min(1.0);
+        let scale = if spawn < 1.0 {
+            0.3 + 0.7 * render::ease_out_back(spawn)
+        } else {
+            1.0
+        };
+        self.orb_alpha = (self.orb_alpha + 0.34).min(1.0);
         let recording = self
             .shared
             .lock()
@@ -1557,10 +1635,12 @@ impl Ui {
             .unwrap_or(false);
         let canvas = render::paint_orb(
             self.orb_alpha,
+            scale,
             recording,
             self.frame,
             self.drag.hint().is_some(),
         );
+        let _ = orb_surface;
         let w = render::ORB_W;
         let stride = (w * 4) as i32;
         let Ok((buffer, mem)) =
@@ -1568,6 +1648,28 @@ impl Ui {
                 .create_buffer(w as i32, w as i32, stride, wl_shm::Format::Argb8888)
         else {
             eprintln!("dicta-ui: орб: буфер не выделился");
+            return;
+        };
+        canvas.write_into(mem);
+        orb_surface.damage_buffer(0, 0, w as i32, w as i32);
+        let _ = buffer.attach_to(&orb_surface);
+        orb_layer.commit();
+    }
+
+    /// Прицепить кадр орба к его поверхности (общий хвост рисования).
+    fn attach_orb(&mut self, canvas: Canvas) {
+        let Some(orb_layer) = self.orb_layer.clone() else {
+            return;
+        };
+        let Some(orb_surface) = self.orb_surface.clone() else {
+            return;
+        };
+        let w = render::ORB_W;
+        let stride = (w * 4) as i32;
+        let Ok((buffer, mem)) =
+            self.pool
+                .create_buffer(w as i32, w as i32, stride, wl_shm::Format::Argb8888)
+        else {
             return;
         };
         canvas.write_into(mem);
