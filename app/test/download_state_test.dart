@@ -254,4 +254,25 @@ void main() {
     expect(fake.calls.length, 1);
     expect(fake.calls.single.url, 'https://hf/first.bin');
   });
+
+  test('cancel during connect is held until the request exists', () async {
+    final gate = DownloadCancelGate();
+    // No request has been created yet (the DNS/TLS connect window).
+    expect(gate.isCancelled, isFalse);
+    expect(gate.throwIfCancelled, returnsNormally);
+
+    gate.cancel();
+    expect(gate.isCancelled, isTrue);
+    // The engine checks right after getUrl/close, so the intent is not lost.
+    expect(gate.throwIfCancelled, throwsA(isA<DownloadCancelledException>()));
+
+    // A later download clears the flag, and a fresh cancel is honored again.
+    gate.reset();
+    expect(gate.throwIfCancelled, returnsNormally);
+    gate.cancel();
+    expect(gate.throwIfCancelled, throwsA(isA<DownloadCancelledException>()));
+
+    // cancel() on the real engine is safe even with no request in flight.
+    expect(HttpDownloadEngine().cancel, returnsNormally);
+  });
 }

@@ -57,11 +57,36 @@ int totalFromContentRange(String? header) {
   return int.tryParse(match.group(1) ?? '') ?? 0;
 }
 
+/// Holds a cancel intent that can arrive before the HTTP request exists.
+///
+/// DNS/TLS connect can take seconds; `_request` is null for all of that, so
+/// aborting it alone silently drops the user's cancel (WR-03). The engine
+/// checks [throwIfCancelled] after every await instead.
+class DownloadCancelGate {
+  bool _cancelled = false;
+
+  bool get isCancelled => _cancelled;
+
+  /// A new download starts with a clean slate.
+  void reset() => _cancelled = false;
+
+  /// Records the intent even when there is no request to abort yet.
+  void cancel() => _cancelled = true;
+
+  /// Called immediately after each async gap in the transport.
+  void throwIfCancelled() {
+    if (_cancelled) throw const DownloadCancelledException();
+  }
+}
+
 class HttpDownloadEngine implements DownloadEngine {
   HttpClientRequest? _request;
+  final DownloadCancelGate _gate = DownloadCancelGate();
 
   @override
   void cancel() {
+    // Record the intent first: it survives a null _request during connect.
+    _gate.cancel();
     // abort() tears the connection down: the response stream completes with
     // the exception below, which the manager turns into a cancelled state.
     _request?.abort(const DownloadCancelledException());
@@ -74,16 +99,21 @@ class HttpDownloadEngine implements DownloadEngine {
     String partPath, {
     int? expectedBytes,
   }) async* {
+    _gate.reset();
     final part = File(partPath);
     final offset = part.existsSync() ? part.lengthSync() : 0;
     final client = HttpClient();
     try {
       final request = await client.getUrl(url);
+      // A cancel that landed during DNS/TLS connect is honored here rather
+      // than being lost with a null _request.
+      _gate.throwIfCancelled();
       _request = request;
       if (offset > 0) {
         request.headers.set(HttpHeaders.rangeHeader, 'bytes=$offset-');
       }
       final response = await request.close(); // followRedirects carries Range.
+      _gate.throwIfCancelled();
       if (response.statusCode >= 400) {
         throw DownloadException(response.statusCode);
       }
