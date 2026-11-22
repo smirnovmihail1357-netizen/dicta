@@ -2,19 +2,19 @@
 gsd_state_version: "1.0"
 milestone: v1.1
 milestone_name: «Dicta App»
-current_phase: 4
-current_phase_name: Настройки + браузер моделей
+current_phase: 5
+current_phase_name: Трей + хоткей-экран
 status: executing
 stopped_at: Roadmap v1.1 создан, файлы ROADMAP.md/STATE.md/REQUIREMENTS.md написаны; коммитов нет (оркестратор коммитит)
-last_updated: "2026-11-22T13:41:31.235Z"
+last_updated: "2026-11-22T15:35:47.128Z"
 last_activity: 2026-11-22
 last_activity_desc: Roadmap v1.1 создан (8 фаз, 29/29 требований замаплено)
-state_head: 052f6f13f05307694f3c4673ddc0937677425c2c
+state_head: b81178be7677da1fe13fedede5e7b488a88c06a0
 progress:
   total_phases: 8
   completed_phases: 0
-  total_plans: 4
-  completed_plans: 2
+  total_plans: 5
+  completed_plans: 4
 ---
 
 # Project State
@@ -24,16 +24,17 @@ progress:
 See: .planning/PROJECT.md (updated 2026-11-22)
 
 **Core value:** Нажал хоткей — заговорил — текст оказался в курсоре. Быстро и предсказуемо, без фокуса на окно диктанта.
-**Current focus:** Веха v1.1 «Dicta App» — Phase 1: Каркас dicta-app + IPC-клиент
+**Current focus:** Веха v1.1 «Dicta App» — Phase 5: Трей + хоткей-экран
 
 ## Current Position
 
-Phase: 4 (Настройки + браузер моделей) — READY TO EXECUTE
-Plan: 0 of TBD in current phase
-Status: Ready to execute
-Last activity: 2026-11-22 — Roadmap v1.1 создан (8 фаз, 29/29 требований замаплено)
+Phase: 5 (Трей + хоткей-экран) — READY TO EXECUTE
+Status: planned
+Total Plans in Phase: 1
+Plans Completed in Phase: 0
+Last activity: 2026-11-22 — Phase 5 спланирована (05-01-PLAN.md, чекер PASS ревизия 1)
 
-Progress: [░░░░░░░░░░] 0%
+Progress: [████░░░░░░] 4/9 планов вехи (фазы 1-4 исполнены, ждут UAT)
 
 ## Performance Metrics
 

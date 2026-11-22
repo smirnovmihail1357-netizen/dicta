@@ -545,7 +545,7 @@ TrayIconState iconFor(DaemonState state) => switch (state) {
 | Framework | flutter_test (SDK, pubspec dev_dependencies: flutter_test) |
 | Config file | app/pubspec.yaml + default; отдельного конфига нет |
 | Quick run command | `cd app && flutter test test/tray_service_test.dart` (один файл) |
-| Full suite command | `cd app && flutter test` (25 сьютов сейчас; ~минуты на десктопе) |
+| Full suite command | `cd app && flutter test` (24 тест-файла сейчас: 21 *_test.dart + 3 фейка; ~минуты на десктопе) |
 
 ### Phase Requirements → Test Map
 

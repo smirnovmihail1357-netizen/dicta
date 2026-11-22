@@ -32,7 +32,16 @@ coverage: applicable 4, unclassified 4 → все резолвлены орке�
 
 ## Per-Task Verification Map
 
-Task IDs: TBD — привязка к задачам 05-01-PLAN.md выполняется после создания плана (канон фазы 2: binding в ревизии чекера).
+Привязка к задачам 05-01-PLAN.md (канон фазы 2: binding в ревизии чекера, ревизия 1 от 2026-11-22).
+
+| Task | Requirement / обязательство | Проверка (05-01-PLAN.md) |
+|---|---|---|
+| Task 1 (Wave 0) | швы TrayService/WindowShell + фейки, tray_manager 0.9.0 пин, PNG-генератор + 2 ассета, 24 .arb-ключа, residual runtimeType (daemon_engine.dart:61) | Task 1 <automated>: пин [HEAD=0 EXPECT==1], assets [HEAD=0 EXPECT==1], PNG-сигнатура 89504e470d0a1a0a, .arb-счётчик [HEAD=0 EXPECT==24], $error [HEAD=1 EXPECT==0], implements TrayService/WindowShell == 1, батарея/analyze/cyrillic |
+| Task 2 (Wave 1, TRACER) | TRAY-01/TRAY-02 explicit (unit через фейки) + backstop (живой трей на живом демоне) | Task 2 <automated>: tray_service_test/window_shell_test + батарея; plugin-изоляция (tray_manager lib/ == 1, test/ == 0); живой SMOKE на KDE с гашением (unit+backstop, результаты в SUMMARY) |
+| Task 3 (Wave 2) | TRAY-01 иконка по состоянию (гард переходов, transcribing→recording) + вкладка из меню (selectedTabNotifier) | Task 3 <automated>: iconCalls-сценарии, _selected [HEAD=4 EXPECT==0], rail == 4 пункта, свой полл [HEAD=0 EXPECT==0], батарея/analyze/cyrillic |
+| Task 4 (Wave 2) | HK-01 (config.toml read-only, DE-таблица, предупреждение о рестарте) | Task 4 <automated>: config_path_test (паритет config.rs:173-178 verbatim) + hotkey_card_test (фикстуры), writeAs/openWrite [HEAD=0 EXPECT==0], set('hotkey') [HEAD=0 EXPECT==0], батарея/analyze/cyrillic |
+| Task 5 (Wave 3) | UI-наследие фазы 4 одним задачей (канон T8; сверка живого кода + допил остатка) | Task 5 <automated>: 'HTTP ${error.statusCode}' [HEAD=2 EXPECT==0], 'delete failed' [HEAD=1 EXPECT==0], '} GB'/'} MB' [HEAD=2 EXPECT==0], modelSearchTitle/histExpand [HEAD=0 EXPECT>=1], батарея/analyze/cyrillic |
+| Task 6 (Wave 4) | финальные гейты + HK-02 + README ×2 + SUMMARY с UAT-листом | Task 6 <automated>: полная батарея + analyze + cyrillic + status_smoke; контракты git diff --quiet b81178b HEAD -- crates/ adapters/ systemd/ пусты; hotkey_manager [HEAD=0 EXPECT==0] (HK-02); implements DictaEngine/TrayService/WindowShell == 1 каждый; детерминизм иконок (перегенерация байт-в-байт); README-якоря [HEAD=0 EXPECT==1] каждый |
 
 ## Sampling
 
