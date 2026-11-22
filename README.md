@@ -274,6 +274,33 @@ Not done: an end-to-end AT-SPI insertion check against a real focused input fiel
 development machine Firefox reports `focused` on its document node, not on a field), Qt
 windows without `QT_ACCESSIBILITY=1`, packaged releases for other distros, macOS/Windows.
 
+## Windows (phase 6 client, phase 7 daemon)
+
+### named pipe DACL contract
+
+The Windows client talks to the daemon over the named pipe `\\.\pipe\dicta`.
+This section records a CONTRACT for phase 7; phase 6 verifies only that the
+contract is written down — the server and its tests arrive in phase 7.
+
+1. The phase-7 pipe server (Rust, `interprocess`) creates `\\.\pipe\dicta` with
+   a security descriptor granting access ONLY to the current user SID — never
+   Everyone, never Authenticated Users (PITFALLS.md:234).
+2. The dart_ipc 2.0.2 client added in phase 6 has nothing to do with the DACL:
+   it connects with an ordinary `CreateFile` call. A nuance found in the
+   dart_ipc source: its own `bind()` passes `null` security attributes to
+   `CreateNamedPipe`, i.e. a default DACL. The dicta server will be Rust /
+   `interprocess`, so the contract applies to that Rust server.
+3. Phase-7 obligations (the phase-7 executor reads these as the spec):
+   (a) the pipe security descriptor must allow only the current user SID;
+   (b) the server must use the `interprocess` crate, not dart_ipc `bind()`;
+   (c) when dicta-core is ported under `cfg(windows)`, switch the model path
+       from `dirs::data_dir()` to `dirs::data_local_dir()` — large binary model
+       data must not land in the Roaming profile. This is a deliberate
+       deviation from Linux parity, not an accident.
+4. Phase 6 verifies the RECORD of this contract; implementation and tests are
+   phase 7. Client-side config resolves to `%APPDATA%\dicta\config.toml` and
+   models to `%LOCALAPPDATA%\whisper-cpp` (WIN-05).
+
 ## Contribute / release
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) and [docs/RELEASE.md](docs/RELEASE.md).
