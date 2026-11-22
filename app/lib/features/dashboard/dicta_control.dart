@@ -1,9 +1,11 @@
 /// Command-side state for the dashboard. Recognized text is captured only
 /// from our own stop/inject replies - status never carries text.
+/// The history journal captures only dictations made through the app.
 /// Transport stays in core; errors arrive as data, never as exceptions.
 library;
 
 import 'package:dicta_app/core/providers.dart';
+import 'package:dicta_app/features/history/history.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -96,6 +98,13 @@ class DictaControlNotifier extends Notifier<DictaControlState> {
         lastError: snapshot.error,
         lastErrorCommand: DictaCommand.stop,
       );
+      // The stop reply is the only honest capture point: status never carries
+      // text. Empty/whitespace text never lands in the journal (A3/A4).
+      if (snapshot.error == null &&
+          snapshot.text != null &&
+          snapshot.text!.trim().isNotEmpty) {
+        ref.read(historyProvider.notifier).add(snapshot.text!);
+      }
     } catch (_) {
       state = state.copyWith(
         commandInFlight: false,
