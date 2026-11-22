@@ -53,4 +53,16 @@ class AppLocalizationsRu extends AppLocalizations {
   String dashRecordingTime(String time) {
     return 'время $time';
   }
+
+  @override
+  String get dashStartButton => 'начать запись';
+
+  @override
+  String get dashStopButton => 'остановить';
+
+  @override
+  String get dashCancelButton => 'отмена';
+
+  @override
+  String get dashTranscribing => 'распознаю…';
 }

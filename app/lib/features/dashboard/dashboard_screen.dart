@@ -5,6 +5,7 @@ library;
 
 import 'package:dicta_app/core/engine.dart';
 import 'package:dicta_app/core/providers.dart';
+import 'package:dicta_app/features/dashboard/dicta_control.dart';
 import 'package:dicta_app/features/dashboard/level_history.dart';
 import 'package:dicta_app/l10n/generated/app_localizations.dart';
 import 'package:flutter/material.dart';
@@ -22,7 +23,13 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
     final status = ref.watch(dictaStatusProvider);
+    final control = ref.watch(dictaControlProvider);
     final colors = Theme.of(context).colorScheme;
+    final busy = control.commandInFlight;
+    final canStart = status.connected && status.state == DaemonState.idle && !busy;
+    final canStop =
+        status.connected && status.state == DaemonState.recording && !busy;
+    final canCancel = canStop; // cancel during transcribing would lie
 
     // Feed the histogram only from recording ticks: the daemon reports level
     // 0.0 in every other state and those zeros would drag the view to the floor.
@@ -76,6 +83,73 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                     ),
                     style: TextStyle(color: colors.onSurfaceVariant),
                   ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 12),
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Row(
+                    children: [
+                      Expanded(
+                        child: ElevatedButton(
+                          key: const Key('dashStartButton'),
+                          onPressed: canStart
+                              ? () => ref
+                                  .read(dictaControlProvider.notifier)
+                                  .start()
+                              : null,
+                          child: Text(l10n.dashStartButton),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: ElevatedButton(
+                          key: const Key('dashStopButton'),
+                          onPressed: canStop
+                              ? () => ref
+                                  .read(dictaControlProvider.notifier)
+                                  .stop()
+                              : null,
+                          child: Text(l10n.dashStopButton),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: ElevatedButton(
+                          key: const Key('dashCancelButton'),
+                          onPressed: canCancel
+                              ? () => ref
+                                  .read(dictaControlProvider.notifier)
+                                  .cancel()
+                              : null,
+                          child: Text(l10n.dashCancelButton),
+                        ),
+                      ),
+                    ],
+                  ),
+                  // Bound to the polled state, not to the stop Future: a stop
+                  // fired by the daemon's hotkey is visible here too.
+                  if (status.state == DaemonState.transcribing)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 12),
+                      child: Row(
+                        children: [
+                          const SizedBox(
+                            width: 16,
+                            height: 16,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          ),
+                          const SizedBox(width: 8),
+                          Text(l10n.dashTranscribing),
+                        ],
+                      ),
+                    ),
                 ],
               ),
             ),

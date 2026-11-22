@@ -171,6 +171,30 @@ abstract class AppLocalizations {
   /// In ru, this message translates to:
   /// **'время {time}'**
   String dashRecordingTime(String time);
+
+  /// Start recording button, active only while idle
+  ///
+  /// In ru, this message translates to:
+  /// **'начать запись'**
+  String get dashStartButton;
+
+  /// Stop recording button, active only while recording
+  ///
+  /// In ru, this message translates to:
+  /// **'остановить'**
+  String get dashStopButton;
+
+  /// Cancel recording button, deliberately disabled while transcribing
+  ///
+  /// In ru, this message translates to:
+  /// **'отмена'**
+  String get dashCancelButton;
+
+  /// Spinner caption tied to the polled transcribing state
+  ///
+  /// In ru, this message translates to:
+  /// **'распознаю…'**
+  String get dashTranscribing;
 }
 
 class _AppLocalizationsDelegate

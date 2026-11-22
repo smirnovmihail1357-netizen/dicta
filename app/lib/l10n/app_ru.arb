@@ -62,5 +62,21 @@
     "placeholders": {
       "time": {"type": "String", "example": "01:05"}
     }
+  },
+  "dashStartButton": "начать запись",
+  "@dashStartButton": {
+    "description": "Start recording button, active only while idle"
+  },
+  "dashStopButton": "остановить",
+  "@dashStopButton": {
+    "description": "Stop recording button, active only while recording"
+  },
+  "dashCancelButton": "отмена",
+  "@dashCancelButton": {
+    "description": "Cancel recording button, deliberately disabled while transcribing"
+  },
+  "dashTranscribing": "распознаю…",
+  "@dashTranscribing": {
+    "description": "Spinner caption tied to the polled transcribing state"
   }
 }
