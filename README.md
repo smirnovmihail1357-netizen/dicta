@@ -108,6 +108,11 @@ optional. Key ones: `model`, `language`, `use_gpu`, `gpu_device`, `mic`, `socket
 `min_level`, `clipboard_restore_ms`, `paste_delay_ms`, `auto_stop`, `auto_stop_level`,
 `auto_stop_after_ms`, `auto_stop_grace_ms`, `max_record_ms`.
 
+`paste_delay_ms` is now the upper bound for waiting until `wl-copy` actually publishes the
+text: the paste keys are sent as soon as the buffer is confirmed, not after a blind sleep.
+The previous clipboard contents are restored in the background after `clipboard_restore_ms`,
+so the daemon answers and goes idle right after the keystrokes.
+
 Environment: `DICTA_CONFIG`, `DICTA_UI`, `DICTA_HOTKEY`, `DICTA_APP`, and overlay knobs
 `DICTA_LAYER`, `DICTA_EXCLUSIVE`, `DICTA_DEBUG`, `DICTA_ALWAYS_DRAW`.
 

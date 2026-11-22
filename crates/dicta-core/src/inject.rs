@@ -145,7 +145,7 @@ where
         Ok(value) => {
             // flush: KWin/libinput читает события пачками
             kb.event(EV_SYN, 0, SYN_REPORT)?;
-            std::thread::sleep(Duration::from_millis(40));
+            std::thread::sleep(Duration::from_millis(15));
             Ok(value)
         }
         Err(err) => {
@@ -325,6 +325,63 @@ fn clipboard_cmd(cmd: &str, args: &[&str], input: Option<&str>) -> Option<String
     }
 }
 
+/// Подождать, пока wl-paste увидит в буфере ровно `text`.
+/// Возвращает true, если буфер подтверждён; false — вышел `max_wait`.
+fn wait_clipboard_ready(text: &str, max_wait: Duration) -> bool {
+    let deadline = Instant::now() + max_wait;
+    while Instant::now() < deadline {
+        if let Some(cur) = clipboard_cmd("wl-paste", &["--no-newline"], None) {
+            if cur == text {
+                return true;
+            }
+        }
+        std::thread::sleep(Duration::from_millis(10));
+    }
+    false
+}
+
+/// Отложенное восстановление буфера: одна работа на процесс.
+/// Новая вставка до срабатывания продлевает дедлайн и сохраняет исходный буфер.
+struct PendingRestore {
+    prev: String,
+    deadline: Instant,
+}
+static PENDING_RESTORE: std::sync::Mutex<Option<PendingRestore>> = std::sync::Mutex::new(None);
+
+fn schedule_restore(prev: String, delay: Duration) {
+    if prev.is_empty() {
+        return;
+    }
+    let mut slot = match PENDING_RESTORE.lock() {
+        Ok(s) => s,
+        Err(_) => return,
+    };
+    match slot.as_mut() {
+        // Уже ждём восстановления: продлеваем дедлайн, prev не трогаем —
+        // он и есть исходный буфер пользователя.
+        Some(job) => job.deadline = Instant::now() + delay,
+        None => {
+            *slot = Some(PendingRestore {
+                prev,
+                deadline: Instant::now() + delay,
+            });
+            std::thread::spawn(|| loop {
+                std::thread::sleep(Duration::from_millis(50));
+                let Ok(mut slot) = PENDING_RESTORE.lock() else { return };
+                let Some(job) = slot.as_ref() else { return };
+                if Instant::now() < job.deadline {
+                    continue;
+                }
+                let prev = job.prev.clone();
+                *slot = None;
+                drop(slot);
+                clipboard_cmd("wl-copy", &["--type", "text"], Some(&prev));
+                return;
+            });
+        }
+    }
+}
+
 /// Кладёт текст в буфер обмена и посылает клавиши вставки; старый буфер возвращает.
 pub fn paste_text(
     text: &str,
@@ -340,14 +397,16 @@ pub fn paste_text(
     // text/plain даёт стандартный набор text/plain, TEXT, STRING, UTF8_STRING.
     clipboard_cmd("wl-copy", &["--type", "text/plain"], Some(text));
 
-    std::thread::sleep(delay_before_keys);
+    // Ждём подтверждения, что wl-copy анонсировал новый буфер, а не слепую паузу.
+    // paste_delay_ms теперь — потолок ожидания, а не фиксированная задержка.
+    if !wait_clipboard_ready(text, delay_before_keys) {
+        eprintln!("dicta: буфер не подтвердился за {delay_before_keys:?}, шлю клавиши всё равно");
+    }
     with_keyboard(|kb| kb.send(combo)).context("не удалось послать клавиши вставки (uinput)")?;
 
+    // Восстановление — в фоне: вставка завершена, демон не должен ждать 2,5 с.
     if let Some(prev) = previous {
-        if !prev.is_empty() {
-            std::thread::sleep(restore_after);
-            clipboard_cmd("wl-copy", &["--type", "text"], Some(&prev));
-        }
+        schedule_restore(prev, restore_after);
     }
     Ok(())
 }

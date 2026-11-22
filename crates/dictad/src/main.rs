@@ -116,7 +116,9 @@ struct Handler {
     cfg: Config,
     /// Куда писать изменения настроек (обычно ~/.config/dicta/config.toml).
     cfg_path: PathBuf,
-    engine: Option<Engine>,
+    /// Движок живёт за Arc<Mutex<..>>: распознавание в воркере держит только его,
+    /// а не весь handler, чтобы новые команды не ждали inference.
+    engine: Option<Arc<Mutex<Engine>>>,
     recorder: Option<Recorder>,
     last_text: Option<String>,
     last_error: Option<String>,
@@ -184,7 +186,7 @@ fn main() -> Result<()> {
         thread::spawn(move || match Engine::load(&cfg) {
             Ok(engine) => {
                 if let Ok(mut h) = handler.lock() {
-                    h.engine = Some(engine);
+                    h.engine = Some(Arc::new(Mutex::new(engine)));
                 }
                 reloading.store(false, Ordering::SeqCst);
             }
@@ -252,13 +254,12 @@ fn main() -> Result<()> {
                         drop(h);
 
                         if let Some(reason) = decision.0 {
-                            if let Ok(mut h) = handler.lock() {
-                                eprintln!("dictad: авто-остановка записи: {reason}");
-                                if let Err(err) =
-                                    run_stop(&mut h, &state, &started_at, decision.1.as_deref())
-                                {
-                                    eprintln!("dictad: {err}");
-                                }
+                            eprintln!("dictad: авто-остановка записи: {reason}");
+                            // Воркер сам ловит handler; сигнал окончания вставки нам не нужен.
+                            if let Err(err) =
+                                run_stop(&handler, &state, &started_at, decision.1.as_deref())
+                            {
+                                eprintln!("dictad: {err}");
                             }
                         }
                     }
@@ -764,7 +765,7 @@ fn schedule_engine_reload(
         match Engine::load(&cfg) {
             Ok(engine) => {
                 if let Ok(mut h) = handler.lock() {
-                    h.engine = Some(engine);
+                    h.engine = Some(Arc::new(Mutex::new(engine)));
                     h.last_error = None;
                 }
                 eprintln!("dictad: загружена модель {} за {:?}", name, t0.elapsed());
@@ -933,15 +934,18 @@ fn serve_conn(
                 }
             }
             "start" | "stop" | "toggle" | "cancel" => {
-                let mut h = handler
-                    .lock()
-                    .map_err(|_| anyhow::anyhow!("handler отравлен"))?;
                 let cmd = req.cmd.clone();
-                if cmd == "cancel" {
+                // run_stop сам ловит handler: держим мьютекс только на быстрых
+                // действиях, иначе воркер не сможет записать результат.
+                let done = if cmd == "cancel" {
+                    let mut h = handler
+                        .lock()
+                        .map_err(|_| anyhow::anyhow!("handler отравлен"))?;
                     h.recorder = None;
                     started_at.store(0, Ordering::Relaxed);
                     state.store(State::Idle.to_index(), Ordering::Relaxed);
                     h.last_error = Some("запись отменена".into());
+                    None
                 } else {
                     let want_start = match cmd.as_str() {
                         "start" => true,
@@ -949,11 +953,23 @@ fn serve_conn(
                         _ => State::from_index(state.load(Ordering::Relaxed)) != State::Recording,
                     };
                     if want_start {
+                        let mut h = handler
+                            .lock()
+                            .map_err(|_| anyhow::anyhow!("handler отравлен"))?;
                         run_start(&mut h, &state, &started_at)?;
+                        None
                     } else {
-                        run_stop(&mut h, &state, &started_at, req.app.as_deref())?;
+                        run_stop(&handler, &state, &started_at, req.app.as_deref())?
                     }
+                };
+                // Соединение со "stop" держим до конца вставки; воркер шлёт сигнал
+                // сразу после клавиш, не дожидаясь фонового восстановления буфера.
+                if let Some(done) = done {
+                    let _ = done.recv();
                 }
+                let h = handler
+                    .lock()
+                    .map_err(|_| anyhow::anyhow!("handler отравлен"))?;
                 let seconds = h
                     .recorder
                     .as_ref()
@@ -1008,110 +1024,185 @@ fn run_start(h: &mut Handler, state: &Arc<AtomicUsize>, started_at: &Arc<AtomicU
     Ok(())
 }
 
+/// Снять запись и уйти распознавать в отдельный поток: inference не должен держать
+/// мьютекс handler, иначе start/toggle/status встанут в очередь на секунды.
+/// Возвращает приёмник сигнала «вставка завершена» (нужен соединению "stop").
 fn run_stop(
-    h: &mut Handler,
+    handler: &Arc<Mutex<Handler>>,
     state: &Arc<AtomicUsize>,
     started_at: &Arc<AtomicU64>,
     app_hint: Option<&str>,
-) -> Result<()> {
+) -> Result<Option<std::sync::mpsc::Receiver<()>>> {
     if State::from_index(state.load(Ordering::Relaxed)) != State::Recording {
-        return Ok(());
+        return Ok(None);
     }
-
     state.store(State::Transcribing.to_index(), Ordering::Relaxed);
-    let recorder = match h.recorder.take() {
-        Some(rec) => rec,
-        None => {
-            state.store(State::Idle.to_index(), Ordering::Relaxed);
-            return Ok(());
-        }
-    };
-    let spoken = recorder.elapsed();
-    started_at.store(0, Ordering::Relaxed);
 
-    let samples = match recorder.stop() {
-        Ok(s) => s,
-        Err(err) => {
-            h.last_error = Some(err.to_string());
-            state.store(State::Idle.to_index(), Ordering::Relaxed);
-            return Ok(());
-        }
-    };
-
-    // Гейтер тишины: whisper на фоновом шуме сочиняет правдоподобные фразы,
-    // и они вставятся в фокусное окно. Не запускаем распознавание на шуме.
-    let level = dicta_core::speech_level(&samples);
-    let overall = dicta_core::normalized_rms(&samples);
-    if level < h.cfg.min_level {
-        h.last_error = Some(format!(
-            "слишком тихо (уровень {:.3} < {:.2}) — распознавание пропущено",
-            level, h.cfg.min_level
-        ));
-        state.store(State::Idle.to_index(), Ordering::Relaxed);
-        eprintln!(
-            "dictad: пропуск: записано {:?}, речь {:.3} (в среднем {:.3}) ниже порога {:.2}",
-            spoken, level, overall, h.cfg.min_level
-        );
-        return Ok(());
-    }
-
-    if h.engine.is_none() {
-        // Модель ещё прогревалась — грузим синхронно.
-        match Engine::load(&h.cfg) {
-            Ok(engine) => h.engine = Some(engine),
+    // Редактор и рекордер забираем под коротким мьютексом.
+    let (samples, spoken, cfg, engine, app_hint, paste_combo) = {
+        let mut h = handler
+            .lock()
+            .map_err(|_| anyhow::anyhow!("handler отравлен"))?;
+        let Some(recorder) = h.recorder.take() else {
+            finish(state);
+            return Ok(None);
+        };
+        let spoken = recorder.elapsed();
+        started_at.store(0, Ordering::Relaxed);
+        let samples = match recorder.stop() {
+            Ok(s) => s,
             Err(err) => {
                 h.last_error = Some(err.to_string());
-                state.store(State::Idle.to_index(), Ordering::Relaxed);
-                return Ok(());
+                finish(state);
+                return Ok(None);
+            }
+        };
+        (
+            samples,
+            spoken,
+            h.cfg.clone(),
+            h.engine.clone(),
+            app_hint.map(str::to_string).or_else(|| h.last_app.clone()),
+            h.paste_combo,
+        )
+    };
+
+    let (tx, rx) = std::sync::mpsc::channel::<()>();
+    let handler = handler.clone();
+    let state2 = state.clone();
+    std::thread::spawn(move || {
+        // Шаг 1. Гейт тишины: whisper на фоновом шуме сочиняет правдоподобные фразы,
+        // и они вставятся в фокусное окно. Не запускаем распознавание на шуме.
+        let level = dicta_core::speech_level(&samples);
+        let overall = dicta_core::normalized_rms(&samples);
+        if level < cfg.min_level {
+            if let Ok(mut h) = handler.lock() {
+                h.last_error = Some(format!(
+                    "слишком тихо (уровень {:.3} < {:.2}) — распознавание пропущено",
+                    level, cfg.min_level
+                ));
+            }
+            finish(&state2);
+            eprintln!(
+                "dictad: пропуск: записано {:?}, речь {:.3} (в среднем {:.3}) ниже порога {:.2}",
+                spoken, level, overall, cfg.min_level
+            );
+            let _ = tx.send(());
+            return;
+        }
+
+        // Шаг 2. Движок: модель может ещё прогреваться — грузим здесь, не под общим мьютексом.
+        let engine = match engine {
+            Some(engine) => engine,
+            None => match Engine::load(&cfg) {
+                Ok(e) => {
+                    let e = Arc::new(Mutex::new(e));
+                    if let Ok(mut h) = handler.lock() {
+                        if h.engine.is_none() {
+                            h.engine = Some(e.clone());
+                        }
+                    }
+                    e
+                }
+                Err(err) => {
+                    if let Ok(mut h) = handler.lock() {
+                        h.last_error = Some(err.to_string());
+                    }
+                    finish(&state2);
+                    let _ = tx.send(());
+                    return;
+                }
+            },
+        };
+
+        // Шаг 3. Inference: держим только engine, handler свободен для других команд.
+        let t0 = Instant::now();
+        let text = {
+            let eng = match engine.lock() {
+                Ok(eng) => eng,
+                Err(_) => {
+                    if let Ok(mut h) = handler.lock() {
+                        h.last_error = Some("engine отравлен".into());
+                    }
+                    finish(&state2);
+                    let _ = tx.send(());
+                    return;
+                }
+            };
+            match eng.transcribe(&samples) {
+                Ok(text) => text,
+                Err(err) => {
+                    if let Ok(mut h) = handler.lock() {
+                        h.last_error = Some(err.to_string());
+                    }
+                    finish(&state2);
+                    let _ = tx.send(());
+                    return;
+                }
+            }
+        };
+        let inferred = t0.elapsed();
+
+        // Шаг 4. Пустое распознавание в окно не вставляем.
+        if text.is_empty() {
+            if let Ok(mut h) = handler.lock() {
+                h.last_error = Some("ничего не распознано".into());
+            }
+            finish(&state2);
+            let _ = tx.send(());
+            return;
+        }
+
+        // Шаг 5. Клавиши вставки подбираем под фокусное окно (konsole -> Shift+Insert,
+        // браузер/Kate -> Ctrl+V).
+        let app = dicta_core::focus::active_app(app_hint.as_deref());
+        let keys = cfg.paste_keys_for(app.as_deref());
+        let combo = Combo::parse(&keys).unwrap_or(paste_combo);
+
+        // Шаг 6. Вставка; восстановление исходного буфера внутри неё — в фоне.
+        if let Err(err) = inject::insert_text(
+            &text,
+            &cfg.inject_mode,
+            combo,
+            Duration::from_millis(cfg.clipboard_restore_ms),
+            Duration::from_millis(cfg.paste_delay_ms),
+            cfg.atspi_allow_any_role,
+            app.as_deref(),
+        ) {
+            if let Ok(mut h) = handler.lock() {
+                h.last_error = Some(format!("вставка не удалась: {err}"));
             }
         }
-    }
 
-    let t0 = Instant::now();
-    let engine = h.engine.as_ref().expect("engine должен быть");
-    let text = match engine.transcribe(&samples) {
-        Ok(text) => text,
-        Err(err) => {
-            h.last_error = Some(err.to_string());
-            state.store(State::Idle.to_index(), Ordering::Relaxed);
-            return Ok(());
+        // Шаг 7. Результат и тайминги.
+        if let Ok(mut h) = handler.lock() {
+            h.last_text = Some(text.clone());
         }
-    };
-    let inferred = t0.elapsed();
+        eprintln!(
+            "dictad: \"{text}\" (записано {spoken:?}, распознано за {inferred:?}, вставка {keys} в {:?})",
+            app
+        );
 
-    if text.is_empty() {
-        h.last_error = Some("ничего не распознано".into());
-        state.store(State::Idle.to_index(), Ordering::Relaxed);
-        return Ok(());
-    }
+        // Шаг 8. Состояние понижаем только Transcribing→Idle: пользователь мог начать
+        // новую запись, пока шло распознавание, — её не трогаем.
+        finish(&state2);
 
-    h.last_text = Some(text.clone());
+        // Шаг 9. Сигнал для соединения "stop".
+        let _ = tx.send(());
+    });
+    Ok(Some(rx))
+}
 
-    // Клавиши вставки подбираем под фокусное окно (konsole -> Shift+Insert,
-    // браузер/Kate -> Ctrl+V).
-    let app = dicta_core::focus::active_app(app_hint);
-    let keys = h.cfg.paste_keys_for(app.as_deref());
-    let combo = Combo::parse(&keys).unwrap_or_else(|_| h.paste_combo.clone());
-
-    if let Err(err) = inject::insert_text(
-        &text,
-        &h.cfg.inject_mode,
-        combo.clone(),
-        Duration::from_millis(h.cfg.clipboard_restore_ms),
-        Duration::from_millis(h.cfg.paste_delay_ms),
-        h.cfg.atspi_allow_any_role,
-        app.as_deref(),
-    ) {
-        h.last_error = Some(format!("вставка не удалась: {err}"));
-    }
-
-    eprintln!(
-        "dictad: \"{text}\" (записано {spoken:?}, распознано за {inferred:?}, вставка {keys} в {:?})",
-        app
-    );
-
-    state.store(State::Idle.to_index(), Ordering::Relaxed);
-    Ok(())
+/// Сбросить Transcribing в Idle, не задев Recording, начатую во время inference.
+fn finish(state: &Arc<AtomicUsize>) {
+    state
+        .compare_exchange(
+            State::Transcribing.to_index(),
+            State::Idle.to_index(),
+            Ordering::Relaxed,
+            Ordering::Relaxed,
+        )
+        .ok();
 }
 
 fn do_toggle(
@@ -1119,14 +1210,17 @@ fn do_toggle(
     state: &Arc<AtomicUsize>,
     started_at: &Arc<AtomicU64>,
 ) -> Result<()> {
-    let mut h = handler
-        .lock()
-        .map_err(|_| anyhow::anyhow!("handler отравлен"))?;
     let want_start = State::from_index(state.load(Ordering::Relaxed)) != State::Recording;
     if want_start {
+        let mut h = handler
+            .lock()
+            .map_err(|_| anyhow::anyhow!("handler отравлен"))?;
         run_start(&mut h, state, started_at)
     } else {
-        run_stop(&mut h, state, started_at, None)
+        // Мьютекс не держим: run_stop уводит распознавание в воркер.
+        // Receiver просто бросаем — воркер send'ит в никуда без ошибки.
+        let _ = run_stop(handler, state, started_at, None)?;
+        Ok(())
     }
 }
 
