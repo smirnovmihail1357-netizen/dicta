@@ -6,19 +6,25 @@
 #![cfg(windows)]
 
 use std::io::{BufRead, BufReader, Write};
+use std::path::PathBuf;
 use std::process::{Child, Command, Stdio};
 use std::time::{Duration, Instant};
 
 use interprocess::os::windows::named_pipe::{pipe_mode, PipeStream};
 use widestring::U16CString;
 
-/// Демон обязательно умирает вместе с тестом, даже при panic.
-struct DaemonGuard(Child);
+/// Демон и temp-конфиг обязательно умирают вместе с тестом, даже при panic.
+struct DaemonGuard {
+    child: Child,
+    config: PathBuf,
+}
 
 impl Drop for DaemonGuard {
     fn drop(&mut self) {
-        let _ = self.0.kill();
-        let _ = self.0.wait();
+        let _ = self.child.kill();
+        let _ = self.child.wait();
+        // Конфиг по pid мог остаться при падении теста — убираем всегда (IN-08).
+        let _ = std::fs::remove_file(&self.config);
     }
 }
 
@@ -33,10 +39,12 @@ fn status_roundtrip_over_named_pipe() {
         .env("DICTA_CONFIG", &config)
         .stdin(Stdio::null())
         .stdout(Stdio::null())
-        .stderr(Stdio::piped())
+        // Не piped(stderr) без читателя: при росте стартового шума демон
+        // упрётся в буфер пайпа и зависнет (IN-08).
+        .stderr(Stdio::null())
         .spawn()
         .expect("spawn dictad.exe");
-    let _daemon = DaemonGuard(child);
+    let _daemon = DaemonGuard { child, config };
 
     let path = U16CString::from_str(&pipe_name).expect("pipe name");
     let deadline = Instant::now() + Duration::from_secs(2);
@@ -66,6 +74,4 @@ fn status_roundtrip_over_named_pipe() {
     assert_eq!(reply["state"], "idle", "{reply}");
     assert!(reply["error"].is_null(), "{reply}");
     assert_eq!(reply["level"], 0.0, "{reply}");
-
-    std::fs::remove_file(&config).ok();
 }
