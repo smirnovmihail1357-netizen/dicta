@@ -15,11 +15,18 @@ String resolveConfigPath({
   String? configOverride,
   String? xdgConfigHome,
   String? home,
+  String? appData,
 }) {
   final override = configOverride ?? Platform.environment['DICTA_CONFIG'];
   // An empty override is treated as unset: the zero-length path that the
   // daemon's var_os("") edge would produce is never a usable config file.
   if (override != null && override.isNotEmpty) return override;
+
+  // Windows: %APPDATA% (roaming). This is a CONTRACT for phase 7, not a mirror
+  // of config.rs — no Rust parity reference exists for Windows yet. This branch
+  // must stay BEFORE the Unix XDG resolution: on Windows those variables are
+  // absent and the last-resort path would otherwise win.
+  if (Platform.isWindows) return windowsConfigPath(appData: appData);
 
   final xdg = xdgConfigHome ?? Platform.environment['XDG_CONFIG_HOME'];
   // dirs::config_dir() (config.rs:176) accepts ONLY an absolute XDG_CONFIG_HOME;
@@ -32,6 +39,15 @@ String resolveConfigPath({
   final userHome = home ?? Platform.environment['HOME'];
   if (userHome == null || userHome.isEmpty) return 'dicta-config.toml';
   return '$userHome/.config/dicta/config.toml';
+}
+
+/// Windows contract (phase 7): `%APPDATA%\dicta\config.toml`. No Rust parity
+/// reference exists yet — this records the CONTRACT, not a mirror of config.rs.
+/// The env read is injectable so widget tests never mutate Platform.environment.
+String windowsConfigPath({String? appData}) {
+  final roaming = appData ?? Platform.environment['APPDATA'];
+  if (roaming == null || roaming.isEmpty) return r'dicta\config.toml';
+  return '$roaming\\dicta\\config.toml';
 }
 
 // TOML allows both basic ("...") and literal ('...') strings. The daemon's

@@ -29,7 +29,10 @@ String urlFor(String file) =>
 String partOf(String dest) => '$dest.part';
 
 /// Pure version of catalog.rs:70-88 for tests: no process environment reads.
-String destDirFrom(String model, String? xdgDataHome, String? home) {
+/// [localAppData] is the Windows WIN-05 contract: models are local data, not
+/// roaming settings (phase 7 must switch data_dir() to data_local_dir()).
+String destDirFrom(String model, String? xdgDataHome, String? home,
+    [String? localAppData]) {
   // Path::new(model).parent() - '/x' has the root '/' as its parent, while a
   // bare name ('ggml.bin') has an empty parent and takes the fallback.
   final index = model.lastIndexOf('/');
@@ -37,15 +40,24 @@ String destDirFrom(String model, String? xdgDataHome, String? home) {
     final parent = index == 0 ? '/' : model.substring(0, index);
     if (parent.isNotEmpty) return parent;
   }
+  // Windows: local app data + whisper-cpp — BEFORE the Unix data-home
+  // fallback (an explicit custom-model parent above still wins). No Unix path
+  // hardcodes here.
+  if (localAppData != null && localAppData.isNotEmpty) {
+    return '$localAppData\\whisper-cpp';
+  }
   final xdg = xdgDataHome != null && xdgDataHome.isNotEmpty ? xdgDataHome : null;
   final base = xdg ??
       ((home != null && home.isNotEmpty) ? '$home/.local/share' : '.local/share');
   return '$base/whisper-cpp';
 }
 
-/// Production wrapper: XDG_DATA_HOME -> HOME/.local/share -> whisper-cpp.
+/// Production wrapper: Windows local app data / the Unix data-home variable /
+/// HOME -> whisper-cpp. On Linux that Windows variable is absent, so the
+/// existing Unix resolution is byte-for-byte unchanged.
 String destDir(String model) => destDirFrom(
       model,
       Platform.environment['XDG_DATA_HOME'],
       Platform.environment['HOME'],
+      Platform.environment['LOCALAPPDATA'],
     );
