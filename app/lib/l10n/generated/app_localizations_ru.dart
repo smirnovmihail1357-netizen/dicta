@@ -28,9 +28,6 @@ class AppLocalizationsRu extends AppLocalizations {
   String get daemonUnavailable => 'демон недоступен';
 
   @override
-  String get placeholderScreen => 'раздел появится в следующих фазах';
-
-  @override
   String get daemonStateIdle => 'ожидание';
 
   @override
@@ -278,4 +275,38 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get confMilliseconds => 'мс';
+
+  @override
+  String get modelInstalledTitle => 'установленные';
+
+  @override
+  String get modelActive => 'активна';
+
+  @override
+  String get modelSelectButton => 'выбрать';
+
+  @override
+  String get modelDeleteButton => 'удалить';
+
+  @override
+  String get modelDeleteConfirmTitle => 'удалить модель?';
+
+  @override
+  String get modelDeleteConfirmBody =>
+      'файл будет удалён безвозвратно — вернуть нельзя';
+
+  @override
+  String get modelDeleteConfirm => 'удалить';
+
+  @override
+  String get modelDecline => 'отмена';
+
+  @override
+  String get modelDeleted => 'удалено';
+
+  @override
+  String get modelEmpty => 'моделей нет — скачай из каталога ниже';
+
+  @override
+  String get modelDeleteBlocked => 'модель активна или вне каталога';
 }

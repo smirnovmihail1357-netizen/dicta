@@ -4,9 +4,9 @@
 library;
 
 import 'package:dicta_app/core/providers.dart';
-import 'package:dicta_app/core/theme_ext.dart';
 import 'package:dicta_app/features/dashboard/dashboard_screen.dart';
 import 'package:dicta_app/features/history/history_screen.dart';
+import 'package:dicta_app/features/models/models_screen.dart';
 import 'package:dicta_app/features/settings/settings_screen.dart';
 import 'package:dicta_app/l10n/generated/app_localizations.dart';
 import 'package:flutter/material.dart';
@@ -84,7 +84,7 @@ class _ShellWidgetState extends ConsumerState<ShellWidget> {
                     children: const [
                       DashboardScreen(),
                       HistoryScreen(),
-                      _SectionPlaceholder(),
+                      ModelsScreen(),
                       SettingsScreen(),
                     ],
                   ),
@@ -93,21 +93,6 @@ class _ShellWidgetState extends ConsumerState<ShellWidget> {
             ),
           ),
         ],
-      ),
-    );
-  }
-}
-
-class _SectionPlaceholder extends StatelessWidget {
-  const _SectionPlaceholder();
-
-  @override
-  Widget build(BuildContext context) {
-    final l10n = AppLocalizations.of(context)!;
-    return Center(
-      child: Text(
-        l10n.placeholderScreen,
-        style: AppTextStyles.mutedOf(context),
       ),
     );
   }

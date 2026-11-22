@@ -130,12 +130,6 @@ abstract class AppLocalizations {
   /// **'демон недоступен'**
   String get daemonUnavailable;
 
-  /// Weak secondary text on placeholder screens
-  ///
-  /// In ru, this message translates to:
-  /// **'раздел появится в следующих фазах'**
-  String get placeholderScreen;
-
   /// Daemon state: idle
   ///
   /// In ru, this message translates to:
@@ -609,6 +603,72 @@ abstract class AppLocalizations {
   /// In ru, this message translates to:
   /// **'мс'**
   String get confMilliseconds;
+
+  /// Section title for the installed models list
+  ///
+  /// In ru, this message translates to:
+  /// **'установленные'**
+  String get modelInstalledTitle;
+
+  /// Status marker on the currently selected model
+  ///
+  /// In ru, this message translates to:
+  /// **'активна'**
+  String get modelActive;
+
+  /// Selects an inactive model (an ENGINE set)
+  ///
+  /// In ru, this message translates to:
+  /// **'выбрать'**
+  String get modelSelectButton;
+
+  /// Deletes an inactive model file
+  ///
+  /// In ru, this message translates to:
+  /// **'удалить'**
+  String get modelDeleteButton;
+
+  /// Destructive confirm title for model deletion
+  ///
+  /// In ru, this message translates to:
+  /// **'удалить модель?'**
+  String get modelDeleteConfirmTitle;
+
+  /// Destructive confirm body: deletion cannot be undone
+  ///
+  /// In ru, this message translates to:
+  /// **'файл будет удалён безвозвратно — вернуть нельзя'**
+  String get modelDeleteConfirmBody;
+
+  /// Confirm action in the model deletion dialog
+  ///
+  /// In ru, this message translates to:
+  /// **'удалить'**
+  String get modelDeleteConfirm;
+
+  /// Decline action in the model deletion dialog
+  ///
+  /// In ru, this message translates to:
+  /// **'отмена'**
+  String get modelDecline;
+
+  /// Snackbar after a model file was deleted
+  ///
+  /// In ru, this message translates to:
+  /// **'удалено'**
+  String get modelDeleted;
+
+  /// Honest empty state when settings.models is empty
+  ///
+  /// In ru, this message translates to:
+  /// **'моделей нет — скачай из каталога ниже'**
+  String get modelEmpty;
+
+  /// Honest message when the delete guard rejects a path
+  ///
+  /// In ru, this message translates to:
+  /// **'модель активна или вне каталога'**
+  String get modelDeleteBlocked;
 }
 
 class _AppLocalizationsDelegate

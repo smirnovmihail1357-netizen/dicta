@@ -25,10 +25,6 @@
   "@daemonUnavailable": {
     "description": "Persistent banner when the dictad socket cannot be reached"
   },
-  "placeholderScreen": "раздел появится в следующих фазах",
-  "@placeholderScreen": {
-    "description": "Weak secondary text on placeholder screens"
-  },
   "daemonStateIdle": "ожидание",
   "@daemonStateIdle": {
     "description": "Daemon state: idle"
@@ -359,5 +355,50 @@
   "confMilliseconds": "мс",
   "@confMilliseconds": {
     "description": "Milliseconds suffix for slider labels"
+  },
+
+  "modelInstalledTitle": "установленные",
+  "@modelInstalledTitle": {
+    "description": "Section title for the installed models list"
+  },
+  "modelActive": "активна",
+  "@modelActive": {
+    "description": "Status marker on the currently selected model"
+  },
+  "modelSelectButton": "выбрать",
+  "@modelSelectButton": {
+    "description": "Selects an inactive model (an ENGINE set)"
+  },
+  "modelDeleteButton": "удалить",
+  "@modelDeleteButton": {
+    "description": "Deletes an inactive model file"
+  },
+  "modelDeleteConfirmTitle": "удалить модель?",
+  "@modelDeleteConfirmTitle": {
+    "description": "Destructive confirm title for model deletion"
+  },
+  "modelDeleteConfirmBody": "файл будет удалён безвозвратно — вернуть нельзя",
+  "@modelDeleteConfirmBody": {
+    "description": "Destructive confirm body: deletion cannot be undone"
+  },
+  "modelDeleteConfirm": "удалить",
+  "@modelDeleteConfirm": {
+    "description": "Confirm action in the model deletion dialog"
+  },
+  "modelDecline": "отмена",
+  "@modelDecline": {
+    "description": "Decline action in the model deletion dialog"
+  },
+  "modelDeleted": "удалено",
+  "@modelDeleted": {
+    "description": "Snackbar after a model file was deleted"
+  },
+  "modelEmpty": "моделей нет — скачай из каталога ниже",
+  "@modelEmpty": {
+    "description": "Honest empty state when settings.models is empty"
+  },
+  "modelDeleteBlocked": "модель активна или вне каталога",
+  "@modelDeleteBlocked": {
+    "description": "Honest message when the delete guard rejects a path"
   }
 }
