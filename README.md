@@ -220,6 +220,34 @@ dicta-ui --list-edges               # where the overlay sits now
 dicta-ui --edge right               # move it to the right side
 ```
 
+## Tray (dicta-app)
+
+`dicta-app` lives on in the system tray (SNI / StatusNotifierItem). The window's
+X hides it to the tray — the process stays alive and the icon remains. The only
+honest way to quit is the **Exit** item in the tray menu (`destroy()` is called
+from that item alone).
+
+The menu offers: Show/Hide Window, Start, Stop, Cancel, Settings (opens the
+window on the Settings tab) and Exit. The icon is blue when idle and red while
+recording or transcribing; it rides on the app's existing status poll, with no
+second timer in the tray code.
+
+**Linux / SNI behaviour:** the panel (KDE Plasma) keeps icon clicks for itself and
+opens the exported menu on either mouse button — `tray_manager` receives no icon
+click events on Linux. "Left click = access the window" is therefore implemented
+as the **Show/Hide Window** menu item. This is an accepted deviation from the
+literal wording of TRAY-01 (orchestrator decision, 2026-11-22) and is part of UAT
+sign-off.
+
+GNOME shows SNI items only with an AppIndicator extension (a known limitation of
+the package); KDE Plasma hosts them natively.
+
+The global recording hotkey belongs to the daemon, not the app. A read-only
+indicator in **Settings → System** shows the current evdev combination from
+`config.toml` (or "not set (off)" — the live daemon's default), a static
+compositor reference table and a restart warning. See
+[Hotkey wiring](#hotkey-wiring) below.
+
 ## Hotkey wiring
 
 | compositor | how |
