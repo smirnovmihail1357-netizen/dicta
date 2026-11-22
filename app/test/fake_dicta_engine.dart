@@ -75,6 +75,10 @@ class FakeDictaEngine implements DictaEngine {
   /// (the one-at-a-time race from WR-02).
   Completer<void>? fetchSettingsGate;
 
+  /// When set, fetchSettings() throws this (e.g. a dead daemon's socket error)
+  /// instead of returning a snapshot. Used by the reload-timer guard test.
+  Object? fetchSettingsError;
+
   /// Number of fetchSettings() calls (recheck asserts one refetch).
   int fetchCount = 0;
 
@@ -125,6 +129,8 @@ class FakeDictaEngine implements DictaEngine {
     fetchCount++;
     final gate = fetchSettingsGate;
     if (gate != null) await gate.future;
+    final failure = fetchSettingsError;
+    if (failure != null) throw failure;
     return fetchSettingsReply ?? const <String, dynamic>{};
   }
 

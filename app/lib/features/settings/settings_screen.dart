@@ -81,10 +81,22 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     // daemon says it finished (CONTEXT:20 permits this timer).
     _reloadTimer = Timer.periodic(const Duration(seconds: 1), (_) async {
       ref.invalidate(settingsSnapshotProvider);
-      final fresh = await ref.read(settingsSnapshotProvider.future);
-      if (!mounted) return;
-      setState(() => _replySnapshot = fresh);
-      if (!fresh.reloading) _stopReloadPolling();
+      try {
+        final fresh = await ref.read(settingsSnapshotProvider.future);
+        if (!mounted) return;
+        setState(() => _replySnapshot = fresh);
+        if (!fresh.reloading) _stopReloadPolling();
+      } catch (_) {
+        // A daemon that died mid-reload must not turn this into a 1 Hz
+        // unhandled-error loop: stop polling and show the honest state.
+        _stopReloadPolling();
+        if (mounted) {
+          setState(() {
+            _error = AppLocalizations.of(context)!.daemonUnavailable;
+            _statusIsError = true;
+          });
+        }
+      }
     });
   }
 

@@ -47,8 +47,19 @@ class ModelsScreen extends ConsumerWidget {
       // real error stops the mandatory done -> invalidate + await refetch that
       // makes the active-model marker follow the switched model.
       if (reply.error != null) return;
-      ref.invalidate(settingsSnapshotProvider);
-      await ref.read(settingsSnapshotProvider.future);
+      try {
+        ref.invalidate(settingsSnapshotProvider);
+        await ref.read(settingsSnapshotProvider.future);
+      } catch (_) {
+        // The set already succeeded; only the marker refresh failed. Never
+        // let a transport error escape the tap handler as an unhandled zone
+        // error after the confirm dialog closed.
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(l10n.daemonUnavailable)),
+          );
+        }
+      }
     }
 
     Future<void> deleteModelWithConfirm(String path) async {
@@ -89,8 +100,18 @@ class ModelsScreen extends ConsumerWidget {
         SnackBar(content: Text(failure ?? l10n.modelDeleted)),
       );
       // No daemon reply carries the new list: a refetch is mandatory here.
-      ref.invalidate(settingsSnapshotProvider);
-      await ref.read(settingsSnapshotProvider.future);
+      try {
+        ref.invalidate(settingsSnapshotProvider);
+        await ref.read(settingsSnapshotProvider.future);
+      } catch (_) {
+        // The file is already deleted; a failed refresh must not throw out of
+        // this async handler. The honest "удалено" feedback above still holds.
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(l10n.daemonUnavailable)),
+          );
+        }
+      }
     }
 
     return SingleChildScrollView(

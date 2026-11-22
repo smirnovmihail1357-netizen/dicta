@@ -167,7 +167,12 @@ class DownloadManager extends Notifier<DownloadState> {
     // The daemon discovers the new model on its own; refresh the snapshot so
     // it appears in settings.models (parity with main.rs:377-416, CR-01).
     ref.invalidate(settingsSnapshotProvider);
-    await ref.read(settingsSnapshotProvider.future);
+    try {
+      await ref.read(settingsSnapshotProvider.future);
+    } catch (_) {
+      // The model is already renamed; a failed best-effort refresh must not
+      // leave an unhandled async error behind an otherwise completed download.
+    }
   }
 
   /// Explicit user cancellation: routed through the seam; the engine's

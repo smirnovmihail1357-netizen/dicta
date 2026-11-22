@@ -507,4 +507,44 @@ void main() {
 
     await tester.pumpWidget(const SizedBox.shrink());
   });
+
+  testWidgets('reload polling stops and reports honestly when the daemon dies',
+      (tester) async {
+    final reloadingSnapshot = <String, dynamic>{
+      ...settingsFixture['settings'] as Map<String, dynamic>,
+      'reloading': true,
+    };
+    final fake = FakeDictaEngine(
+      const DictaStatus(connected: true, state: DaemonState.idle),
+      fetchSettingsReply: settingsFixture,
+      // The set starts reload polling with reloading:true in its snapshot.
+      setReplyMap: <String, dynamic>{
+        'text': 'auto_stop = on — сохранено в /tmp/config.toml',
+        'settings': reloadingSnapshot,
+      },
+    );
+    await tester.pumpWidget(buildFakeApp(fake));
+    await tick(tester);
+    await openSettings(tester);
+
+    tester.widget<SwitchListTile>(find.byKey(const Key('confAutoStopSwitch')))
+        .onChanged!(true);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 100));
+    expect(find.byKey(const Key('confReloadSpinner')), findsOneWidget);
+
+    // The daemon goes away mid-reload.
+    fake.fetchSettingsError = StateError('socket closed');
+    await tester.pump(const Duration(seconds: 1));
+    await tester.pump();
+    expect(find.text('демон недоступен'), findsOneWidget);
+    final countAfterFailure = fake.fetchCount;
+
+    // The timer was stopped, not left to refetch-and-throw every second.
+    await tester.pump(const Duration(seconds: 3));
+    await tester.pump();
+    expect(fake.fetchCount, countAfterFailure);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
 }
