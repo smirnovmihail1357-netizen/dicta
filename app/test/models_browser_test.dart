@@ -456,4 +456,62 @@ void main() {
       await tester.pumpWidget(const SizedBox.shrink());
     }
   });
+
+  testWidgets('show more appends page 2; a new search resets the offset',
+      (tester) async {
+    final firstUrl = browseUrl('alpha', 'downloads', false, 0);
+    final secondUrl = browseUrl('alpha', 'downloads', false, 20);
+    final freshUrl = browseUrl('beta', 'downloads', false, 0);
+    final hf = FakeHfClient(urlBody: {
+      firstUrl: jsonEncode([
+        {'id': 'org/alpha1', 'downloads': 1, 'likes': 1},
+      ]),
+      secondUrl: jsonEncode([
+        {'id': 'org/alpha2', 'downloads': 2, 'likes': 2},
+      ]),
+      freshUrl: jsonEncode([
+        {'id': 'org/beta1', 'downloads': 3, 'likes': 3},
+      ]),
+    });
+    final fake = FakeDictaEngine(
+      const DictaStatus(connected: true, state: DaemonState.idle),
+      fetchSettingsReply: readSettings(),
+    );
+    await tester.pumpWidget(buildFakeApp(
+      fake,
+      hfClient: hf,
+      downloadEngine: FakeDownloadEngine(scenario: FakeDownloadScenario.ok200),
+    ));
+    await tick(tester);
+    await openModels(tester);
+
+    await tester.enterText(find.byKey(const Key('modelSearchField')), 'alpha');
+    await reveal(tester, find.byKey(const Key('modelSearchButton')));
+    await tester.tap(find.byKey(const Key('modelSearchButton')));
+    await tester.pump();
+    expect(find.text('org/alpha1'), findsOneWidget);
+
+    await reveal(tester, find.byKey(const Key('modelShowMoreButton')));
+    await tester.tap(find.byKey(const Key('modelShowMoreButton')));
+    await tester.pump();
+    expect(hf.fetchedUrls, <String>[firstUrl, secondUrl]);
+    // Page 2 is appended, not swapped in place of page 1.
+    expect(find.text('org/alpha1'), findsOneWidget);
+    expect(find.text('org/alpha2'), findsOneWidget);
+
+    await tester.enterText(find.byKey(const Key('modelSearchField')), 'beta');
+    await tester.pump();
+    // Invoke via the callback: after pagination the button can be off-screen.
+    tester
+        .widget<FilledButton>(find.byKey(const Key('modelSearchButton')))
+        .onPressed!();
+    await tester.pump();
+    // A brand-new search starts at offset 0 and replaces the old list.
+    expect(hf.fetchedUrls.last, freshUrl);
+    expect(find.text('org/alpha1'), findsNothing);
+    expect(find.text('org/alpha2'), findsNothing);
+    expect(find.text('org/beta1'), findsOneWidget);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
 }

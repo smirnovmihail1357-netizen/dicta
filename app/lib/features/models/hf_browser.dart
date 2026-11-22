@@ -53,13 +53,28 @@ class _HfBrowserState extends ConsumerState<HfBrowser> {
         );
   }
 
-  Future<void> _search() async {
+  Future<void> _search({bool append = false}) async {
     final url = browseUrl(_query, _sort, _asrOnly, _offset);
     try {
       final body = await ref.read(hfClientProvider).fetchText(url);
       if (!mounted) return;
       setState(() {
-        _repos = parseSearch(body);
+        // A fresh search replaces page 1; "показать ещё" extends the list
+        // (dicta-settings main.rs:324-328). Never leak the old offset.
+        final page = parseSearch(body);
+        if (append) {
+          // Extend, but keep ids unique: duplicate repo ids would produce
+          // duplicate widget keys in the result list.
+          final merged = <HfRepo>[..._repos];
+          for (final repo in page) {
+            if (!merged.any((existing) => existing.id == repo.id)) {
+              merged.add(repo);
+            }
+          }
+          _repos = merged;
+        } else {
+          _repos = page;
+        }
         _fetchError = null;
         _searched = true;
       });
@@ -280,7 +295,11 @@ class _HfBrowserState extends ConsumerState<HfBrowser> {
           alignment: Alignment.centerLeft,
           child: FilledButton(
             key: const Key('modelSearchButton'),
-            onPressed: _search,
+            onPressed: () {
+              // Every explicit search starts again from the first page.
+              _offset = 0;
+              _search();
+            },
             child: Text(l10n.modelSearchButton),
           ),
         ),
@@ -312,7 +331,7 @@ class _HfBrowserState extends ConsumerState<HfBrowser> {
               key: const Key('modelShowMoreButton'),
               onPressed: () {
                 _offset += 20;
-                _search();
+                _search(append: true);
               },
               child: Text(l10n.modelShowMore),
             ),
