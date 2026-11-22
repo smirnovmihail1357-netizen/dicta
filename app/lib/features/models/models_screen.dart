@@ -131,8 +131,19 @@ class ModelsScreen extends ConsumerWidget {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              if (failure != null) Text(l10n.errDeleteFailed),
-              Text(failure ?? l10n.modelDeleted),
+              // Error snackbar canon (history inject / models select): both
+              // lines carry the error tone. The success "deleted" line stays
+              // in its default tone — only the failure path is two-part.
+              if (failure != null)
+                Text(
+                  l10n.errDeleteFailed,
+                  style: TextStyle(color: colors.error),
+                ),
+              Text(
+                failure ?? l10n.modelDeleted,
+                style:
+                    failure != null ? TextStyle(color: colors.error) : null,
+              ),
             ],
           ),
         ),
