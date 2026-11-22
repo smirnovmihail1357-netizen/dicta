@@ -160,9 +160,17 @@ The **Model** tab downloads ggml models straight from Hugging Face in three ways
 
 1. **Quick pick (verified)** — six whisper.cpp models from the built-in catalog (approximate size
    and a one-line note are shown), press «скачать»;
-2. **Find any model** — search Hugging Face (for example, `whisper ggml`), click a repository to
-   list its `.bin` files with sizes, then download the one you need;
+2. **Hugging Face browser** — opens with the top speech-recognition models already loaded. Filter
+   by name (empty = all ASR), sort by downloads, likes or last update, and untick «speech
+   recognition only» to see every model. Results read `id — N downloads · N likes`, and «показать
+   ещё» appends the next 20. Click a repository to walk its subfolders («← на уровень вверх» goes
+   back); a `.bin` file from a subfolder is saved under its base name next to the current model;
 3. **Direct link** — paste an arbitrary `https://.../resolve/main/<file>.bin` URL.
+
+The **VRAM limit** slider (2–32 GB, 24 by default, UI-only — not written to the config) flags files
+larger than your GPU memory: a ggml model occupies roughly its own size in VRAM, so an oversized
+file is marked «≈N ГБ — больше лимита VRAM» and its download button is disabled. The quick pick and
+direct-link downloads are not restricted by this limit.
 
 Search and download are independent: a request to the API does not block a download and vice
 versa. A known size gives a progress bar (catalog and repository files); a direct link gives a

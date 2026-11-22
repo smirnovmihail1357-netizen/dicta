@@ -41,6 +41,32 @@ impl Tab {
     }
 }
 
+/// Порядок результатов в браузере Hugging Face.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum HfSort {
+    Downloads,
+    Likes,
+    Updated,
+}
+
+impl HfSort {
+    fn api_str(self) -> &'static str {
+        match self {
+            HfSort::Downloads => "downloads",
+            HfSort::Likes => "likes",
+            HfSort::Updated => "lastModified",
+        }
+    }
+
+    fn label(self) -> &'static str {
+        match self {
+            HfSort::Downloads => "по скачиваниям",
+            HfSort::Likes => "по лайкам",
+            HfSort::Updated => "по обновлению",
+        }
+    }
+}
+
 /// Идущая загрузка модели: курл в фоне плюс данные для полосы прогресса.
 struct Download {
     child: Child,
@@ -58,8 +84,14 @@ struct Fetch {
 }
 
 enum FetchKind {
-    Search,
-    Tree(String),
+    /// `append` — дописать результаты к уже показанным («показать ещё»).
+    Search {
+        append: bool,
+    },
+    Tree {
+        repo: String,
+        subpath: String,
+    },
 }
 
 struct App {
@@ -77,12 +109,23 @@ struct App {
     catalog_pick: usize,
     /// Фоновая загрузка ggml-модели (одновременно только одна).
     download: Option<Download>,
-    /// Поиск модели на Hugging Face.
+    /// Фильтры браузера Hugging Face.
     hf_query: String,
+    hf_sort: HfSort,
+    hf_asr_only: bool,
+    /// Делали ли уже выборку (для однократной автозагрузки топ-моделей).
+    hf_loaded: bool,
+    /// Последняя выборка вернула 20 штук — есть ещё страницы.
+    hf_more: bool,
     hf_repos: Vec<HfRepo>,
     /// Выбранный репозиторий: когда он есть, показываем его файлы.
     hf_repo: Option<String>,
+    /// Текущая подпапка внутри репозитория ("" — корень).
+    hf_subpath: String,
     hf_files: Vec<HfFile>,
+    hf_dirs: Vec<String>,
+    /// Порог размера файла для подсказки про VRAM (только UI, в конфиг не пишется).
+    vram_limit_gb: f32,
     /// Ссылка, вставленная пользователем вручную.
     hf_direct_url: String,
     /// Один активный запрос к API (отдельный слот — не мешает загрузке).
@@ -102,9 +145,16 @@ impl App {
             catalog_pick: 0,
             download: None,
             hf_query: String::new(),
+            hf_sort: HfSort::Downloads,
+            hf_asr_only: true,
+            hf_loaded: false,
+            hf_more: false,
             hf_repos: Vec::new(),
             hf_repo: None,
+            hf_subpath: String::new(),
             hf_files: Vec::new(),
+            hf_dirs: Vec::new(),
+            vram_limit_gb: 24.0,
             hf_direct_url: String::new(),
             hf_fetch: None,
         };
@@ -217,8 +267,16 @@ impl App {
             return;
         }
         let url = match &kind {
-            FetchKind::Search => hf::search_url(&self.hf_query),
-            FetchKind::Tree(repo) => hf::tree_url(repo),
+            FetchKind::Search { append } => {
+                let offset = if *append { self.hf_repos.len() } else { 0 };
+                hf::browse_url(
+                    self.hf_query.trim(),
+                    self.hf_sort.api_str(),
+                    self.hf_asr_only,
+                    offset,
+                )
+            }
+            FetchKind::Tree { repo, subpath } => hf::tree_url_at(repo, subpath),
         };
         let child = Command::new("curl")
             .args(["-s", "--fail"])
@@ -263,17 +321,28 @@ impl App {
                 };
                 let text = String::from_utf8_lossy(&output.stdout);
                 match done.kind {
-                    FetchKind::Search => {
-                        self.hf_repos = hf::parse_search(&text);
-                        self.hf_repo = None;
-                        self.hf_files.clear();
+                    FetchKind::Search { append } => {
+                        let repos = hf::parse_search(&text);
+                        self.hf_more = repos.len() == 20;
+                        self.hf_loaded = true;
+                        if append {
+                            self.hf_repos.extend(repos);
+                        } else {
+                            self.hf_repos = repos;
+                            self.hf_repo = None;
+                            self.hf_subpath.clear();
+                            self.hf_files.clear();
+                            self.hf_dirs.clear();
+                        }
                         if self.hf_repos.is_empty() {
                             self.flash_info = Some("ничего не нашлось".into());
                         }
                     }
-                    FetchKind::Tree(repo) => {
+                    FetchKind::Tree { repo, subpath } => {
                         self.hf_files = hf::parse_tree(&text);
+                        self.hf_dirs = hf::parse_tree_dirs(&text);
                         self.hf_repo = Some(repo);
+                        self.hf_subpath = subpath;
                         if self.hf_files.is_empty() {
                             self.flash_info = Some("в этом репозитории нет .bin файлов".into());
                         }
@@ -414,6 +483,12 @@ impl App {
     }
 
     fn model_tab(&mut self, ui: &mut egui::Ui) {
+        // Первое открытие вкладки: показываем топ ASR-моделей без запроса пользователя.
+        if !self.hf_loaded && self.hf_fetch.is_none() && self.client.is_some() {
+            // Отмечаем сразу, чтобы при отсутствии curl не спавнить процесс каждый кадр.
+            self.hf_loaded = true;
+            self.start_fetch(FetchKind::Search { append: false });
+        }
         ui.heading("Модель");
         if self.settings.reloading {
             ui.label("модель загружается…");
@@ -522,43 +597,110 @@ impl App {
         }
 
         ui.separator();
-        ui.heading("Найти любую модель");
+        ui.heading("Браузер Hugging Face");
+        let mut sort_changed = false;
+        let mut filter_changed = false;
         ui.horizontal(|ui| {
             ui.add(
-                egui::TextEdit::singleline(&mut self.hf_query).hint_text("например: whisper ggml"),
+                egui::TextEdit::singleline(&mut self.hf_query)
+                    .hint_text("фильтр по названию — пусто = все ASR"),
             );
-            let busy = self.hf_fetch.is_some();
-            if ui
-                .add_enabled(
-                    !busy && !self.hf_query.trim().is_empty(),
-                    egui::Button::new("найти"),
-                )
-                .clicked()
-            {
-                self.start_fetch(FetchKind::Search);
+            for sort in [HfSort::Downloads, HfSort::Likes, HfSort::Updated] {
+                if ui
+                    .add(egui::SelectableLabel::new(
+                        self.hf_sort == sort,
+                        sort.label(),
+                    ))
+                    .clicked()
+                    && self.hf_sort != sort
+                {
+                    self.hf_sort = sort;
+                    sort_changed = true;
+                }
             }
         });
+        ui.horizontal(|ui| {
+            if ui
+                .checkbox(&mut self.hf_asr_only, "только распознавание речи")
+                .changed()
+            {
+                filter_changed = true;
+            }
+            if ui
+                .add_enabled(self.hf_fetch.is_none(), egui::Button::new("найти"))
+                .clicked()
+            {
+                self.start_fetch(FetchKind::Search { append: false });
+            }
+        });
+        // Смену сортировки/фильтра применяем сразу, но не раньше первой выборки —
+        // иначе автозагрузка при открытии вкладки сделает лишний запрос.
+        if (sort_changed || filter_changed) && (self.hf_loaded || !self.hf_repos.is_empty()) {
+            self.start_fetch(FetchKind::Search { append: false });
+        }
+
         if let Some(repo) = &self.hf_repo {
             let repo = repo.clone();
+            let subpath = self.hf_subpath.clone();
             ui.label(format!("репозиторий: {repo}"));
-            if ui.button("← назад к результатам").clicked() {
-                self.hf_repo = None;
+            if !subpath.is_empty() {
+                ui.weak(format!("папка: {subpath}"));
+            }
+            if ui.button("← на уровень вверх").clicked() {
+                if subpath.is_empty() {
+                    // Из корня — обратно к списку моделей.
+                    self.hf_repo = None;
+                    self.hf_subpath.clear();
+                    self.hf_dirs.clear();
+                    self.hf_files.clear();
+                } else {
+                    let parent = subpath
+                        .rsplit_once('/')
+                        .map(|(parent, _)| parent.to_string())
+                        .unwrap_or_default();
+                    self.hf_files.clear();
+                    self.start_fetch(FetchKind::Tree {
+                        repo: repo.clone(),
+                        subpath: parent,
+                    });
+                }
+            }
+            let dirs = self.hf_dirs.clone();
+            for dir in dirs {
+                if ui.button(format!("[папка] {dir}")).clicked() {
+                    self.hf_files.clear();
+                    self.start_fetch(FetchKind::Tree {
+                        repo: repo.clone(),
+                        subpath: dir,
+                    });
+                }
             }
             let files = self.hf_files.clone();
             for file in &files {
-                let exists = catalog::dest_dir(&current_model).join(&file.path).exists();
-                let path = file.path.clone();
-                let size = file.size;
+                // Файл из подпапки кладём плоским именем рядом с текущей моделью.
+                let dest_name = hf::dest_name(&file.path).to_string();
+                let exists = catalog::dest_dir(&current_model).join(&dest_name).exists();
+                let over_vram =
+                    file.size > 0 && file.size as f32 > self.vram_limit_gb * 1_000_000_000.0;
                 ui.horizontal(|ui| {
-                    ui.label(format!("{path} — ≈{} МБ", size / 1_000_000));
+                    ui.label(format!("{} — {}", file.path, size_text(file.size)));
+                    if over_vram {
+                        ui.weak(format!("{} — больше лимита VRAM", size_text(file.size)));
+                    }
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                         if exists {
                             ui.weak("есть ✓");
+                        } else if over_vram {
+                            ui.add_enabled(false, egui::Button::new("скачать"));
                         } else if ui
                             .add_enabled(!downloading, egui::Button::new("скачать"))
                             .clicked()
                         {
-                            self.start_download(path.clone(), hf::resolve_url(&repo, &path), size);
+                            self.start_download(
+                                dest_name.clone(),
+                                hf::resolve_url(&repo, &file.path),
+                                file.size,
+                            );
                         }
                     });
                 });
@@ -573,14 +715,38 @@ impl App {
                             egui::SelectableLabel::new(false, repo.id.clone()),
                         )
                         .clicked();
-                    ui.weak(format!("— {} скачиваний", repo.downloads));
+                    ui.weak(format!(
+                        "— {} скачиваний · {} лайков",
+                        repo.downloads, repo.likes
+                    ));
                     if clicked {
                         self.hf_files.clear();
-                        self.start_fetch(FetchKind::Tree(repo.id.clone()));
+                        self.hf_dirs.clear();
+                        self.hf_subpath.clear();
+                        self.start_fetch(FetchKind::Tree {
+                            repo: repo.id.clone(),
+                            subpath: String::new(),
+                        });
                     }
                 });
             }
+            if self.hf_more
+                && ui
+                    .add_enabled(self.hf_fetch.is_none(), egui::Button::new("показать ещё"))
+                    .clicked()
+            {
+                self.start_fetch(FetchKind::Search { append: true });
+            }
         }
+        ui.horizontal(|ui| {
+            ui.label(format!("лимит VRAM: {:.0} ГБ", self.vram_limit_gb));
+            ui.add(
+                egui::Slider::new(&mut self.vram_limit_gb, 2.0..=32.0)
+                    .step_by(1.0)
+                    .show_value(false),
+            );
+        });
+        ui.weak("файлы крупнее лимита помечены — в память GPU не влезут");
 
         ui.separator();
         ui.heading("Прямая ссылка");
@@ -769,6 +935,15 @@ fn model_name(model: &str) -> String {
     stem.strip_prefix("ggml-").unwrap_or(stem).to_string()
 }
 
+/// Размер файла в браузере: МБ, а начиная с 1 ГБ — ГБ с одним знаком после запятой.
+fn size_text(size: u64) -> String {
+    if size >= 1_000_000_000 {
+        format!("≈{:.1} ГБ", size as f64 / 1_000_000_000.0)
+    } else {
+        format!("≈{} МБ", size / 1_000_000)
+    }
+}
+
 /// Слайдер уровня 0..1: шлём по отпусканию ползунка, не на каждый кадр.
 fn level_slider(ui: &mut egui::Ui, app: &mut App, key: &'static str, label: &str, value: f32) {
     let mut pending = value;
@@ -885,5 +1060,23 @@ mod tests {
         assert_eq!(Tab::Model.title(), "Модель");
         assert_eq!(Tab::Insert.title(), "Вставка");
         assert_eq!(Tab::System.title(), "Система");
+    }
+
+    #[test]
+    fn hf_sort_maps_to_api_and_ui_labels() {
+        assert_eq!(HfSort::Downloads.api_str(), "downloads");
+        assert_eq!(HfSort::Likes.api_str(), "likes");
+        assert_eq!(HfSort::Updated.api_str(), "lastModified");
+        assert_eq!(HfSort::Downloads.label(), "по скачиваниям");
+        assert_eq!(HfSort::Likes.label(), "по лайкам");
+        assert_eq!(HfSort::Updated.label(), "по обновлению");
+    }
+
+    #[test]
+    fn size_text_switches_to_gigabytes_at_one_gb() {
+        assert_eq!(size_text(0), "≈0 МБ");
+        assert_eq!(size_text(32_000_000), "≈32 МБ");
+        assert_eq!(size_text(1_100_000_000), "≈1.1 ГБ");
+        assert_eq!(size_text(4_700_000_000), "≈4.7 ГБ");
     }
 }
