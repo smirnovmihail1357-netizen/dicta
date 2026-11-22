@@ -6,6 +6,7 @@ import 'dart:async';
 
 import 'package:dicta_app/core/engine.dart';
 import 'package:dicta_app/core/providers.dart';
+import 'package:dicta_app/core/settings.dart';
 import 'package:dicta_app/core/theme_ext.dart';
 import 'package:dicta_app/features/dashboard/dicta_control.dart';
 import 'package:dicta_app/features/shell/shell.dart';
@@ -21,7 +22,7 @@ class FakeDictaEngine implements DictaEngine {
     this.fetchSettingsReply,
     this.stopReply,
     this.injectReply,
-    this.setReply,
+    this.setReplyMap,
     this.cancelReply,
     this.statusError,
     this.onSet,
@@ -44,8 +45,10 @@ class FakeDictaEngine implements DictaEngine {
   DictaStatus? stopReply;
   DictaStatus? injectReply;
 
-  /// Scripted set reply (Task 5): defaults to a silent success.
-  DictaReply? setReply;
+  /// Scripted full set reply (C1): note + error + settings snapshot.
+  /// Null mirrors the daemon default: the reply carries a fresh snapshot
+  /// built from fetchSettingsReply (which onSet may have just mutated).
+  Map<String, dynamic>? setReplyMap;
 
   /// Scripted cancel reply (WR-04): lets tests pin the daemon's cancellation
   /// notice exactly, including the "suppress honest noise" branch.
@@ -117,10 +120,13 @@ class FakeDictaEngine implements DictaEngine {
   }
 
   @override
-  Future<DictaReply> set(String key, String value) async {
+  Future<SetReply> set(String key, String value) async {
     setCalls.add((key: key, value: value));
+    // onSet runs before the snapshot is read so a test can mutate the reply.
     onSet?.call(key, value);
-    return setReply ?? const DictaReply(ok: true);
+    return SetReply.fromReply(
+      setReplyMap ?? fetchSettingsReply ?? const <String, dynamic>{},
+    );
   }
 }
 

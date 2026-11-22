@@ -8,6 +8,8 @@ library;
 
 import 'dart:convert';
 
+import 'settings.dart';
+
 enum DaemonState { idle, recording, transcribing }
 
 class DictaStatus {
@@ -82,7 +84,10 @@ abstract interface class DictaEngine {
 
   /// Full decoded reply map; SettingsReply.fromReply consumes it (Task 4).
   Future<Map<String, dynamic>> fetchSettings();
-  Future<DictaReply> set(String key, String value);
+
+  /// The reply carries a note and a fresh settings snapshot (C1) so the form
+  /// can update without a refetch and engine-reload refusals stay visible.
+  Future<SetReply> set(String key, String value);
 }
 
 Map<String, dynamic> decodeReplyMap(String line) {

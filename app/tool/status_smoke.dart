@@ -9,7 +9,8 @@ Future<void> main() async {
     final status = await engine.status();
     stdout.writeln('SMOKE OK state=${status.state.name}');
   } catch (error) {
-    stderr.writeln('SMOKE FAIL $error');
+    // Type only: never print the error object (03-SECURITY residual).
+    stderr.writeln('SMOKE FAIL ${error.runtimeType}');
     exitCode = 1;
   }
 }

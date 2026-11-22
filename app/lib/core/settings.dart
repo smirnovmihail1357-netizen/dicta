@@ -152,3 +152,25 @@ class SettingsReply {
   final bool reloading;
   final String configPath;
 }
+
+/// The set reply always carries a fresh settings snapshot (dictad
+/// main.rs:730-739). `note` is the reply's text and may hold the engine-reload
+/// refusal while `error` stays null; `error` is the top-level/transport error.
+class SetReply {
+  const SetReply({this.note, this.error, required this.settings});
+
+  /// Reuses the single snapshot parser in SettingsReply.fromReply - there is
+  /// deliberately no second settings parser for the set reply.
+  factory SetReply.fromReply(Map<String, dynamic> reply) {
+    final parsed = SettingsReply.fromReply(reply);
+    return SetReply(
+      note: reply['text'] as String?,
+      error: parsed.error,
+      settings: parsed.settings,
+    );
+  }
+
+  final String? note;
+  final String? error;
+  final SettingsReply settings;
+}

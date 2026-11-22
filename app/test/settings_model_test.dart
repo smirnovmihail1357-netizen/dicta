@@ -69,4 +69,28 @@ void main() {
   test('top-level error is surfaced from the reply', () {
     expect(SettingsReply.fromReply({'error': 'bad value'}).error, 'bad value');
   });
+
+  test('SetReply.fromReply carries note and a fresh settings snapshot', () {
+    final reply = SetReply.fromReply({
+      'text': 'перезагружаю',
+      'settings': {'min_level': 0.42},
+    });
+    expect(reply.note, 'перезагружаю');
+    expect(reply.error, isNull);
+    expect(reply.settings.minLevel, closeTo(0.42, 1e-6));
+  });
+
+  test('SetReply.fromReply surfaces the error with default settings', () {
+    final reply = SetReply.fromReply({'error': 'минус'});
+    expect(reply.error, 'минус');
+    expect(reply.note, isNull);
+    expect(reply.settings.language, 'ru');
+  });
+
+  test('SetReply.fromReply on an empty map has no note and no error', () {
+    final reply = SetReply.fromReply({});
+    expect(reply.note, isNull);
+    expect(reply.error, isNull);
+    expect(reply.settings.minLevel, 0.0);
+  });
 }

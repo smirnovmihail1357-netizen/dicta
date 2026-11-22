@@ -86,8 +86,8 @@ void main() {
     fake = FakeDictaEngine(
       const DictaStatus(connected: true, state: DaemonState.idle),
       fetchSettingsReply: settingsFixture,
-      // The daemon accepted 0.42; the refetch must report the NEW value,
-      // otherwise a synchronous .value read would echo the pre-drag 0.35.
+      // The daemon accepted 0.42; the set reply must carry the NEW snapshot,
+      // otherwise the form would echo the pre-drag 0.35.
       onSet: (_, value) {
         fake.fetchSettingsReply = <String, dynamic>{
           'settings': <String, dynamic>{'min_level': double.parse(value)},
@@ -103,7 +103,7 @@ void main() {
     expect(painter().marker, closeTo(0.35, 1e-6));
 
     await dragMarkerTo(tester, 0.42);
-    // set -> invalidate -> await settings.future completes over microtasks.
+    // set -> SetReply snapshot over microtasks; no refetch.
     await tester.pump(const Duration(milliseconds: 100));
     await tester.pump();
 
@@ -189,6 +189,7 @@ void main() {
     expect(find.text('порог 0.42'), findsOneWidget);
 
     // onChangeEnd is the single commit, with the panel's {:.2} format.
+    final fetchCountBeforeSet = fake.fetchCount;
     slider.onChangeEnd!(0.42);
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 100));
@@ -197,8 +198,10 @@ void main() {
     expect(fake.setCalls.length, 1);
     expect(fake.setCalls.single.key, 'min_level');
     expect(fake.setCalls.single.value, '0.42');
-    // CR-01: the readout settles on the daemon's canonical value.
+    // The readout settles on the canonical value from the set reply snapshot.
     expect(find.text('порог 0.42'), findsOneWidget);
+    // Anti-refetch gate: the set reply already carried the snapshot.
+    expect(fake.fetchCount, fetchCountBeforeSet);
 
     await tester.pumpWidget(const SizedBox.shrink());
   });
@@ -228,10 +231,9 @@ void main() {
     final fake = FakeDictaEngine(
       const DictaStatus(connected: true, state: DaemonState.recording),
       fetchSettingsReply: autoStopFixture,
-      setReply: const DictaReply(
-        ok: false,
-        error: 'min_level: 1.5 вне диапазона 0..1',
-      ),
+      setReplyMap: const {
+        'error': 'min_level: 1.5 вне диапазона 0..1',
+      },
     );
     await tester.pumpWidget(buildFakeApp(fake));
     await tick(tester);

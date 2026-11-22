@@ -7,6 +7,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'engine.dart';
+import 'settings.dart';
 
 /// DICTA_SOCK (test override) -> XDG_RUNTIME_DIR -> /run/user/`uid`.
 /// A config.toml `socket = "..."` override is deliberately not parsed in
@@ -159,8 +160,32 @@ class DaemonEngine implements DictaEngine {
       );
 
   @override
-  Future<DictaReply> set(String key, String value) => _commandLine(
-        buildSetLine(key, value),
-        timeout: _settingsTimeout,
+  Future<SetReply> set(String key, String value) async {
+    try {
+      // Parse the FULL reply: note (text) + error + fresh settings snapshot
+      // (dictad main.rs:730-739). _commandLine would drop note and settings.
+      final map = decodeReplyMap(
+        await _call(buildSetLine(key, value), timeout: _settingsTimeout),
       );
+      return SetReply.fromReply(map);
+    } on SocketException catch (error) {
+      // Error message only - never log the set payload (payload privacy).
+      return SetReply(
+        note: null,
+        error: error.message,
+        settings: const SettingsReply(),
+      );
+    } on TimeoutException {
+      return SetReply(
+        error: _timeoutHint(_settingsTimeout),
+        settings: const SettingsReply(),
+      );
+    } catch (_) {
+      // JSON/format/EOF failures only - never mask a SocketException again.
+      return SetReply(
+        error: _badReply,
+        settings: const SettingsReply(),
+      );
+    }
+  }
 }
