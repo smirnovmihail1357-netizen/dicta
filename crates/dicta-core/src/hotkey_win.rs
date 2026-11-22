@@ -67,12 +67,13 @@ pub fn listen(spec: &str, mut on_press: impl FnMut() + Send + 'static) -> Result
 
     unsafe {
         RegisterHotKey(None, 1, mods, vk).map_err(|err| {
+            // code() — HRESULT-обёртка windows-crate вида 0x8007xxxx. Настоящий
+            // GetLastError — младшие 16 бит (HRESULT_CODE), напр. 1409 =
+            // ERROR_HOTKEY_ALREADY_REGISTERED (IN-03).
+            let win32 = (err.code().0 as u32) & 0xFFFF;
             Error::new(
                 ErrorKind::PermissionDenied,
-                format!(
-                    "комбинация '{spec}' занята или недоступна (GetLastError={})",
-                    err.code().0
-                ),
+                format!("комбинация '{spec}' занята или недоступна (GetLastError={win32})"),
             )
         })?;
     }
