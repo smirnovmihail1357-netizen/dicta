@@ -86,6 +86,13 @@ void main() {
     expect(filenameOf('https://host/dir'), 'dir');
     expect(filenameOf('example.com'), isNull);
     expect(filenameOf(''), isNull);
+    // T-4-01: a traversal-like last segment must never become a dest name.
+    expect(filenameOf('https://x/..'), isNull);
+    expect(filenameOf('https://x/.'), isNull);
+    expect(filenameOf('https://x/a/b/..?download=1'), isNull);
+    expect(filenameOf('https://x/a\\..'), isNull);
+    // Percent-encoded separators stay literal file names, no traversal.
+    expect(filenameOf('https://x/..%2F..bin'), '..%2F..bin');
   });
 
   test('vramBlocked uses the exact daemon comparison', () {

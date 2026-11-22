@@ -76,6 +76,15 @@ class DownloadManager extends Notifier<DownloadState> {
     // await: the old guard left a whole round-trip window where a second tap
     // could start a concurrent download over the same .part (WR-02).
     if (_starting || state is DownloadActive) return;
+    // Defense in depth for every call site (catalog, tree, direct link): a
+    // traversal-like name would escape dest_dir lexically (T-4-01).
+    if (destName == '.' ||
+        destName == '..' ||
+        destName.contains('/') ||
+        destName.contains('\\')) {
+      state = DownloadFailed(message: 'download failed: invalid name');
+      return;
+    }
     _starting = true;
     File? failedPart;
     try {

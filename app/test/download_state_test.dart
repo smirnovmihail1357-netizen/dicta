@@ -275,4 +275,20 @@ void main() {
     // cancel() on the real engine is safe even with no request in flight.
     expect(HttpDownloadEngine().cancel, returnsNormally);
   });
+
+  test('a traversal-like dest name is rejected before any filesystem use',
+      () async {
+    final fake = FakeDownloadEngine(scenario: FakeDownloadScenario.ok200);
+    final container = containerFor(fake);
+    addTearDown(container.dispose);
+
+    await container.read(downloadManagerProvider.notifier).start(
+          url: 'https://hf/..',
+          destName: '..',
+        );
+    final state = container.read(downloadManagerProvider);
+
+    expect(state, isA<DownloadFailed>());
+    expect(fake.calls, isEmpty);
+  });
 }

@@ -111,7 +111,15 @@ String? filenameOf(String url) {
   final path = url.split('?').first;
   if (!path.contains('/')) return null;
   final name = path.split('/').last;
-  if (name.isEmpty) return null;
+  // T-4-01: '..' as the last segment would make dest_dir/.. resolve to the
+  // PARENT of dest_dir. Reject traversal-like and non-file names here.
+  // A percent-encoded '..%2F..bin' stays a literal, harmless file name.
+  if (name.isEmpty ||
+      name == '.' ||
+      name == '..' ||
+      name.contains('\\')) {
+    return null;
+  }
   return name;
 }
 
