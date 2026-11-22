@@ -68,6 +68,14 @@ void main() {
       );
     });
 
+    test('explicit Windows model parent wins over localAppData', () {
+      expect(
+        destDirFrom(r'C:\models\ggml.bin', null, '/home/u',
+            r'C:\Users\u\AppData\Local'),
+        r'C:\models',
+      );
+    });
+
     test('Linux HOME fallback is unchanged (regression)', () {
       expect(
         destDirFrom('ggml.bin', null, '/home/u', null),

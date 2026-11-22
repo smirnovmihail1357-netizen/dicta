@@ -35,9 +35,12 @@ String destDirFrom(String model, String? xdgDataHome, String? home,
     [String? localAppData]) {
   // Path::new(model).parent() - '/x' has the root '/' as its parent, while a
   // bare name ('ggml.bin') has an empty parent and takes the fallback.
-  final index = model.lastIndexOf('/');
+  // Windows custom-model paths use backslashes, so consider both separators.
+  final slash = model.lastIndexOf('/');
+  final backslash = model.lastIndexOf('\\');
+  final index = backslash > slash ? backslash : slash;
   if (index >= 0) {
-    final parent = index == 0 ? '/' : model.substring(0, index);
+    final parent = index == 0 ? model[index] : model.substring(0, index);
     if (parent.isNotEmpty) return parent;
   }
   // Windows: local app data + whisper-cpp — BEFORE the Unix data-home
