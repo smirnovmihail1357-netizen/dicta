@@ -2,19 +2,19 @@
 gsd_state_version: "1.0"
 milestone: v1.1
 milestone_name: «Dicta App»
-current_phase: 6
-current_phase_name: Windows CI + каркас
+current_phase: 7
+current_phase_name: Windows диктовка MVP
 status: executing
 stopped_at: Roadmap v1.1 создан, файлы ROADMAP.md/STATE.md/REQUIREMENTS.md написаны; коммитов нет (оркестратор коммитит)
-last_updated: "2026-11-22T17:31:48.844Z"
+last_updated: "2026-11-22T19:00:15.332Z"
 last_activity: 2026-11-22
 last_activity_desc: Roadmap v1.1 создан (8 фаз, 29/29 требований замаплено)
-state_head: eb344e6cb8ef8edde988526a2aba88c0cc2d4c44
+state_head: 944708cd7cdf0042fdec74c83cf5441ed3b33555
 progress:
   total_phases: 8
   completed_phases: 0
-  total_plans: 6
-  completed_plans: 4
+  total_plans: 8
+  completed_plans: 5
 ---
 
 # Project State
@@ -28,9 +28,9 @@ See: .planning/PROJECT.md (updated 2026-11-22)
 
 ## Current Position
 
-Phase: 6 (Windows CI + каркас) — READY TO EXECUTE
+Phase: 7 (Windows диктовка MVP) — READY TO EXECUTE
 Status: planned
-Total Plans in Phase: 1
+Total Plans in Phase: 2
 Plans Completed in Phase: 0
 Last activity: 2026-11-22 — Phase 5 спланирована (05-01-PLAN.md, чекер PASS ревизия 1)
 

@@ -530,13 +530,13 @@ fn type_fallback(mut enigo: &mut Enigo, text: &str) -> Result<(), enigo::InputEr
 | A7 | `cfg.mic` (PipeWire source) на Windows не применим; MVP = дефолтный микрофон | §2 | Если нужен выбор микрофона — матчинг по имени cpal-устройства (малая доработка) |
 | A8 | dart_ipc-клиент совместим с interprocess-сервером в pipe_mode::Bytes (построчная семантика) | §12 | Риск совместимости transport-пар; проверяется первым же UAT-пунктом U-3 из 06-UAT (поглощается фазой 7) |
 
-## Open Questions
+## Open Questions (RESOLVED)
 
-1. **WM_RENDERFORMAT в message-only окно** — доки гарантируют доставку direct-сообщений, но не фиксируют прямо случай clipboard-owner. Что делаем: пункт №7 спик-протокола (message-only → fallback скрытое окно с логом, какой сработал). Планировать inject_win с параметризуемым типом окна до результата спика.
-2. **Латентность CPU-inference на Windows-машине пользователя** — та же модель (locked 4), GPU нет (Vulkan сломан). Замер в UAT; если неприемлемо — осознанное решение пользователя по конфигу (n_threads/beam/модель), не архитектурная правка.
-3. **interprocess 2.4.8 vs 2.4.9** — планёр выбирает пин (locked 4 писал 2.4.8 до релиза 2.4.9; API-различий в security_descriptor не выявлено).
-4. **Дефолт hotkey-спеки на Windows** — Linux-дефолт "off" (config.rs:90); пользователь должен задать сам (DICTA_HOTKEY env или конфиг). Рекомендация: оставить "off" + документация, честная ошибка при занятости (§4).
-5. **Порядок двух планов** (Autonomy: split допустим) — рекомендация: 07-01 (cfg-гейт + capture + hotkey + transport/DACL + CI Rust-джоба + IN-02 Flutter-фикс) → 07-02 (спик → inject_win → UAT). Depends_on очевиден: вставка последней, спик — её предусловие.
+1. **WM_RENDERFORMAT в message-only окно** — доки гарантируют доставку direct-сообщений, но не фиксируют прямо случай clipboard-owner. Что делаем: пункт №7 спик-протокола (message-only → fallback скрытое окно с логом, какой сработал). Планировать inject_win с параметризуемым типом окна до результата спика. **RESOLVED: замер №7 спик-протокола (07-02 Task 1/2); тип окна фиксируется в 07-SPIKE-RESULT.md ДО inject_win — 07-02 Task 3 читает его как обязательный вход.**
+2. **Латентность CPU-inference на Windows-машине пользователя** — та же модель (locked 4), GPU нет (Vulkan сломан). Замер в UAT; если неприемлемо — осознанное решение пользователя по конфигу (n_threads/beam/модель), не архитектурная правка. **RESOLVED: UAT-пункт №6 (07-VALIDATION UAT) + README-заметка о конфиг-ручках (07-02 Task 4); A5 подтверждён.**
+3. **interprocess 2.4.8 vs 2.4.9** — планёр выбирает пин (locked 4 писал 2.4.8 до релиза 2.4.9; API-различий в security_descriptor не выявлено). **RESOLVED: пин 2.4.8 — locked 4 буквально; детерминизм через коммит Cargo.lock + --locked; записано в 07-VALIDATION Wave 0.**
+4. **Дефолт hotkey-спеки на Windows** — Linux-дефолт "off" (config.rs:90); пользователь должен задать сам (DICTA_HOTKEY env или конфиг). Рекомендация: оставить "off" + документация, честная ошибка при занятости (§4). **RESOLVED: дефолт остаётся "off"; README-заметка с рекомендацией Alt+клавиша (07-02 Task 4); занятость → честная ошибка с GetLastError (07-01 Task 4).**
+5. **Порядок двух планов** (Autonomy: split допустим) — рекомендация: 07-01 (cfg-гейт + capture + hotkey + transport/DACL + CI Rust-джоба + IN-02 Flutter-фикс) → 07-02 (спик → inject_win → UAT). Depends_on очевиден: вставка последней, спик — её предусловие. **RESOLVED: split выполнен — 07-01 (wave 1, сервер+захват+хоткей+CI) → 07-02 (wave 2, depends_on ["07-01"], спик → inject_win).**
 
 ## Sources
 

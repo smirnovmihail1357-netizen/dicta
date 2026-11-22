@@ -18,8 +18,8 @@ validated_by: plan-checker
 ## Mandatory Gates (фаза-уровень)
 
 1. `cargo test --workspace` (Linux) зелёный после каждого Rust-таска — Linux-батарея не деградирует.
-2. `git diff main -- crates/` показывает ТОЛЬКО cfg-развилки + новые _win-модули; Linux-поведение байт-в-байт (ci.yml не тронут).
-3. CI: расширенный windows-build.yml — Flutter-джоба + Rust-джоба (`dtolnay/rust-toolchain@stable`, `Swatinem/rust-cache@v2`, `cargo build/test --no-default-features -p dicta-core -p dictad`) зелёный на ветке windows.
+2. `git diff 23049d6 -- crates/` показывает ТОЛЬКО cfg-развилки + новые _win-модули; Linux-поведение байт-в-байт (ci.yml не тронут). База — неподвижный tip ветки windows 23049d6 (main движется .planning-коммитами оркестратора).
+3. CI: расширенный windows-build.yml — Flutter-джоба + Rust-джоба (`dtolnay/rust-toolchain@stable`, `Swatinem/rust-cache@v2`, `cargo build --release --locked --no-default-features -p dicta-core -p dictad` + `cargo test --locked --no-default-features -p dicta-core -p dictad`; build ОБЯЗАН быть --release — артефакт dictad.exe грузится из target/release) зелёный на ветке windows.
 4. `flutter test` (Linux) — батарея не падает (фаза не ломает Flutter; IN-02-остаток: hotkeyConfigTextProvider error-ветка + тесты).
 5. Спик: `spike/delayed_render` + `07-SPIKE-RESULT.md` существуют ДО production inject_win (Must-NOT 8; план обязан ставить inject-задачу с precondition на спик-результат).
 6. Windows-порты путей: %APPDATA% конфиг / %LOCALAPPDATA% модели (dirs::data_local_dir развилка — A-находка RESEARCH §10).
@@ -28,19 +28,21 @@ validated_by: plan-checker
 
 ## Per-Task Verification Map
 
-Task IDs: TBD — планёр привязывает при создании 07-01-PLAN.md / 07-02-PLAN.md (ожидаемая раскладка ниже).
+Task IDs: привязаны планёром 2026-11-22 (07-01-PLAN.md / 07-02-PLAN.md созданы; нумерация: план 07-01 = Task 1-5, план 07-02 = Task 1-4).
 
 | Behavior | Test command | Task ID |
 |---|---|---|
-| Hotkey-парсинг «alt+v» → (MOD_ALT\|MOD_NOREPEAT, VK_V) | `cargo test -p dicta-core hotkey_win` | TBD |
-| Capture-структура 16кГц mono / level>0 (без реального звука) | `cargo test -p dicta-core capture_win` | TBD |
-| Windows-сборка CPU-only | CI windows-latest Rust-джоба | TBD |
-| SDDL DACL-строка | `cargo test -p dictad transport_win` | TBD |
-| Enigo-комбо порядок | `cargo test -p dicta-core inject_win` | TBD |
-| Протокол не изменён | `flutter test` (framing/golden фазы 1-6) | TBD |
-| Linux не деградировал | `cargo test --workspace` + `git diff main -- crates/` | TBD |
-| Спик-артефакты | `test -f spike/delayed_render/Cargo.toml && test -f .../07-SPIKE-RESULT.md` (после прогона) | TBD |
-| IN-02-остаток Flutter | `flutter test` ≥ 194 | TBD |
+| Hotkey-парсинг «alt+v» → (MOD_ALT\|MOD_NOREPEAT, VK_V) | `cargo test -p dicta-core hotkey_win` | 07-01 Task 4 |
+| Capture-структура 16кГц mono / level>0 (без реального звука) | `cargo test -p dicta-core capture_win` | 07-01 Task 3 |
+| Windows-сборка CPU-only | CI windows-latest Rust-джоба | 07-01 Task 2 |
+| SDDL DACL-строка | `cargo test -p dictad transport_win` | 07-01 Task 1 |
+| Enigo-комбо порядок | `cargo test -p dicta-core inject_win` | 07-02 Task 3 |
+| Протокол не изменён | `flutter test` (framing/golden фазы 1-6) | 07-01 Task 5 (батарея; фрейминг не трогается ни одним таском) |
+| Linux не деградировал | `cargo test --workspace` + `git diff 23049d6 -- crates/` (база: код 23049d6, НЕ движущийся main) | каждый Rust-таск обоих планов; финальные аудиты — 07-01 Task 5 и 07-02 Task 4 |
+| Спик-артефакты | `test -f spike/delayed_render/Cargo.toml && test -f .../07-SPIKE-RESULT.md` (после прогона) | 07-02 Task 1 (создание) + Task 2 (checkpoint: прогон/заполнение) |
+| IN-02-остаток Flutter | `flutter test` ≥ 194 | 07-01 Task 5 |
+
+Резолюции Wave 0 (планёр, 2026-11-22): interprocess пин = **2.4.8** (locked 4 буквально; drift-заметка A6 — 2.4.9 вышла 2026-11-18, API security_descriptor идентичен; детерминизм через коммит Cargo.lock + --locked); CPU-only подтверждён (07-01 Task 2: `cargo build/test --locked --no-default-features -p dicta-core -p dictad`; предпосылка — dep-строка dictad→dicta-core без жёсткого vulkan, 07-01 Task 1); cfg-гейтинг — 07-01 Task 1 (список RESEARCH §10); база заморозки — код 23049d6 / docs a434ff6 (branch_choreography обоих планов).
 
 ## Nyquist Sampling
 
