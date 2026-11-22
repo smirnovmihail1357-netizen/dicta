@@ -107,6 +107,15 @@ class TrayManagerService implements TrayService {
   Future<void> setIconState(TrayIconState state) async {
     // Guard by the last installed name: the 100 ms status tick must not spam
     // native icon swaps ten times a second (validation Sampling).
+    //
+    // WR-03 LIVE PROOF (2026-11-22, KDE Plasma 6 SNI host): with a live daemon
+    // and the built bundle, gdbus Properties.Get(IconPixmap) on this item showed
+    // 208 x #35689F blue / 0 x #E53935 red at idle, 0 / 208 after firing the
+    // DBusMenu "start" item, and 208 / 0 again after "cancel". A plain
+    // `trayIcon.icon = ImageAsset.fromAsset(...)` DOES repaint the panel, so the
+    // A1 destroy+create fallback is deliberately NOT added: re-registering the
+    // SNI item on every transition would only add risk. Repeat this probe if
+    // the panel/SNI host changes.
     if (state == _lastIconState) return;
     final icon = _trayIcon;
     if (icon == null) return;
