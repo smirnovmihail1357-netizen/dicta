@@ -46,7 +46,7 @@ order; row 4 carries Threat Ref T-2-01 (inject payload discipline). Legend same 
 
 | Task ID | Plan | Wave | Requirement | Threat Ref | Secure Behavior | Test Type | Automated Command | File Exists | Status |
 |---------|------|------|-------------|------------|-----------------|-----------|-------------------|-------------|--------|
-| Task 1 | 01 | 0 | (infra) | — | N/A | fake factory extraction | `cd app && flutter test test/fake_dicta_engine_test.dart` | ❌ W0 | ⬜ pending |
+| Task 1 | 01 | 0 | (infra) | — | N/A | fake factory extraction (8 tests, `implements DictaEngine` == 1) | `cd app && flutter test test/fake_dicta_engine_test.dart test/shell_test.dart test/widget_test.dart` | ✅ | ✅ green |
 | Task 2 | 01 | 1 | DASH-01 | — | N/A | widget (FakeDictaEngine, 3 states) + unit (ring buffer 200/порядок/clear) | `cd app && flutter test test/dashboard_state_test.dart test/level_history_test.dart` | ❌ W0 | ⬜ pending |
 | Task 3 | 01 | 1 | DASH-02 | — | N/A | widget (button matrix × {idle, recording, transcribing, disconnected}; «распознаю…» spinner) | `cd app && flutter test test/dashboard_buttons_test.dart` | ❌ W0 | ⬜ pending |
 | Task 4 | 01 | 2 | DASH-03 | T-2-01 | inject only sends user's last text via jsonEncode; never logs payload | widget (stop-reply text → card; copy via clipboard seam; inject framing/disabled-при-пустом/error shown) | `cd app && flutter test test/last_text_test.dart` | ❌ W0 | ⬜ pending |
@@ -72,9 +72,13 @@ order; row 4 carries Threat Ref T-2-01 (inject payload discipline). Legend same 
 
 ## Wave 0 Requirements
 
-- [ ] `app/test/fake_dicta_engine.dart` — единая фабрика фейков (сейчас 2 инлайн-копии в
-      widget_test.dart/shell_test.dart ломаются от расширения интерфейса stop()/inject());
-      сценарии: статус-снапшот, счётчик set, скриптуемые ответы stop/inject
+- [x] `app/test/fake_dicta_engine.dart` — единая фабрика фейков (2 инлайн-копии из
+      widget_test.dart/shell_test.dart слиты; `implements DictaEngine` == 1). Фактический
+      набор крюков Task 1: мутабельный `statusValue` (скриптование между тиками поллера),
+      `setCalls` (записи key/value), `injectTexts` (готов к Task 2), `stopGate`
+      (Completer-управляемый stop), `fetchSettingsReply` + `fetchCount`. Скриптуемые
+      `stopReply`/`injectReply` добавляются Task 2 вместе с новыми членами интерфейса;
+      `buildTestApp` остаётся в `shell_test.dart`.
 - [ ] Новые ключи .arb (~25) + `flutter gen-l10n` — до первого виджета (cyrillic gate)
 - [ ] Все новые тест-файлы из таблицы выше (стабы)
 - [ ] `app/tool/diag_smoke.dart` — по образцу `tool/status_smoke.dart`; живой демон:

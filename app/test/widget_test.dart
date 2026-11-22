@@ -7,40 +7,20 @@ import 'package:dicta_app/main.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-class _FakeEngine implements DictaEngine {
-  @override
-  Future<DictaStatus> status() async =>
-      const DictaStatus(connected: true, state: DaemonState.idle);
-
-  @override
-  Future<DictaReply> start({String? app}) async => const DictaReply(ok: true);
-
-  @override
-  Future<DictaReply> stop({String? app}) async => const DictaReply(ok: true);
-
-  @override
-  Future<DictaReply> toggle({String? app}) async => const DictaReply(ok: true);
-
-  @override
-  Future<DictaReply> cancel() async => const DictaReply(ok: true);
-
-  @override
-  Future<Map<String, dynamic>> fetchSettings() async => <String, dynamic>{};
-
-  @override
-  Future<DictaReply> set(String key, String value) async =>
-      const DictaReply(ok: true);
-
-  @override
-  Stream<DictaStatus> get statusStream => Stream<DictaStatus>.empty();
-}
+import 'fake_dicta_engine.dart';
 
 void main() {
   testWidgets('DictaApp boots and renders the first shell destination',
       (tester) async {
     await tester.pumpWidget(
       ProviderScope(
-        overrides: [engineProvider.overrideWithValue(_FakeEngine())],
+        overrides: [
+          engineProvider.overrideWithValue(
+            FakeDictaEngine(
+              const DictaStatus(connected: true, state: DaemonState.idle),
+            ),
+          )
+        ],
         child: const DictaApp(),
       ),
     );

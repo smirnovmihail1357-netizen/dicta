@@ -8,36 +8,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-class FakeDictaEngine implements DictaEngine {
-  FakeDictaEngine(this.snapshot);
-
-  final DictaStatus snapshot;
-
-  @override
-  Future<DictaStatus> status() async => snapshot;
-
-  @override
-  Future<DictaReply> start({String? app}) async => const DictaReply(ok: true);
-
-  @override
-  Future<DictaReply> stop({String? app}) async => const DictaReply(ok: true);
-
-  @override
-  Future<DictaReply> toggle({String? app}) async => const DictaReply(ok: true);
-
-  @override
-  Future<DictaReply> cancel() async => const DictaReply(ok: true);
-
-  @override
-  Future<Map<String, dynamic>> fetchSettings() async => <String, dynamic>{};
-
-  @override
-  Future<DictaReply> set(String key, String value) async =>
-      const DictaReply(ok: true);
-
-  @override
-  Stream<DictaStatus> get statusStream => Stream<DictaStatus>.empty();
-}
+import 'fake_dicta_engine.dart';
 
 Widget buildTestApp(FakeDictaEngine fake) {
   return ProviderScope(
