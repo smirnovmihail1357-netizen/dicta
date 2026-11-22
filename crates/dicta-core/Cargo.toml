@@ -18,6 +18,9 @@ atspi = { version = "0.22", optional = true, default-features = false, features 
 futures = { version = "0.3", optional = true }
 zbus = { version = "4.2", optional = true }
 
+[target.'cfg(windows)'.dependencies]
+cpal = "0.18.2"
+
 [features]
 default = ["vulkan"]
 # Vulkan (ggml-vulkan, RX 7900 XTX / iGPU). Требует glslangValidator при сборке.
