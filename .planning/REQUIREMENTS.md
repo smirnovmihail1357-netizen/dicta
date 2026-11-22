@@ -88,17 +88,45 @@
 
 ## Traceability
 
-Заполняется при создании roadmap.
+Заполнено при создании roadmap (2026-11-22).
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| (заполнит roadmap) | — | Pending |
+| APP-01 | Phase 1 | Pending |
+| APP-02 | Phase 1 | Pending |
+| APP-03 | Phase 1 | Pending |
+| APP-04 | Phase 1 | Pending |
+| APP-05 | Phase 1 | Pending |
+| APP-06 | Phase 1 | Pending |
+| DASH-01 | Phase 2 | Pending |
+| DASH-02 | Phase 2 | Pending |
+| DASH-03 | Phase 2 | Pending |
+| DASH-04 | Phase 2 | Pending |
+| DIAG-01 | Phase 2 | Pending |
+| HIST-01 | Phase 3 | Pending |
+| HIST-02 | Phase 3 | Pending |
+| HIST-03 | Phase 3 | Pending |
+| HIST-04 | Phase 3 | Pending |
+| CONF-01 | Phase 4 | Pending |
+| CONF-02 | Phase 4 | Pending |
+| MODEL-01 | Phase 4 | Pending |
+| MODEL-02 | Phase 4 | Pending |
+| TRAY-01 | Phase 5 | Pending |
+| TRAY-02 | Phase 5 | Pending |
+| HK-01 | Phase 5 | Pending |
+| HK-02 | Phase 5 | Pending |
+| WIN-01 | Phase 6 | Pending |
+| WIN-02 | Phase 6 | Pending |
+| WIN-05 | Phase 6 | Pending |
+| WIN-03 | Phase 7 | Pending |
+| WIN-04 | Phase 7 | Pending |
+| RETIRE-01 | Phase 8 | Pending |
 
 **Coverage:**
-- v1 requirements: 26 total
-- Mapped to phases: 0
-- Unmapped: 26 ⚠️ (до создания roadmap)
+- v1 requirements: 29 total (фактический подсчёт по REQ-ID; ранее в этом файле указывалось 26 — недосчёт, исправлен при создании roadmap)
+- Mapped to phases: 29/29 ✓
+- Unmapped: 0
 
 ---
 *Requirements defined: 2026-11-22*
-*Last updated: 2026-11-22 after initial definition*
+*Last updated: 2026-11-22 after roadmap creation (Traceability заполнена, счёт v1 исправлен 26→29)*
