@@ -3,6 +3,11 @@
 import 'package:dicta_app/core/tray.dart';
 
 class FakeTrayService implements TrayService {
+  FakeTrayService({this.failStart = false});
+
+  /// Simulates an SNI host / panel missing at boot (WR-02).
+  final bool failStart;
+
   final List<TrayIconState> iconCalls = <TrayIconState>[];
   int startCount = 0;
   int disposeCount = 0;
@@ -11,6 +16,7 @@ class FakeTrayService implements TrayService {
 
   @override
   Future<void> start() async {
+    if (failStart) throw StateError('no SNI host');
     startCount++;
   }
 

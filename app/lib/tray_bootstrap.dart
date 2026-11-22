@@ -7,6 +7,8 @@
 /// and menu ride on the existing dictaStatusProvider / DictaControlNotifier.
 library;
 
+import 'dart:io' show stderr;
+
 import 'package:dicta_app/core/providers.dart';
 import 'package:dicta_app/core/tray.dart';
 import 'package:dicta_app/core/window_shell.dart';
@@ -16,6 +18,33 @@ import 'package:dicta_app/l10n/generated/app_localizations.dart';
 import 'package:flutter/material.dart'
     show GlobalKey, Locale, ScaffoldMessengerState, SnackBar, Text;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+
+/// WR-02: the tray is an add-on, not the app core. If there is no SNI host on
+/// this session (GNOME without AppIndicator; panel not up yet at autostart),
+/// TrayIcon.create()/Menu.create() fail — but the window, dashboard and stop
+/// button must still work. Top-level so a test can inject a throwing fake via
+/// the provider overrides and prove no error escapes.
+Future<void> bootstrapTray(
+  ProviderContainer container, {
+  GlobalKey<ScaffoldMessengerState>? messengerKey,
+}) async {
+  try {
+    await TrayController(
+      container,
+      container.read(trayServiceProvider),
+      container.read(windowShellProvider),
+      messengerKey: messengerKey,
+    ).start();
+  } catch (error) {
+    // Unicode escapes keep the log Russian without a Cyrillic literal in lib/
+    // (phase-1 canon). Only the error TYPE is logged — never a payload.
+    stderr.writeln(
+      '\u0422\u0440\u0435\u0439 \u043d\u0435\u0434\u043e\u0441\u0442\u0443\u043f\u0435\u043d, '
+      '\u0437\u0430\u043f\u0443\u0441\u043a \u0431\u0435\u0437 \u0442\u0440\u0435\u044f: '
+      '${error.runtimeType}',
+    );
+  }
+}
 
 class TrayController {
   TrayController(

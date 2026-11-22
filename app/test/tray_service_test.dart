@@ -107,6 +107,25 @@ void main() {
     expect(daemon.stopCalls, 1);
   });
 
+  test('WR-02: a failing tray bootstrap never propagates (windowed mode)',
+      () async {
+    final failingTray = FakeTrayService(failStart: true);
+    final fallbackWindow = FakeWindowShell();
+    final fallbackContainer = ProviderContainer(overrides: [
+      engineProvider.overrideWithValue(daemon),
+      trayServiceProvider.overrideWithValue(failingTray),
+      windowShellProvider.overrideWithValue(fallbackWindow),
+    ]);
+    addTearDown(fallbackContainer.dispose);
+
+    // Any throw here would fail the test: the app must still reach runApp().
+    await bootstrapTray(fallbackContainer);
+
+    expect(failingTray.startCount, 0);
+    expect(fallbackWindow.preventCloseCount, 0);
+    expect(fallbackWindow.destroyCount, 0);
+  });
+
   testWidgets('WR-01: a reply error surfaces in a snackbar, not silence',
       (tester) async {
     final messengerKey = GlobalKey<ScaffoldMessengerState>();

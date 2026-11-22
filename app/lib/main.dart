@@ -1,4 +1,3 @@
-import 'package:dicta_app/core/providers.dart';
 import 'package:dicta_app/core/theme_ext.dart';
 import 'package:dicta_app/features/shell/shell.dart';
 import 'package:dicta_app/l10n/generated/app_localizations.dart';
@@ -27,12 +26,8 @@ Future<void> main() async {
   // main(), and buildFakeApp/buildTestApp override the seams with fakes.
   final container = ProviderContainer();
   final messengerKey = GlobalKey<ScaffoldMessengerState>();
-  await TrayController(
-    container,
-    container.read(trayServiceProvider),
-    container.read(windowShellProvider),
-    messengerKey: messengerKey,
-  ).start();
+  // No SNI host must not cost the user the window (WR-02).
+  await bootstrapTray(container, messengerKey: messengerKey);
 
   runApp(UncontrolledProviderScope(
     container: container,
