@@ -3,42 +3,57 @@
 
   "appTitle": "Dicta",
   "@appTitle": {
-    "description": "Заголовок окна приложения"
+    "description": "Window title of the application"
   },
   "dashboardTitle": "Дашборд",
   "@dashboardTitle": {
-    "description": "Заголовок раздела «Дашборд» в боковой навигации"
+    "description": "Dashboard destination in the sidebar"
   },
   "historyTitle": "История",
   "@historyTitle": {
-    "description": "Заголовок раздела «История» в боковой навигации"
+    "description": "History destination in the sidebar"
   },
   "modelsTitle": "Модели",
   "@modelsTitle": {
-    "description": "Заголовок раздела «Модели» в боковой навигации"
+    "description": "Models destination in the sidebar"
   },
   "settingsTitle": "Настройки",
   "@settingsTitle": {
-    "description": "Заголовок раздела «Настройки» в боковой навигации"
+    "description": "Settings destination in the sidebar"
   },
   "daemonUnavailable": "демон недоступен",
   "@daemonUnavailable": {
-    "description": "Баннер при потере соединения с демоном dictad"
+    "description": "Persistent banner when the dictad socket cannot be reached"
   },
   "placeholderScreen": "раздел появится в следующих фазах",
   "@placeholderScreen": {
-    "description": "Слабый вторичный текст на заглушках разделов"
+    "description": "Weak secondary text on placeholder screens"
   },
   "daemonStateIdle": "ожидание",
   "@daemonStateIdle": {
-    "description": "Состояние демона: ожидание"
+    "description": "Daemon state: idle"
   },
   "daemonStateRecording": "запись",
   "@daemonStateRecording": {
-    "description": "Состояние демона: запись"
+    "description": "Daemon state: recording"
   },
   "daemonStateTranscribing": "распознавание",
   "@daemonStateTranscribing": {
-    "description": "Состояние демона: распознавание"
+    "description": "Daemon state: transcribing"
+  },
+  "stateLabel": "состояние: {state}",
+  "@stateLabel": {
+    "description": "Live daemon state label on the dashboard",
+    "placeholders": {
+      "state": {"type": "String", "example": "ожидание"}
+    }
+  },
+  "levelSeconds": "уровень {level} · {seconds} с",
+  "@levelSeconds": {
+    "description": "Live signal level and elapsed seconds on the dashboard",
+    "placeholders": {
+      "level": {"type": "String", "example": "0.00"},
+      "seconds": {"type": "String", "example": "0.0"}
+    }
   }
 }
