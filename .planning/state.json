@@ -6,7 +6,7 @@
     {
       "number": "1",
       "name": "Каркас dicta-app + IPC-клиент",
-      "status": "pending"
+      "status": "in_progress"
     },
     {
       "number": "2",
@@ -47,7 +47,7 @@
   "next": {
     "command": "/gsd-progress --next",
     "label": "Advance to the next step",
-    "reason": "Phase 1 of 8 · executing"
+    "reason": "Phase 2 of 8 · executing"
   },
-  "updated_at": "2026-11-22T09:59:23.060Z"
+  "updated_at": "2026-11-22T11:02:25.166Z"
 }

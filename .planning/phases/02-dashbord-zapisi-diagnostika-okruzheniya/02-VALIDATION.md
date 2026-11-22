@@ -41,18 +41,18 @@ created: "2026-11-22"
 
 ## Per-Task Verification Map
 
-Task IDs are TBD until the planner emits 02-01-PLAN.md; rows bind task IDs to the
-commands below at plan time (legend: same as Phase 1).
+Task IDs bound to 02-01-PLAN.md (planner, 2026-11-22): rows map to Tasks 1-7 in
+order; row 4 carries Threat Ref T-2-01 (inject payload discipline). Legend same as Phase 1.
 
 | Task ID | Plan | Wave | Requirement | Threat Ref | Secure Behavior | Test Type | Automated Command | File Exists | Status |
 |---------|------|------|-------------|------------|-----------------|-----------|-------------------|-------------|--------|
-| TBD | 01 | 0 | (infra) | — | N/A | fake factory extraction | `cd app && flutter test test/fake_dicta_engine_test.dart` | ❌ W0 | ⬜ pending |
-| TBD | 01 | 1 | DASH-01 | — | N/A | widget (FakeDictaEngine, 3 states) + unit (ring buffer 200/порядок/clear) | `cd app && flutter test test/dashboard_state_test.dart test/level_history_test.dart` | ❌ W0 | ⬜ pending |
-| TBD | 01 | 1 | DASH-02 | — | N/A | widget (button matrix × {idle, recording, transcribing, disconnected}; «распознаю…» spinner) | `cd app && flutter test test/dashboard_buttons_test.dart` | ❌ W0 | ⬜ pending |
-| TBD | 01 | 2 | DASH-03 | — | inject only sends user's last text via jsonEncode; never logs payload | widget (stop-reply text → card; copy via clipboard seam; inject framing/disabled-при-пустом/error shown) | `cd app && flutter test test/last_text_test.dart` | ❌ W0 | ⬜ pending |
-| TBD | 01 | 2 | DASH-04 | — | N/A | widget (drag release → ровно один `set('min_level','0.42')`, формат {:.2}) | `cd app && flutter test test/calibration_test.dart` | ❌ W0 | ⬜ pending |
-| TBD | 01 | 3 | DIAG-01 | — | N/A | widget (green/neutral/red/«перепроверить») + smoke по живому демону | `cd app && flutter test test/diagnostics_test.dart && dart run tool/diag_smoke.dart` | ❌ W0 | ⬜ pending |
-| TBD | 01 | 3 | all | — | N/A | manual smoke | see Manual-Only Verifications | n/a | n/a | ⬜ pending |
+| Task 1 | 01 | 0 | (infra) | — | N/A | fake factory extraction | `cd app && flutter test test/fake_dicta_engine_test.dart` | ❌ W0 | ⬜ pending |
+| Task 2 | 01 | 1 | DASH-01 | — | N/A | widget (FakeDictaEngine, 3 states) + unit (ring buffer 200/порядок/clear) | `cd app && flutter test test/dashboard_state_test.dart test/level_history_test.dart` | ❌ W0 | ⬜ pending |
+| Task 3 | 01 | 1 | DASH-02 | — | N/A | widget (button matrix × {idle, recording, transcribing, disconnected}; «распознаю…» spinner) | `cd app && flutter test test/dashboard_buttons_test.dart` | ❌ W0 | ⬜ pending |
+| Task 4 | 01 | 2 | DASH-03 | T-2-01 | inject only sends user's last text via jsonEncode; never logs payload | widget (stop-reply text → card; copy via clipboard seam; inject framing/disabled-при-пустом/error shown) | `cd app && flutter test test/last_text_test.dart` | ❌ W0 | ⬜ pending |
+| Task 5 | 01 | 2 | DASH-04 | — | N/A | widget (drag release → ровно один `set('min_level','0.42')`, формат {:.2}) | `cd app && flutter test test/calibration_test.dart` | ❌ W0 | ⬜ pending |
+| Task 6 | 01 | 3 | DIAG-01 | — | N/A | widget (green/neutral/red/«перепроверить») + smoke по живому демону | `cd app && flutter test test/diagnostics_test.dart && dart run tool/diag_smoke.dart` | ❌ W0 | ⬜ pending |
+| Task 7 | 01 | 3 | all | — | N/A | manual smoke | see Manual-Only Verifications | n/a | n/a | ⬜ pending |
 
 *Status: ⬜ pending · ✅ green · ❌ red · ⚠️ flaky*
 
