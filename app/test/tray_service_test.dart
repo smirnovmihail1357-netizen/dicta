@@ -153,6 +153,8 @@ void main() {
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 20));
     }
+    // Error-snackbar skeleton: localised title + verbatim body, both present.
+    expect(find.text('ошибка команды'), findsOneWidget);
     expect(find.text('daemon refused'), findsOneWidget);
   });
 

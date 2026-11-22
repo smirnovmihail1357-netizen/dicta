@@ -16,7 +16,17 @@ import 'package:dicta_app/features/dashboard/dicta_control.dart';
 import 'package:dicta_app/features/shell/shell.dart';
 import 'package:dicta_app/l10n/generated/app_localizations.dart';
 import 'package:flutter/material.dart'
-    show GlobalKey, Locale, ScaffoldMessengerState, SnackBar, Text;
+    show
+        Column,
+        CrossAxisAlignment,
+        GlobalKey,
+        Locale,
+        MainAxisSize,
+        ScaffoldMessengerState,
+        SnackBar,
+        Text,
+        TextStyle,
+        Theme;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 /// WR-02: the tray is an add-on, not the app core. If there is no SNI host on
@@ -143,12 +153,31 @@ class TrayController {
     final control = _container.read(dictaControlProvider);
     final error = control.lastError;
     if ((error == null || error.isEmpty) && !control.genericFailure) return;
+    final messenger = messengerKey?.currentState;
+    if (messenger == null) return;
+    // Resolve the error colour BEFORE the async visibility check so no
+    // BuildContext crosses an await (use_build_context_synchronously).
+    final errorStyle =
+        TextStyle(color: Theme.of(messenger.context).colorScheme.error);
     if (!await _window.isVisible()) return;
 
     final l10n = lookupAppLocalizations(const Locale('ru'));
     // Daemon error text is data; a command that threw before a reply uses the
     // localised body — same rule as the dashboard's error card.
     final body = control.genericFailure ? l10n.dashCommandFailedBody : error!;
-    messengerKey?.currentState?.showSnackBar(SnackBar(content: Text(body)));
+    // Same error-snackbar skeleton as history inject-failure and models
+    // select-failure: localised title + verbatim body, both in the error tone.
+    messenger.showSnackBar(
+      SnackBar(
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(l10n.dashCommandFailed, style: errorStyle),
+            Text(body, style: errorStyle),
+          ],
+        ),
+      ),
+    );
   }
 }
