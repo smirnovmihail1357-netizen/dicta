@@ -29,6 +29,12 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   SettingsReply? _replySnapshot;
 
   String? _error;
+
+  /// The liveRegion status line carries EITHER a transport/validation error
+  /// (red) OR the daemon's success note (neutral, like l10n.diagModelLoading).
+  /// A note is DATA, never an error - main.rs:737 sends `text: Some(note)` on
+  /// every successful set with `error: None`.
+  bool _statusIsError = false;
   Timer? _reloadTimer;
 
   final _pasteKeysController = TextEditingController();
@@ -100,14 +106,19 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
 
     final reply = await ref.read(engineProvider).set(key, value);
     if (!mounted) return;
-    final notice = reply.error ?? reply.note;
-    if (notice != null) {
-      // Engine refusals arrive as note with error:None. Keep them verbatim
-      // and keep the local edit untouched so the user can retry.
-      setState(() => _error = notice);
-    } else {
+    if (reply.error != null) {
+      // A real error keeps the local edit untouched so the user can retry.
       setState(() {
-        _error = null;
+        _error = reply.error;
+        _statusIsError = true;
+      });
+    } else {
+      // Every successful daemon set carries a non-null note (main.rs:737).
+      // It is a status message, not a failure: apply the reply snapshot and
+      // clear pending here, exactly like CalibrationCard._commitMarker.
+      setState(() {
+        _error = reply.note;
+        _statusIsError = false;
         _pending.clear();
         _replySnapshot = reply.settings;
       });
@@ -475,7 +486,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             child: Text(
               _error ?? '',
               key: const Key('confStatus'),
-              style: TextStyle(color: colors.error),
+              style: _statusIsError
+                  ? TextStyle(color: colors.error)
+                  : AppTextStyles.mutedOf(context),
             ),
           ),
         ],

@@ -43,7 +43,10 @@ class ModelsScreen extends ConsumerWidget {
       );
       if (confirmed != true) return;
       final reply = await ref.read(engineProvider).set('model', path);
-      if (reply.error != null || reply.note != null) return;
+      // The daemon's success note is data (main.rs:737), not a refusal. Only a
+      // real error stops the mandatory done -> invalidate + await refetch that
+      // makes the active-model marker follow the switched model.
+      if (reply.error != null) return;
       ref.invalidate(settingsSnapshotProvider);
       await ref.read(settingsSnapshotProvider.future);
     }

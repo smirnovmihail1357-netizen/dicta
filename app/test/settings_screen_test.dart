@@ -85,14 +85,17 @@ void main() {
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
-  testWidgets('form updates from the set snapshot with no refetch',
+  testWidgets('success note is neutral status (never a red error) and the snapshot applies',
       (tester) async {
+    // Real daemon shape: text is ALWAYS non-null on success, error stays null.
+    const note =
+        'paste_delay_ms = 800 — сохранено в /home/user/.config/dicta/config.toml';
     late final FakeDictaEngine fake;
     fake = FakeDictaEngine(
       const DictaStatus(connected: true, state: DaemonState.idle),
       fetchSettingsReply: settingsFixture,
       setReplyMap: const {
-        'text': null,
+        'text': note,
         'settings': <String, dynamic>{'paste_delay_ms': 900},
       },
     );
@@ -113,6 +116,13 @@ void main() {
     expect(readout(tester).data, '900');
     expect(sliderValue(tester), 900);
     expect(fake.fetchCount, fetchCountBeforeSet);
+
+    // The success note is shown verbatim in the liveRegion, but it is DATA:
+    // neutral styling, not the red error line.
+    expect(find.text(note), findsOneWidget);
+    final status = find.byKey(const Key('confStatus'));
+    final errorColor = Theme.of(tester.element(status)).colorScheme.error;
+    expect(tester.widget<Text>(status).style?.color, isNot(errorColor));
 
     await tester.pumpWidget(const SizedBox.shrink());
   });
@@ -137,6 +147,10 @@ void main() {
 
     expect(find.text(refusal), findsOneWidget);
     expect(sliderValue(tester), 900);
+    // Only a real top-level error gets the red error styling.
+    final status = find.byKey(const Key('confStatus'));
+    final errorColor = Theme.of(tester.element(status)).colorScheme.error;
+    expect(tester.widget<Text>(status).style?.color, errorColor);
 
     await tester.pumpWidget(const SizedBox.shrink());
   });

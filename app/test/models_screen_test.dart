@@ -50,17 +50,32 @@ void main() {
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
-  testWidgets('select waits for the ENGINE confirm, then sets the full path',
+  testWidgets('select confirms, sets the path, refetches and moves the active marker',
       (tester) async {
     final fixture = readFixture();
-    final models = (fixture['settings'] as Map)['models'] as List;
-    final fake = FakeDictaEngine(
+    final baseSettings = Map<String, dynamic>.from(fixture['settings'] as Map);
+    final models = List<String>.from(baseSettings['models'] as List);
+    final target = models.first; // ggml-large-v3-turbo-q5_0.bin
+    late final FakeDictaEngine fake;
+    fake = FakeDictaEngine(
       const DictaStatus(connected: true, state: DaemonState.idle),
       fetchSettingsReply: fixture,
+      // Real daemon reply: non-null note on success, error stays null.
+      setReplyMap: <String, dynamic>{
+        'text': 'model = $target — сохранено в /home/user/.config/dicta/config.toml',
+        'settings': fixture['settings'],
+      },
+      onSet: (key, value) {
+        // Simulate the daemon switching the active model before the refetch.
+        final switched = Map<String, dynamic>.from(baseSettings)
+          ..['model'] = value;
+        fake.fetchSettingsReply = <String, dynamic>{...fixture, 'settings': switched};
+      },
     );
     await tester.pumpWidget(buildFakeApp(fake));
     await tick(tester);
     await openModels(tester);
+    final before = fake.fetchCount;
 
     await tester.tap(find.byKey(const Key('modelSelectButton-large-v3-turbo-q5_0')));
     await tester.pump();
@@ -73,7 +88,19 @@ void main() {
 
     expect(fake.setCalls.length, 1);
     expect(fake.setCalls.single.key, 'model');
-    expect(fake.setCalls.single.value, models.first);
+    expect(fake.setCalls.single.value, target);
+    // The successful set triggered invalidate + await future -> refetch.
+    expect(fake.fetchCount, greaterThan(before));
+    expect(find.text('активна'), findsOneWidget);
+    // The newly active model lost its select button / delete is disabled.
+    expect(
+      tester
+          .widget<OutlinedButton>(
+            find.byKey(const Key('modelDeleteButton-large-v3-turbo-q5_0')),
+          )
+          .onPressed,
+      isNull,
+    );
 
     await tester.pumpWidget(const SizedBox.shrink());
   });

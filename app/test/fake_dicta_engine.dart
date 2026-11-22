@@ -126,9 +126,18 @@ class FakeDictaEngine implements DictaEngine {
     setCalls.add((key: key, value: value));
     // onSet runs before the snapshot is read so a test can mutate the reply.
     onSet?.call(key, value);
-    return SetReply.fromReply(
+    final raw = Map<String, dynamic>.from(
       setReplyMap ?? fetchSettingsReply ?? const <String, dynamic>{},
     );
+    // Mirror the frozen daemon: EVERY successful set carries a non-null note
+    // with error:None (crates/dictad/src/main.rs:733-739). A scripted error or
+    // an explicit note wins; otherwise synthesize the realistic success shape
+    // so tests can never again pass against a reply the daemon never sends.
+    if (raw['error'] == null && raw['text'] == null) {
+      raw['text'] =
+          '$key = $value — сохранено в /home/user/.config/dicta/config.toml';
+    }
+    return SetReply.fromReply(raw);
   }
 }
 
