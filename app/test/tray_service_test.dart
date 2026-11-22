@@ -3,6 +3,7 @@
 import 'package:dicta_app/core/engine.dart';
 import 'package:dicta_app/core/providers.dart';
 import 'package:dicta_app/core/tray.dart';
+import 'package:dicta_app/features/shell/shell.dart';
 import 'package:dicta_app/tray_bootstrap.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -87,11 +88,52 @@ void main() {
     expect(daemon.cancelCalls, 1);
   });
 
-  test('settings menu item shows the window', () async {
+  test('settings menu item shows the window and selects the Settings tab',
+      () async {
     await window.hide();
     tray.clickSettings();
     await settle();
     expect(window.showCount, 1);
     expect(window.visible, isTrue);
+    expect(container.read(selectedTabProvider), 3);
+  });
+
+  test('icon follows status transitions only (guard, red on transcribing)',
+      () async {
+    final status = container.read(dictaStatusProvider.notifier);
+
+    status.state = const DictaStatus(
+        connected: true, state: DaemonState.recording);
+    expect(tray.iconCalls.last, TrayIconState.recording);
+
+    // Repeating the same state is a no-op: no 10 Hz icon spam.
+    final count = tray.iconCalls.length;
+    status.state = const DictaStatus(
+        connected: true, state: DaemonState.recording);
+    expect(tray.iconCalls.length, count);
+
+    // Transcribing maps to red too; from idle it must install the red icon.
+    status.state =
+        const DictaStatus(connected: true, state: DaemonState.idle);
+    expect(tray.iconCalls.last, TrayIconState.idle);
+    status.state = const DictaStatus(
+        connected: true, state: DaemonState.transcribing);
+    expect(tray.iconCalls.last, TrayIconState.recording);
+    expect(tray.iconCalls.length, count + 2);
+
+    // recording -> transcribing are both red: the guard suppresses the swap.
+    status.state = const DictaStatus(
+        connected: true, state: DaemonState.recording);
+    expect(tray.iconCalls.length, count + 2);
+
+    status.state =
+        const DictaStatus(connected: true, state: DaemonState.idle);
+    expect(tray.iconCalls.last, TrayIconState.idle);
+
+    // A dead daemon maps to idle blue and does not add a redundant call.
+    final beforeDisconnect = tray.iconCalls.length;
+    status.state = const DictaStatus.disconnected();
+    expect(tray.iconCalls.last, TrayIconState.idle);
+    expect(tray.iconCalls.length, beforeDisconnect);
   });
 }

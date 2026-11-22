@@ -3,6 +3,7 @@
 import 'package:dicta_app/core/engine.dart';
 import 'package:dicta_app/core/providers.dart';
 import 'package:dicta_app/core/theme_ext.dart';
+import 'package:dicta_app/features/settings/settings_screen.dart';
 import 'package:dicta_app/features/shell/shell.dart';
 import 'package:dicta_app/l10n/generated/app_localizations.dart';
 import 'package:flutter/material.dart';
@@ -11,21 +12,29 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'fake_dicta_engine.dart';
 
-Widget buildTestApp(FakeDictaEngine fake) {
+Widget buildTestApp(
+  FakeDictaEngine fake, {
+  void Function(ProviderContainer container)? captureContainer,
+}) {
   // This suite owns its scaffold; register the same mandatory extension as
   // main.dart and buildFakeApp so mutedOf(context) resolves everywhere.
   final colors = ThemeData().colorScheme;
   return ProviderScope(
     overrides: [engineProvider.overrideWithValue(fake)],
-    child: MaterialApp(
-      theme: ThemeData(
-        colorScheme: colors,
-        extensions: [AppTextStyles.from(colors)],
-      ),
-      localizationsDelegates: AppLocalizations.localizationsDelegates,
-      supportedLocales: AppLocalizations.supportedLocales,
-      locale: const Locale('ru'),
-      home: const ShellWidget(),
+    child: Builder(
+      builder: (context) {
+        captureContainer?.call(ProviderScope.containerOf(context));
+        return MaterialApp(
+          theme: ThemeData(
+            colorScheme: colors,
+            extensions: [AppTextStyles.from(colors)],
+          ),
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          locale: const Locale('ru'),
+          home: const ShellWidget(),
+        );
+      },
     ),
   );
 }
@@ -56,6 +65,26 @@ void main() {
 
     expect(find.text('демон недоступен'), findsOneWidget);
 
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
+  testWidgets('tray-selected tab (index 3) shows SettingsScreen',
+      (tester) async {
+    ProviderContainer? captured;
+    await tester.pumpWidget(buildTestApp(
+      FakeDictaEngine(const DictaStatus(
+        connected: true,
+        state: DaemonState.idle,
+      )),
+      captureContainer: (container) => captured = container,
+    ));
+    await tester.pump(const Duration(milliseconds: 300));
+
+    expect(find.byType(SettingsScreen), findsNothing);
+    captured!.read(selectedTabProvider.notifier).select(3);
+    await tester.pump();
+
+    expect(find.byType(SettingsScreen), findsOneWidget);
     await tester.pumpWidget(const SizedBox.shrink());
   });
 }

@@ -7,9 +7,11 @@
 /// and menu ride on the existing dictaStatusProvider / DictaControlNotifier.
 library;
 
+import 'package:dicta_app/core/providers.dart';
 import 'package:dicta_app/core/tray.dart';
 import 'package:dicta_app/core/window_shell.dart';
 import 'package:dicta_app/features/dashboard/dicta_control.dart';
+import 'package:dicta_app/features/shell/shell.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 class TrayController {
@@ -19,10 +21,23 @@ class TrayController {
   final TrayService _tray;
   final WindowShell _window;
 
+  /// Last icon installed, so the 100 ms status tick only swaps on transitions.
+  TrayIconState? _lastIcon;
+
   Future<void> start() async {
     // Icon and menu before anything else (labels are set inside the service).
     await _tray.start();
     await _tray.setIconState(TrayIconState.idle);
+    _lastIcon = TrayIconState.idle;
+
+    // The icon rides on the EXISTING 100 ms status poll — no new timer/socket.
+    _container.listen(dictaStatusProvider, (_, next) {
+      final target =
+          next.connected ? iconFor(next.state) : TrayIconState.idle;
+      if (target == _lastIcon) return;
+      _lastIcon = target;
+      _tray.setIconState(target);
+    });
 
     // TRAY-02: the X is a vetoed close request, not an exit. destroy() bypasses
     // the veto, so it is deliberately reachable ONLY from the Exit item below.
@@ -48,7 +63,8 @@ class TrayController {
         () => _container.read(dictaControlProvider.notifier).cancel());
     _tray.onMenuSettings(() async {
       await _window.show();
-      // Task 3 adds: selectedTabProvider.notifier.select(3).
+      // Rail order is fixed by phase 1: Settings is destination 3.
+      _container.read(selectedTabProvider.notifier).select(3);
     });
     _tray.onMenuExit(() async {
       await _tray.dispose();

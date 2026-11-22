@@ -12,6 +12,19 @@ import 'package:dicta_app/l10n/generated/app_localizations.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+/// The selected rail destination. A tiny provider (canon HistoryQueryNotifier,
+/// history.dart:60-68) lets the tray menu open the Settings tab from outside
+/// the widget tree without touching the four rail destinations themselves.
+class SelectedTabNotifier extends Notifier<int> {
+  @override
+  int build() => 0;
+
+  void select(int index) => state = index;
+}
+
+final selectedTabProvider =
+    NotifierProvider<SelectedTabNotifier, int>(SelectedTabNotifier.new);
+
 class ShellWidget extends ConsumerStatefulWidget {
   const ShellWidget({super.key});
 
@@ -20,11 +33,10 @@ class ShellWidget extends ConsumerStatefulWidget {
 }
 
 class _ShellWidgetState extends ConsumerState<ShellWidget> {
-  int _selected = 0;
-
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
+    final selected = ref.watch(selectedTabProvider);
     final status = ref.watch(dictaStatusProvider);
     final colors = Theme.of(context).colorScheme;
 
@@ -50,9 +62,9 @@ class _ShellWidgetState extends ConsumerState<ShellWidget> {
             child: Row(
               children: [
                 NavigationRail(
-                  selectedIndex: _selected,
+                  selectedIndex: selected,
                   onDestinationSelected: (index) =>
-                      setState(() => _selected = index),
+                      ref.read(selectedTabProvider.notifier).select(index),
                   labelType: NavigationRailLabelType.all,
                   destinations: [
                     NavigationRailDestination(
@@ -80,7 +92,7 @@ class _ShellWidgetState extends ConsumerState<ShellWidget> {
                 const VerticalDivider(width: 1),
                 Expanded(
                   child: IndexedStack(
-                    index: _selected,
+                    index: selected,
                     children: const [
                       DashboardScreen(),
                       HistoryScreen(),

@@ -6,6 +6,8 @@ library;
 
 import 'package:dicta_app/l10n/generated/app_localizations.dart';
 import 'package:flutter/material.dart' show Locale;
+
+import 'engine.dart';
 import 'package:tray_manager/tray_manager.dart'
     show
         ContextMenuTrigger,
@@ -19,6 +21,15 @@ import 'package:tray_manager/tray_manager.dart'
 /// Only two visual states: recording AND transcribing share the red icon
 /// (orchestrator decision 2026-11-22), everything else is the blue idle icon.
 enum TrayIconState { idle, recording }
+
+/// Pure state → icon mapping. The busy part of the recording cycle (recording
+/// AND transcribing) shares the red icon; everything else is idle blue.
+/// Disconnected snapshots are mapped by the caller (they have no red state).
+TrayIconState iconFor(DaemonState state) => switch (state) {
+      DaemonState.recording || DaemonState.transcribing =>
+        TrayIconState.recording,
+      _ => TrayIconState.idle,
+    };
 
 abstract interface class TrayService {
   /// Creates the icon, attaches the menu, makes it visible.
