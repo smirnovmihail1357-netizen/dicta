@@ -291,7 +291,9 @@ fn main() -> Result<()> {
     }
 
     // uinput-девайс регистрируется в KWin не мгновенно: создаём его сразу при старте,
-    // чтобы первая же вставка дошла до окна.
+    // чтобы первая же вставка дошла до окна. Только Unix: на Windows uinput нет,
+    // inject_win::warm_up_keyboard — no-op, и печатать «uinput готова» нечестно (IN-05).
+    #[cfg(unix)]
     if cfg.inject_mode == "paste" {
         match inject::warm_up_keyboard() {
             Ok(()) => eprintln!("dictad: виртуальная клавиатура (uinput) готова"),
@@ -348,6 +350,8 @@ fn main() -> Result<()> {
                             "dictad: горячая клавиша '{}' недоступна: {} (повтор через {:?})",
                             hotkey_spec, err, backoff
                         );
+                        // Совет про /dev/input — unix-only; на Windows hotkey — RegisterHotKey (IN-05).
+                        #[cfg(unix)]
                         eprintln!(
                             "dictad: либо добавь пользователя в группу input (или udev-ACL на /dev/input/event*), \
                              либо hotkey = \"off\" и клавишу DE (см. adapters/README.md)"
