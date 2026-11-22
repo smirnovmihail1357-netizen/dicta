@@ -117,10 +117,10 @@ Plans:
   2. Вставка SendInput (KEYEVENTF_UNICODE) с delayed render (SetClipboardData(NULL) + WM_RENDERFORMAT) проходит 4 обязательных кейса: обычное окно, elevated-окно (UIPI), зажатый модификатор, Chromium-окно
   3. Оптаут-форматы Win+V/облака учтены, исходный буфер восстанавливается
   4. Спайк delayed-render/WM_RENDERFORMAT выполнен экспериментально до фиксации реализации вставки
-**Plans**: 2/2 plans
+**Plans**: 1/2 plans executed
 Plans:
 **Wave 1**
-- [ ] 07-01-PLAN.md — Windows-ядро демона: cfg-развилки юникс-модулей, transport_win (named pipe + DACL) + интеграционный status-roundtrip на CI, CI Rust-джоба (CPU-only, артефакт dictad.exe), capture_win (cpal/WASAPI), hotkey_win (RegisterHotKey без окна), IN-02-остаток Flutter
+- [x] 07-01-PLAN.md — Windows-ядро демона: cfg-развилки юникс-модулей, transport_win (named pipe + DACL) + интеграционный status-roundtrip на CI, CI Rust-джоба (CPU-only, артефакт dictad.exe), capture_win (cpal/WASAPI), hotkey_win (RegisterHotKey без окна), IN-02-остаток Flutter
 
 **Wave 2** *(blocked on Wave 1 completion)*
 - [ ] 07-02-PLAN.md — Вставка + спик: spike/delayed_render (9 замеров на машине пользователя → 07-SPIKE-RESULT.md), checkpoint-прогон, inject_win (enigo + delayed render + оптаут-форматы Win+V/облака + UIPI-отказ + release-модификаторов + восстановление буфера), README Windows-заметка, UAT-handoff
@@ -150,5 +150,5 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8.
 | 4. Настройки + браузер моделей | 1/1 | In Progress | - |
 | 5. Трей + хоткей-экран | 1/1 | In Progress | - |
 | 6. Windows CI + каркас | 1/1 | In Progress | - |
-| 7. Windows диктовка MVP | 0/TBD | Not started | - |
+| 7. Windows диктовка MVP | 1/2 | In Progress | - |
 | 8. Декомиссия dicta-settings | 0/TBD | Not started | - |
