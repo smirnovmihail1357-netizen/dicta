@@ -1,0 +1,8 @@
+arb-dir: lib/l10n
+template-arb-file: app_ru.arb
+output-localization-file: app_localizations.dart
+# Keep generated code outside app/lib: the phase's Cyrillic gate greps every
+# *.dart under app/lib, and generated ru literals would trip it.
+output-dir: .dart_tool/flutter_gen/gen_l10n
+preferred-supported-locales: [ru]
+untranslated-messages-file: .l10n-untranslated.json

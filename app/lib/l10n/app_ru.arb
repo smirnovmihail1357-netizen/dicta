@@ -1,0 +1,44 @@
+{
+  "@@locale": "ru",
+
+  "appTitle": "Dicta",
+  "@appTitle": {
+    "description": "Заголовок окна приложения"
+  },
+  "dashboardTitle": "Дашборд",
+  "@dashboardTitle": {
+    "description": "Заголовок раздела «Дашборд» в боковой навигации"
+  },
+  "historyTitle": "История",
+  "@historyTitle": {
+    "description": "Заголовок раздела «История» в боковой навигации"
+  },
+  "modelsTitle": "Модели",
+  "@modelsTitle": {
+    "description": "Заголовок раздела «Модели» в боковой навигации"
+  },
+  "settingsTitle": "Настройки",
+  "@settingsTitle": {
+    "description": "Заголовок раздела «Настройки» в боковой навигации"
+  },
+  "daemonUnavailable": "демон недоступен",
+  "@daemonUnavailable": {
+    "description": "Баннер при потере соединения с демоном dictad"
+  },
+  "placeholderScreen": "раздел появится в следующих фазах",
+  "@placeholderScreen": {
+    "description": "Слабый вторичный текст на заглушках разделов"
+  },
+  "daemonStateIdle": "ожидание",
+  "@daemonStateIdle": {
+    "description": "Состояние демона: ожидание"
+  },
+  "daemonStateRecording": "запись",
+  "@daemonStateRecording": {
+    "description": "Состояние демона: запись"
+  },
+  "daemonStateTranscribing": "распознавание",
+  "@daemonStateTranscribing": {
+    "description": "Состояние демона: распознавание"
+  }
+}
