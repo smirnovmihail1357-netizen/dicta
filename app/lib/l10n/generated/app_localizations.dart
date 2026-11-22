@@ -267,6 +267,78 @@ abstract class AppLocalizations {
   /// In ru, this message translates to:
   /// **'включён авто-стоп — для калибровки нажимай отмена'**
   String get calibrationAutoStopHint;
+
+  /// Title of the onboarding diagnostics checklist
+  ///
+  /// In ru, this message translates to:
+  /// **'диагностика'**
+  String get diagTitle;
+
+  /// Automatic row from the polled daemon status
+  ///
+  /// In ru, this message translates to:
+  /// **'демон жив'**
+  String get diagDaemonAlive;
+
+  /// Automatic row: same transport test as daemon alive, shown honestly
+  ///
+  /// In ru, this message translates to:
+  /// **'сокет отвечает'**
+  String get diagSocketAnswers;
+
+  /// Honest note that the two status rows share one signal
+  ///
+  /// In ru, this message translates to:
+  /// **'обе строки — один и тот же тест сокета'**
+  String get diagStatusNote;
+
+  /// Green row when settings report a model and no reload
+  ///
+  /// In ru, this message translates to:
+  /// **'модель готова'**
+  String get diagModelReady;
+
+  /// Neutral row while the daemon is still loading its model
+  ///
+  /// In ru, this message translates to:
+  /// **'модель загружается…'**
+  String get diagModelLoading;
+
+  /// Red row when the daemon is unreachable or reports no model
+  ///
+  /// In ru, this message translates to:
+  /// **'модель: данных нет'**
+  String get diagModelUnavailable;
+
+  /// Honest caveat for the model readiness proxy
+  ///
+  /// In ru, this message translates to:
+  /// **'по данным демона — гарантию даёт живая диктовка'**
+  String get diagModelNote;
+
+  /// Manual hint; the app never triggers the daemon hotkey
+  ///
+  /// In ru, this message translates to:
+  /// **'хоткей — проверь вручную: dictactl toggle'**
+  String get diagHotkeyManual;
+
+  /// Manual hint; the app never inserts text from diagnostics
+  ///
+  /// In ru, this message translates to:
+  /// **'вставку проверь живой диктовкой'**
+  String get diagInjectManual;
+
+  /// Forces one status poll and one settings refetch
+  ///
+  /// In ru, this message translates to:
+  /// **'перепроверить'**
+  String get diagRecheck;
+
+  /// Repair hint shown next to red daemon rows
+  ///
+  /// In ru, this message translates to:
+  /// **'запусти: systemctl --user start dictad'**
+  String get diagStartHint;
 }
 
 class _AppLocalizationsDelegate

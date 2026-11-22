@@ -126,5 +126,53 @@
   "calibrationAutoStopHint": "включён авто-стоп — для калибровки нажимай отмена",
   "@calibrationAutoStopHint": {
     "description": "Warns that silence may stop recording before calibration finishes"
+  },
+  "diagTitle": "диагностика",
+  "@diagTitle": {
+    "description": "Title of the onboarding diagnostics checklist"
+  },
+  "diagDaemonAlive": "демон жив",
+  "@diagDaemonAlive": {
+    "description": "Automatic row from the polled daemon status"
+  },
+  "diagSocketAnswers": "сокет отвечает",
+  "@diagSocketAnswers": {
+    "description": "Automatic row: same transport test as daemon alive, shown honestly"
+  },
+  "diagStatusNote": "обе строки — один и тот же тест сокета",
+  "@diagStatusNote": {
+    "description": "Honest note that the two status rows share one signal"
+  },
+  "diagModelReady": "модель готова",
+  "@diagModelReady": {
+    "description": "Green row when settings report a model and no reload"
+  },
+  "diagModelLoading": "модель загружается…",
+  "@diagModelLoading": {
+    "description": "Neutral row while the daemon is still loading its model"
+  },
+  "diagModelUnavailable": "модель: данных нет",
+  "@diagModelUnavailable": {
+    "description": "Red row when the daemon is unreachable or reports no model"
+  },
+  "diagModelNote": "по данным демона — гарантию даёт живая диктовка",
+  "@diagModelNote": {
+    "description": "Honest caveat for the model readiness proxy"
+  },
+  "diagHotkeyManual": "хоткей — проверь вручную: dictactl toggle",
+  "@diagHotkeyManual": {
+    "description": "Manual hint; the app never triggers the daemon hotkey"
+  },
+  "diagInjectManual": "вставку проверь живой диктовкой",
+  "@diagInjectManual": {
+    "description": "Manual hint; the app never inserts text from diagnostics"
+  },
+  "diagRecheck": "перепроверить",
+  "@diagRecheck": {
+    "description": "Forces one status poll and one settings refetch"
+  },
+  "diagStartHint": "запусти: systemctl --user start dictad",
+  "@diagStartHint": {
+    "description": "Repair hint shown next to red daemon rows"
   }
 }

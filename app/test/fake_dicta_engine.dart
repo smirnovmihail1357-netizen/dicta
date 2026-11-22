@@ -46,8 +46,14 @@ class FakeDictaEngine implements DictaEngine {
   /// Number of fetchSettings() calls (recheck asserts one refetch).
   int fetchCount = 0;
 
+  /// Number of status() calls (recheck asserts one extra poll).
+  int statusCount = 0;
+
   @override
-  Future<DictaStatus> status() async => statusValue;
+  Future<DictaStatus> status() async {
+    statusCount++;
+    return statusValue;
+  }
 
   @override
   Future<DictaReply> start({String? app}) async => const DictaReply(ok: true);

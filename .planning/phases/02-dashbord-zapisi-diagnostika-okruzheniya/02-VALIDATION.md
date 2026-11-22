@@ -51,7 +51,7 @@ order; row 4 carries Threat Ref T-2-01 (inject payload discipline). Legend same 
 | Task 3 | 01 | 1 | DASH-02 | — | N/A | widget (button matrix × {idle, recording, transcribing, disconnected}; «распознаю…» spinner) | `cd app && flutter test test/dashboard_buttons_test.dart` | ✅ | ✅ green |
 | Task 4 | 01 | 2 | DASH-03 | T-2-01 | inject only sends user's last text via jsonEncode; never logs payload | widget (stop-reply text → card; copy via clipboard seam; inject framing/disabled-при-пустом/error shown) | `cd app && flutter test test/last_text_test.dart` | ✅ | ✅ green |
 | Task 5 | 01 | 2 | DASH-04 | — | N/A | widget (drag release → ровно один `set('min_level','0.42')`, формат {:.2}) | `cd app && flutter test test/calibration_test.dart` | ✅ | ✅ green |
-| Task 6 | 01 | 3 | DIAG-01 | — | N/A | widget (green/neutral/red/«перепроверить») + smoke по живому демону | `cd app && flutter test test/diagnostics_test.dart && dart run tool/diag_smoke.dart` | ❌ W0 | ⬜ pending |
+| Task 6 | 01 | 3 | DIAG-01 | — | N/A | widget (green/neutral/red/«перепроверить») + smoke по живому демону | `cd app && flutter test test/diagnostics_test.dart && dart run tool/diag_smoke.dart` | ✅ | ✅ green |
 | Task 7 | 01 | 3 | all | — | N/A | manual smoke | see Manual-Only Verifications | n/a | n/a | ⬜ pending |
 
 *Status: ⬜ pending · ✅ green · ❌ red · ⚠️ flaky*
@@ -79,11 +79,14 @@ order; row 4 carries Threat Ref T-2-01 (inject payload discipline). Legend same 
       (Completer-управляемый stop), `fetchSettingsReply` + `fetchCount`. Скриптуемые
       `stopReply`/`injectReply` добавляются Task 2 вместе с новыми членами интерфейса;
       `buildTestApp` остаётся в `shell_test.dart`.
-- [ ] Новые ключи .arb (~25) + `flutter gen-l10n` — до первого виджета (cyrillic gate)
-- [ ] Все новые тест-файлы из таблицы выше (стабы)
-- [ ] `app/tool/diag_smoke.dart` — по образцу `tool/status_smoke.dart`; живой демон:
-      status-тик + безвредный `inject ""` (демон честно ответит error «текст пустой…»,
-      вставка не вызывается — main.rs:886-893)
+- [x] Новые ключи .arb (29 ключей dash*/calibration*/diag*) + `flutter gen-l10n` —
+      генерат закоммичен, `bash tool/cyrillic_gate.sh` печатает 0
+- [x] Все новые тест-файлы из таблицы выше созданы и зелёные (7 файлов: fake factory,
+      dashboard_state, level_history, dashboard_buttons, last_text, calibration, diagnostics)
+- [x] `app/tool/diag_smoke.dart` — по образцу `tool/status_smoke.dart`; живой демон:
+      status-тик + безвредный `inject ""` (демон честно ответил error «текст пустой…»,
+      вставка не вызывается — main.rs:886-893); печать `DIAG SMOKE state=idle connected=true`
+      и `INJECT-REJECTED-AS-EXPECTED`, exit 0
 
 ---
 

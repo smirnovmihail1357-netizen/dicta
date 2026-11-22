@@ -103,4 +103,40 @@ class AppLocalizationsRu extends AppLocalizations {
   @override
   String get calibrationAutoStopHint =>
       'включён авто-стоп — для калибровки нажимай отмена';
+
+  @override
+  String get diagTitle => 'диагностика';
+
+  @override
+  String get diagDaemonAlive => 'демон жив';
+
+  @override
+  String get diagSocketAnswers => 'сокет отвечает';
+
+  @override
+  String get diagStatusNote => 'обе строки — один и тот же тест сокета';
+
+  @override
+  String get diagModelReady => 'модель готова';
+
+  @override
+  String get diagModelLoading => 'модель загружается…';
+
+  @override
+  String get diagModelUnavailable => 'модель: данных нет';
+
+  @override
+  String get diagModelNote => 'по данным демона — гарантию даёт живая диктовка';
+
+  @override
+  String get diagHotkeyManual => 'хоткей — проверь вручную: dictactl toggle';
+
+  @override
+  String get diagInjectManual => 'вставку проверь живой диктовкой';
+
+  @override
+  String get diagRecheck => 'перепроверить';
+
+  @override
+  String get diagStartHint => 'запусти: systemctl --user start dictad';
 }
