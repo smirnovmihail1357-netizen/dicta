@@ -23,7 +23,8 @@ pub struct Config {
     pub flash_attn: bool,
     /// PipeWire source для записи. None -> дефолтный микрофон системы.
     pub mic: Option<String>,
-    /// Unix-сокет демона.
+    /// Unix-сокет демона (только Linux; на Windows НЕ используется слушателем —
+    /// имя пайпа берётся из DICTA_PIPE/DEFAULT_PIPE_NAME, см. transport_win).
     pub socket: PathBuf,
     /// Клавиши вставки по умолчанию (uinput): ctrl+v, ctrl+shift+v, shift+insert.
     pub paste_keys: String,
@@ -259,8 +260,10 @@ fn default_model_path() -> PathBuf {
         .join("ggml-medium-q5_0.bin")
 }
 
-// На Windows поле socket хранит полное имя именованного канала; инициатива
-// слушателя — в transport_win (DICTA_PIPE → дефолт).
+// ВАЖНО: настройка `socket` unix-only. Слушатель Windows НЕ читает cfg.socket —
+// цепочка DICTA_PIPE → DEFAULT_PIPE_NAME живёт в transport_win::resolve_pipe_name,
+// чтобы не было двух источников истины. Поле сохранено только для совместимости
+// формата конфига (parity README фазы 7 это не требует).
 #[cfg(windows)]
 fn default_socket_path() -> PathBuf {
     PathBuf::from(DEFAULT_PIPE_NAME)

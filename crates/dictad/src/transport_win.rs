@@ -27,6 +27,8 @@ use crate::Handler;
 
 /// env-шов теста (паритет DICTA_SOCK/DICTA_PIPE фазы 6): пустое значение
 /// игнорируется, чтобы случайная пустая переменная не сломала дефолтный канал.
+/// Цепочка: DICTA_PIPE → DEFAULT_PIPE_NAME. Настройка cfg.socket (unix-only)
+/// в Windows-пути НЕ участвует — один источник истины (WR-02).
 pub fn resolve_pipe_name() -> String {
     std::env::var_os("DICTA_PIPE")
         .map(|v| v.to_string_lossy().into_owned())

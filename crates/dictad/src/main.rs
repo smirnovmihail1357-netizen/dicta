@@ -299,9 +299,19 @@ fn main() -> Result<()> {
         }
     }
 
+    // cfg.socket — unix-only: на Windows слушатель берёт имя пайпа из resolve_pipe_name,
+    // поэтому печатать socket как «активный» было бы нечестно (WR-02).
+    #[cfg(unix)]
     eprintln!(
         "dictad: сокет {}, модель {}, язык {}",
         socket.display(),
+        cfg.model.display(),
+        cfg.language
+    );
+    #[cfg(windows)]
+    eprintln!(
+        "dictad: пайп {}, модель {}, язык {}",
+        transport_win::resolve_pipe_name(),
         cfg.model.display(),
         cfg.language
     );
@@ -398,7 +408,6 @@ fn main() -> Result<()> {
     #[cfg(windows)]
     {
         let pipe_name = transport_win::resolve_pipe_name();
-        eprintln!("dictad: пайп {}", pipe_name);
         transport_win::serve(
             &pipe_name, handler, state, level, started_at, panel, reloading,
         )?;
