@@ -27,7 +27,10 @@ String resolveConfigPath({
   return '$userHome/.config/dicta/config.toml';
 }
 
-final RegExp _hotkeyRe = RegExp(r'^\s*hotkey\s*=\s*"([^"]*)"');
+// TOML allows both basic ("...") and literal ('...') strings. The daemon's
+// real parser accepts either, so the honest card must too (WR-04): this key is
+// written by the user's hand, not by set_key. Quote pairing is not enforced.
+final RegExp _hotkeyRe = RegExp(r'''^\s*hotkey\s*=\s*["']([^"']*)["']''');
 
 /// Extracts the evdev hotkey value from flat TOML text. Line based, so a
 /// trailing `#` comment is ignored and a stray section header changes nothing.

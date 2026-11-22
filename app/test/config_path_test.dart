@@ -26,6 +26,18 @@ void main() {
       expect(extractHotkey('   hotkey   =   "alt+v"'), 'alt+v');
     });
 
+    test('TOML literal string in single quotes (WR-04)', () {
+      expect(extractHotkey("hotkey = 'alt+v'"), 'alt+v');
+    });
+
+    test('single quotes with leading spaces and explicit off (WR-04)', () {
+      expect(extractHotkey("   hotkey   =   'off'"), 'off');
+    });
+
+    test('single-quoted literal after a section header (WR-04)', () {
+      expect(extractHotkey("[hotkey]\nhotkey='ctrl+alt+v'"), 'ctrl+alt+v');
+    });
+
     test('unquoted garbage is not a value', () {
       expect(extractHotkey('hotkey = off'), isNull);
     });
