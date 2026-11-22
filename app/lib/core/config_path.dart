@@ -17,10 +17,17 @@ String resolveConfigPath({
   String? home,
 }) {
   final override = configOverride ?? Platform.environment['DICTA_CONFIG'];
+  // An empty override is treated as unset: the zero-length path that the
+  // daemon's var_os("") edge would produce is never a usable config file.
   if (override != null && override.isNotEmpty) return override;
 
   final xdg = xdgConfigHome ?? Platform.environment['XDG_CONFIG_HOME'];
-  if (xdg != null && xdg.isNotEmpty) return '$xdg/dicta/config.toml';
+  // dirs::config_dir() (config.rs:176) accepts ONLY an absolute XDG_CONFIG_HOME;
+  // a relative value is discarded and $HOME/.config is used instead. Keep that
+  // edge in step so the card cannot read a different file than the daemon.
+  if (xdg != null && xdg.isNotEmpty && xdg.startsWith('/')) {
+    return '$xdg/dicta/config.toml';
+  }
 
   final userHome = home ?? Platform.environment['HOME'];
   if (userHome == null || userHome.isEmpty) return 'dicta-config.toml';

@@ -59,7 +59,7 @@ void main() {
       );
     });
 
-    test('empty override falls through to XDG_CONFIG_HOME', () {
+    test('empty override is unset, not a zero-length path (IN-01)', () {
       expect(
         resolveConfigPath(
           configOverride: '',
@@ -67,6 +67,27 @@ void main() {
           home: '/home/u',
         ),
         '/xdg/dicta/config.toml',
+      );
+    });
+
+    test('relative XDG_CONFIG_HOME is ignored, dirs parity (IN-01)', () {
+      expect(
+        resolveConfigPath(
+          configOverride: '',
+          xdgConfigHome: 'relative/xdg',
+          home: '/home/u',
+        ),
+        '/home/u/.config/dicta/config.toml',
+      );
+      // A relative non-empty override is NOT an XDG setting: config.rs's
+      // var_os("DICTA_CONFIG") accepts it as a path verbatim.
+      expect(
+        resolveConfigPath(
+          configOverride: 'relative/config.toml',
+          xdgConfigHome: '/xdg',
+          home: '/home/u',
+        ),
+        'relative/config.toml',
       );
     });
 
