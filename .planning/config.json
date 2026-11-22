@@ -1,0 +1,13 @@
+{
+  "version": "1",
+  "mode": "auto",
+  "granularity": "standard",
+  "parallelization": true,
+  "commit_docs": true,
+  "workflow": {
+    "research": true,
+    "plan_check": true,
+    "verifier": true,
+    "agent_hint_routing": true
+  }
+}
