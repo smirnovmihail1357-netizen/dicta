@@ -150,16 +150,34 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     }
   }
 
-  Widget _group(String title, List<Widget> children) => Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          // Inter-group rhythm 20 (04-UI-REVIEW p.126); inside the group 12/8.
-          const SizedBox(height: 20),
-          Text(title, style: Theme.of(context).textTheme.titleMedium),
-          const SizedBox(height: 8),
-          ...children,
-        ],
-      );
+  Widget _group(
+    String title,
+    List<Widget> children, {
+    double topGap = 20,
+  }) {
+    // Inside-group rhythm (04-UI-REVIEW p.126 / 05-UI-REVIEW top-1): a 12px
+    // separator after each control keeps a slider's muted readout from
+    // sticking to the next control's label. ListTile-like switches carry their
+    // own padding, so they are left alone; the group's last child gets no
+    // trailing gap (the next group owns the 20px inter-group rhythm).
+    final spaced = <Widget>[];
+    for (var i = 0; i < children.length; i++) {
+      spaced.add(children[i]);
+      if (i < children.length - 1 && children[i] is! SwitchListTile) {
+        spaced.add(const SizedBox(height: 12));
+      }
+    }
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        // First group has no leading gap: 16px scroll padding is enough.
+        if (topGap > 0) SizedBox(height: topGap),
+        Text(title, style: Theme.of(context).textTheme.titleMedium),
+        const SizedBox(height: 8),
+        ...spaced,
+      ],
+    );
+  }
 
   Widget _slider({
     required String label,
@@ -439,7 +457,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               format: (v) => '${(v / 1000).toStringAsFixed(0)} ${l10n.confSeconds}',
               wireFormat: (v) => v.toInt().toString(),
             ),
-          ]),
+          ], topGap: 0),
           _group(l10n.confGroupInsert, [
             _segmented<String>(
               label: l10n.confInjectModeLabel,
