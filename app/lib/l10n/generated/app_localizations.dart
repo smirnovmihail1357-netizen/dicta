@@ -262,6 +262,48 @@ abstract class AppLocalizations {
   /// **'текст вставлен'**
   String get dashInjected;
 
+  /// Title of the empty state on the history screen
+  ///
+  /// In ru, this message translates to:
+  /// **'журнал пуст'**
+  String get histEmpty;
+
+  /// Honest empty-state hint: daemon hotkey dictations are invisible to the app
+  ///
+  /// In ru, this message translates to:
+  /// **'записи появляются после диктовок из приложения — глобальный хоткей демона приложению не виден'**
+  String get histEmptyHint;
+
+  /// Hint on the history journal search field
+  ///
+  /// In ru, this message translates to:
+  /// **'поиск по тексту'**
+  String get histSearchHint;
+
+  /// Shown when the search query matches no journal entry
+  ///
+  /// In ru, this message translates to:
+  /// **'ничего не найдено'**
+  String get histSearchNoMatches;
+
+  /// Button that removes one entry from the in-memory journal
+  ///
+  /// In ru, this message translates to:
+  /// **'удалить'**
+  String get histDeleteButton;
+
+  /// Local snackbar confirmation after deleting a journal entry
+  ///
+  /// In ru, this message translates to:
+  /// **'удалено'**
+  String get histDeleted;
+
+  /// Semantic label of the history journal search field
+  ///
+  /// In ru, this message translates to:
+  /// **'поиск по журналу'**
+  String get histSearchSemantics;
+
   /// Title of the live level histogram and calibration card
   ///
   /// In ru, this message translates to:

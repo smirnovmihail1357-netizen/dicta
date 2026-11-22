@@ -6,6 +6,7 @@ import 'dart:async';
 
 import 'package:dicta_app/core/engine.dart';
 import 'package:dicta_app/core/providers.dart';
+import 'package:dicta_app/core/theme_ext.dart';
 import 'package:dicta_app/features/dashboard/dicta_control.dart';
 import 'package:dicta_app/features/shell/shell.dart';
 import 'package:dicta_app/l10n/generated/app_localizations.dart';
@@ -142,7 +143,15 @@ Widget buildFakeApp(
     child: Builder(
       builder: (context) {
         captureContainer?.call(ProviderScope.containerOf(context));
+        // The real app registers AppTextStyles in both themes; every widget
+        // suite must see the same extension or mutedOf(context) would assert.
+        final colors = ColorScheme.fromSeed(seedColor: const Color(0xFF35689F));
         return MaterialApp(
+          theme: ThemeData(
+            colorScheme: colors,
+            useMaterial3: true,
+            extensions: [AppTextStyles.from(colors)],
+          ),
           localizationsDelegates: AppLocalizations.localizationsDelegates,
           supportedLocales: AppLocalizations.supportedLocales,
           locale: const Locale('ru'),

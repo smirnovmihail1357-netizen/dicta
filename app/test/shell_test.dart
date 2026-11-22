@@ -2,6 +2,7 @@
 // No dart:io import and no DaemonEngine reference anywhere in this file.
 import 'package:dicta_app/core/engine.dart';
 import 'package:dicta_app/core/providers.dart';
+import 'package:dicta_app/core/theme_ext.dart';
 import 'package:dicta_app/features/shell/shell.dart';
 import 'package:dicta_app/l10n/generated/app_localizations.dart';
 import 'package:flutter/material.dart';
@@ -11,9 +12,16 @@ import 'package:flutter_test/flutter_test.dart';
 import 'fake_dicta_engine.dart';
 
 Widget buildTestApp(FakeDictaEngine fake) {
+  // This suite owns its scaffold; register the same mandatory extension as
+  // main.dart and buildFakeApp so mutedOf(context) resolves everywhere.
+  final colors = ThemeData().colorScheme;
   return ProviderScope(
     overrides: [engineProvider.overrideWithValue(fake)],
     child: MaterialApp(
+      theme: ThemeData(
+        colorScheme: colors,
+        extensions: [AppTextStyles.from(colors)],
+      ),
       localizationsDelegates: AppLocalizations.localizationsDelegates,
       supportedLocales: AppLocalizations.supportedLocales,
       locale: const Locale('ru'),

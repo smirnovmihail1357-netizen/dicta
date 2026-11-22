@@ -5,6 +5,7 @@ library;
 
 import 'package:dicta_app/core/engine.dart';
 import 'package:dicta_app/core/providers.dart';
+import 'package:dicta_app/core/theme_ext.dart';
 import 'package:dicta_app/features/dashboard/calibration_card.dart';
 import 'package:dicta_app/features/dashboard/diagnostics_card.dart';
 import 'package:dicta_app/features/dashboard/dicta_control.dart';
@@ -77,8 +78,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                     excludeSemantics: true,
                     child: Text(
                       l10n.dashRecordingTime(_formatSeconds(status.seconds)),
-                      style: TextStyle(
-                        color: colors.onSurfaceVariant,
+                      style: AppTextStyles.mutedOf(context).copyWith(
                         fontFeatures: const [FontFeature.tabularFigures()],
                       ),
                     ),
@@ -91,8 +91,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                         status.level.toStringAsFixed(2),
                         status.seconds.toStringAsFixed(1),
                       ),
-                      style: TextStyle(
-                        color: colors.onSurfaceVariant,
+                      style: AppTextStyles.mutedOf(context).copyWith(
                         fontFeatures: const [FontFeature.tabularFigures()],
                       ),
                     ),

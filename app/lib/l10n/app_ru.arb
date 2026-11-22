@@ -123,6 +123,34 @@
   "@dashInjected": {
     "description": "Local snackbar confirmation after a successful re-inject"
   },
+  "histEmpty": "журнал пуст",
+  "@histEmpty": {
+    "description": "Title of the empty state on the history screen"
+  },
+  "histEmptyHint": "записи появляются после диктовок из приложения — глобальный хоткей демона приложению не виден",
+  "@histEmptyHint": {
+    "description": "Honest empty-state hint: daemon hotkey dictations are invisible to the app"
+  },
+  "histSearchHint": "поиск по тексту",
+  "@histSearchHint": {
+    "description": "Hint on the history journal search field"
+  },
+  "histSearchNoMatches": "ничего не найдено",
+  "@histSearchNoMatches": {
+    "description": "Shown when the search query matches no journal entry"
+  },
+  "histDeleteButton": "удалить",
+  "@histDeleteButton": {
+    "description": "Button that removes one entry from the in-memory journal"
+  },
+  "histDeleted": "удалено",
+  "@histDeleted": {
+    "description": "Local snackbar confirmation after deleting a journal entry"
+  },
+  "histSearchSemantics": "поиск по журналу",
+  "@histSearchSemantics": {
+    "description": "Semantic label of the history journal search field"
+  },
   "calibrationTitle": "порог тишины",
   "@calibrationTitle": {
     "description": "Title of the live level histogram and calibration card"

@@ -1,3 +1,4 @@
+import 'package:dicta_app/core/theme_ext.dart';
 import 'package:dicta_app/features/shell/shell.dart';
 import 'package:dicta_app/l10n/generated/app_localizations.dart';
 import 'package:dynamic_color/dynamic_color.dart';
@@ -42,8 +43,16 @@ class DictaApp extends StatelessWidget {
           brightness: Brightness.dark,
         );
         return MaterialApp(
-          theme: ThemeData(colorScheme: light, useMaterial3: true),
-          darkTheme: ThemeData(colorScheme: dark, useMaterial3: true),
+          theme: ThemeData(
+            colorScheme: light,
+            useMaterial3: true,
+            extensions: [AppTextStyles.from(light)],
+          ),
+          darkTheme: ThemeData(
+            colorScheme: dark,
+            useMaterial3: true,
+            extensions: [AppTextStyles.from(dark)],
+          ),
           localizationsDelegates: AppLocalizations.localizationsDelegates,
           supportedLocales: AppLocalizations.supportedLocales,
           locale: const Locale('ru'),

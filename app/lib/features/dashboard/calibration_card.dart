@@ -4,6 +4,7 @@
 library;
 
 import 'package:dicta_app/core/providers.dart';
+import 'package:dicta_app/core/theme_ext.dart';
 import 'package:dicta_app/features/dashboard/level_history.dart';
 import 'package:dicta_app/l10n/generated/app_localizations.dart';
 import 'package:flutter/material.dart';
@@ -148,8 +149,7 @@ class _CalibrationCardState extends ConsumerState<CalibrationCard> {
             const SizedBox(height: 8),
             Text(
               l10n.calibrationThreshold(marker.toStringAsFixed(2)),
-              style: TextStyle(
-                color: colors.onSurfaceVariant,
+              style: AppTextStyles.mutedOf(context).copyWith(
                 fontFeatures: const [FontFeature.tabularFigures()],
               ),
             ),
@@ -164,20 +164,20 @@ class _CalibrationCardState extends ConsumerState<CalibrationCard> {
             ),
             Text(
               l10n.calibrationApplyHint,
-              style: TextStyle(color: colors.onSurfaceVariant),
+              style: AppTextStyles.mutedOf(context),
             ),
             if (samples.isEmpty) ...[
               const SizedBox(height: 4),
               Text(
                 l10n.calibrationEmptyHint,
-                style: TextStyle(color: colors.onSurfaceVariant),
+                style: AppTextStyles.mutedOf(context),
               ),
             ],
             if (settings?.autoStop == true) ...[
               const SizedBox(height: 4),
               Text(
                 l10n.calibrationAutoStopHint,
-                style: TextStyle(color: colors.onSurfaceVariant),
+                style: AppTextStyles.mutedOf(context),
               ),
             ],
             if (_error != null && _error!.isNotEmpty) ...[

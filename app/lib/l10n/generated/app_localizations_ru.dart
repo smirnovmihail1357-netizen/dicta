@@ -101,6 +101,28 @@ class AppLocalizationsRu extends AppLocalizations {
   String get dashInjected => 'текст вставлен';
 
   @override
+  String get histEmpty => 'журнал пуст';
+
+  @override
+  String get histEmptyHint =>
+      'записи появляются после диктовок из приложения — глобальный хоткей демона приложению не виден';
+
+  @override
+  String get histSearchHint => 'поиск по тексту';
+
+  @override
+  String get histSearchNoMatches => 'ничего не найдено';
+
+  @override
+  String get histDeleteButton => 'удалить';
+
+  @override
+  String get histDeleted => 'удалено';
+
+  @override
+  String get histSearchSemantics => 'поиск по журналу';
+
+  @override
   String get calibrationTitle => 'порог тишины';
 
   @override

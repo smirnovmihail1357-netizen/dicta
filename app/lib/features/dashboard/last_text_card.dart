@@ -3,6 +3,7 @@
 /// says so instead of inventing text (DASH-03).
 library;
 
+import 'package:dicta_app/core/theme_ext.dart';
 import 'package:dicta_app/features/dashboard/dicta_control.dart';
 import 'package:dicta_app/l10n/generated/app_localizations.dart';
 import 'package:flutter/material.dart';
@@ -19,7 +20,7 @@ class LastTextCard extends ConsumerWidget {
     final hasText = text != null && text.isNotEmpty;
     final busy = control.commandInFlight;
     final colors = Theme.of(context).colorScheme;
-    final weak = TextStyle(color: colors.onSurfaceVariant);
+    final weak = AppTextStyles.mutedOf(context);
 
     return Card(
       child: Padding(

@@ -25,7 +25,8 @@ Future<void> main() async {
 
     stdout.writeln('INJECT-REJECTED-AS-EXPECTED');
   } catch (error) {
-    stderr.writeln('DIAG SMOKE FAIL $error');
+    // Type only: never print the error object (02-SECURITY residual).
+    stderr.writeln('DIAG SMOKE FAIL ${error.runtimeType}');
     exitCode = 1;
   }
 }

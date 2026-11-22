@@ -4,6 +4,7 @@
 library;
 
 import 'package:dicta_app/core/providers.dart';
+import 'package:dicta_app/core/theme_ext.dart';
 import 'package:dicta_app/l10n/generated/app_localizations.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -15,7 +16,7 @@ class DiagnosticsCard extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final l10n = AppLocalizations.of(context)!;
     final colors = Theme.of(context).colorScheme;
-    final weak = TextStyle(color: colors.onSurfaceVariant);
+    final weak = AppTextStyles.mutedOf(context);
     final status = ref.watch(dictaStatusProvider);
     final settingsAsync = ref.watch(settingsSnapshotProvider);
     final settings = settingsAsync.value;

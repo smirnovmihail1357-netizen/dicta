@@ -4,6 +4,7 @@
 library;
 
 import 'package:dicta_app/core/providers.dart';
+import 'package:dicta_app/core/theme_ext.dart';
 import 'package:dicta_app/features/dashboard/dashboard_screen.dart';
 import 'package:dicta_app/l10n/generated/app_localizations.dart';
 import 'package:flutter/material.dart';
@@ -104,9 +105,7 @@ class _SectionPlaceholder extends StatelessWidget {
     return Center(
       child: Text(
         l10n.placeholderScreen,
-        style: TextStyle(
-          color: Theme.of(context).colorScheme.onSurfaceVariant,
-        ),
+        style: AppTextStyles.mutedOf(context),
       ),
     );
   }
