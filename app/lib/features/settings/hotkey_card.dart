@@ -94,8 +94,12 @@ class HotkeyCard extends ConsumerWidget {
     );
   }
 
-  Widget _deLine(String text) =>
-      Padding(padding: const EdgeInsets.only(bottom: 4), child: Text(text));
+  Widget _deLine(String text) => Padding(
+        padding: const EdgeInsets.only(bottom: 4),
+        // Actionable config commands must be copyable (confConfigPathField
+        // canon): SelectableText, never a dead Text.
+        child: SelectableText(text),
+      );
 }
 
 class _CurrentHotkey extends StatelessWidget {
