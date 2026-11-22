@@ -1,0 +1,31 @@
+[package]
+name = "dicta-spike-delayed-render"
+version = "0.0.0"
+edition = "2021"
+license = "MIT"
+publish = false
+
+# СТАндАЛОННЫЙ крейт: НЕ входит в [workspace] корня (members перечислены явно),
+# свой Cargo.lock. Это исследовательский бин, НЕ production (Must-NOT 8):
+# результаты прогона идут в 07-SPIKE-RESULT.md ДО написания inject_win.
+# Крейты синтеза клавиш / IPC-транспорта / аудио ЗАПРЕЩЕНЫ здесь — чистый Win32-эксперимент (RESEARCH §5).
+
+# Пустой [workspace] отрезает авто-обнаружение родительского workspace-корня:
+# у спика свой lock и своя зависимость windows 0.58 (не смешиваем с корневой).
+[workspace]
+
+[[bin]]
+name = "dicta-spike-delayed-render"
+path = "src/main.rs"
+
+[dependencies]
+# Та же мажорная версия, что запинена в dictad/dicta-core (07-01): windows 0.58.
+windows = { version = "0.58", features = [
+  "Win32_Foundation",                  # HWND/HANDLE/HGLOBAL/WPARAM/LPARAM
+  "Win32_System_DataExchange",         # OpenClipboard / SetClipboardData / WM_RENDERFORMAT-логика
+  "Win32_System_LibraryLoader",        # GetModuleHandleW для WNDCLASSW.hInstance
+  "Win32_System_Memory",               # GlobalAlloc/GlobalLock — реальный хендл при рендере
+  "Win32_Graphics_Gdi",                # WNDCLASSW + RegisterClassW (gated в windows 0.58)
+  "Win32_UI_WindowsAndMessaging",      # CreateWindowExW / GetMessageW / цикл окна
+  "Win32_UI_Input_KeyboardAndMouse",   # SendInput Ctrl+V с dwExtraInfo-тегом (режим send)
+] }

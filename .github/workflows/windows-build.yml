@@ -55,6 +55,11 @@ jobs:
       - name: Tests (CPU-only, scoped)
         run: cargo test --locked --no-default-features -p dicta-core -p dictad
 
+      # Спик ДО production-вставки (Must-NOT 8): API-ошибки ловим здесь,
+      # на headless-раннере бин НЕ запускаем — живые GUI-замеры делает пользователь.
+      - name: Spike delayed render — compile gate
+        run: cargo check --locked --manifest-path spike/delayed_render/Cargo.toml
+
       - name: Upload dictad.exe
         uses: actions/upload-artifact@v4
         with:
