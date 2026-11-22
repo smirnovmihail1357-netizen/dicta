@@ -199,6 +199,12 @@ class AppLocalizationsRu extends AppLocalizations {
   String get confGroupSystem => 'система';
 
   @override
+  String get confFetching => 'настройки загружаются…';
+
+  @override
+  String get confFetchFailed => 'не удалось получить настройки';
+
+  @override
   String get confMinLevelLabel => 'порог';
 
   @override
@@ -284,6 +290,9 @@ class AppLocalizationsRu extends AppLocalizations {
   String get modelSelectButton => 'выбрать';
 
   @override
+  String get modelSelectFailed => 'не удалось выбрать модель';
+
+  @override
   String get modelDeleteButton => 'удалить';
 
   @override
@@ -307,6 +316,9 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get modelFetchFailed => 'не удалось получить список моделей';
+
+  @override
+  String get modelFetchNetworkError => 'ошибка сети или таймаут';
 
   @override
   String get modelFetchRetry => 'повторить';

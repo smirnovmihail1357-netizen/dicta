@@ -514,4 +514,84 @@ void main() {
 
     await tester.pumpWidget(const SizedBox.shrink());
   });
+
+  // ---- Phase-4 UI audit top-3: non-HTTP network errors --------------------
+
+  testWidgets('a search timeout surfaces honestly and re-enables the button',
+      (tester) async {
+    final hf = FakeHfClient(
+      errorOverride: TimeoutException('search timed out'),
+    );
+    final fake = FakeDictaEngine(
+      const DictaStatus(connected: true, state: DaemonState.idle),
+      fetchSettingsReply: readSettings(),
+    );
+    await tester.pumpWidget(buildFakeApp(
+      fake,
+      hfClient: hf,
+      downloadEngine: FakeDownloadEngine(scenario: FakeDownloadScenario.ok200),
+    ));
+    await tick(tester);
+    await openModels(tester);
+
+    await tester.enterText(find.byKey(const Key('modelSearchField')), 'x');
+    await reveal(tester, find.byKey(const Key('modelSearchButton')));
+    await tester.tap(find.byKey(const Key('modelSearchButton')));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 100));
+
+    // TimeoutException is not HfHttpException: previously unhandled. Now the
+    // honest line is shown, the in-flight flag is cleared and the button works.
+    expect(find.text('ошибка сети или таймаут'), findsOneWidget);
+    final button = tester.widget<FilledButton>(
+      find.byKey(const Key('modelSearchButton')),
+    );
+    expect(button.onPressed, isNotNull);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
+  testWidgets('a tree timeout surfaces honestly and re-enables navigation',
+      (tester) async {
+    final searchUrl = browseUrl('tree', 'downloads', false, 0);
+    final treeUrl = treeUrlAt('org/repo', '');
+    final hf = FakeHfClient(
+      urlBody: {
+        searchUrl: jsonEncode([
+          {'id': 'org/repo', 'downloads': 1, 'likes': 1},
+        ]),
+      },
+      // A healthy search followed by a tree fetch that times out.
+      urlErrors: {treeUrl: TimeoutException('tree timed out')},
+    );
+    final fake = FakeDictaEngine(
+      const DictaStatus(connected: true, state: DaemonState.idle),
+      fetchSettingsReply: readSettings(),
+    );
+    await tester.pumpWidget(buildFakeApp(
+      fake,
+      hfClient: hf,
+      downloadEngine: FakeDownloadEngine(scenario: FakeDownloadScenario.ok200),
+    ));
+    await tick(tester);
+    await openModels(tester);
+
+    await tester.enterText(find.byKey(const Key('modelSearchField')), 'tree');
+    await reveal(tester, find.byKey(const Key('modelSearchButton')));
+    await tester.tap(find.byKey(const Key('modelSearchButton')));
+    await tester.pump();
+    await reveal(tester, find.byKey(const Key('modelRepo-org/repo')));
+    await tester.tap(find.byKey(const Key('modelRepo-org/repo')));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 100));
+
+    expect(find.text('ошибка сети или таймаут'), findsOneWidget);
+    // Navigation is usable again: the repo row can retry the tree fetch.
+    final repo = tester.widget<ListTile>(
+      find.byKey(const Key('modelRepo-org/repo')),
+    );
+    expect(repo.onTap, isNotNull);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
 }

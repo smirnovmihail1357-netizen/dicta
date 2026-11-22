@@ -175,30 +175,38 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     bool disabled = false,
   }) {
     final wire = wireFormat ?? format;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(label),
-        Slider(
-          key: Key(key),
-          min: min,
-          max: max,
-          divisions: divisions,
-          value: value.clamp(min, max),
-          label: format(value),
-          // One set per release, carrying the RAW wire value. Units live only
-          // in the label/readout (the daemon parses these keys as u64).
-          onChanged: disabled ? null : (v) => _preview(settingKey, wire(v)),
-          onChangeEnd: disabled ? null : (v) => _commit(settingKey, wire(v)),
+    // A11y (Pillar 5): a bare "0.35" in tab order says nothing about WHICH
+    // setting it is. Bind the control to its .arb label via MergeSemantics;
+    // the Slider still announces its own value (format(value) label).
+    return MergeSemantics(
+      child: Semantics(
+        label: label,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(label),
+            Slider(
+              key: Key(key),
+              min: min,
+              max: max,
+              divisions: divisions,
+              value: value.clamp(min, max),
+              label: format(value),
+              // One set per release, carrying the RAW wire value. Units live
+              // only in the label/readout (the daemon parses these as u64).
+              onChanged: disabled ? null : (v) => _preview(settingKey, wire(v)),
+              onChangeEnd: disabled ? null : (v) => _commit(settingKey, wire(v)),
+            ),
+            Text(
+              format(value),
+              key: Key(readoutKey ?? '${key}Readout'),
+              style: AppTextStyles.mutedOf(context).copyWith(
+                fontFeatures: const [FontFeature.tabularFigures()],
+              ),
+            ),
+          ],
         ),
-        Text(
-          format(value),
-          key: Key(readoutKey ?? '${key}Readout'),
-          style: AppTextStyles.mutedOf(context).copyWith(
-            fontFeatures: const [FontFeature.tabularFigures()],
-          ),
-        ),
-      ],
+      ),
     );
   }
 
@@ -227,23 +235,30 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     required String Function(T) format,
     bool disabled = false,
   }) =>
-      Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(label),
-          SegmentedButton<T>(
-            key: Key(key),
-            segments: values
-                .map((v) => ButtonSegment<T>(value: v, label: Text(format(v))))
-                .toList(),
-            selected: selected,
-            onSelectionChanged: disabled
-                ? null
-                : (next) {
-                    if (next.isNotEmpty) _commit(settingKey, format(next.first));
-                  },
+      MergeSemantics(
+        child: Semantics(
+          label: label,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(label),
+              SegmentedButton<T>(
+                key: Key(key),
+                segments: values
+                    .map((v) => ButtonSegment<T>(value: v, label: Text(format(v))))
+                    .toList(),
+                selected: selected,
+                onSelectionChanged: disabled
+                    ? null
+                    : (next) {
+                        if (next.isNotEmpty) {
+                          _commit(settingKey, format(next.first));
+                        }
+                      },
+              ),
+            ],
           ),
-        ],
+        ),
       );
 
   Widget _field({
@@ -275,12 +290,77 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
         ),
       );
 
+  /// Honest first-fetch failure: a retry card instead of a form full of
+  /// const SettingsReply() defaults that the user would mistake for live values.
+  /// Reuses the models-screen error-card pattern (WR-06). A failed fetch is a
+  /// TRANSPORT state, never a daemon note - _error/confStatus stays untouched.
+  Widget _fetchErrorCard(AppLocalizations l10n, ColorScheme colors) =>
+      SingleChildScrollView(
+        padding: const EdgeInsets.all(16),
+        child: Card(
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Text(
+                  l10n.confFetchFailed,
+                  key: const Key('confFetchError'),
+                  style: TextStyle(color: colors.error),
+                ),
+                const SizedBox(height: 8),
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: OutlinedButton(
+                    key: const Key('confFetchRetryButton'),
+                    onPressed: () =>
+                        ref.invalidate(settingsSnapshotProvider),
+                    child: Text(l10n.modelFetchRetry),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+
+  /// Honest first-fetch loading: a spinner, not a populated form.
+  Widget _fetchLoading(AppLocalizations l10n) => Center(
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Row(
+            key: const Key('confFetchSpinner'),
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const SizedBox(
+                width: 16,
+                height: 16,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              ),
+              const SizedBox(width: 8),
+              Text(l10n.confFetching),
+            ],
+          ),
+        ),
+      );
+
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
     final colors = Theme.of(context).colorScheme;
-    final providerSettings = ref.watch(settingsSnapshotProvider).value;
-    final s = _replySnapshot ?? providerSettings ?? const SettingsReply();
+    final settingsAsync = ref.watch(settingsSnapshotProvider);
+
+    // Never render a form built from const SettingsReply() defaults: with no
+    // live snapshot there are no real values to edit. A prior successful set
+    // (_replySnapshot) IS a live daemon snapshot and keeps the form (Pattern 3)
+    // even if a later background refetch fails.
+    final snapshot = _replySnapshot ?? settingsAsync.value;
+    if (snapshot == null) {
+      if (settingsAsync is AsyncError) return _fetchErrorCard(l10n, colors);
+      return _fetchLoading(l10n);
+    }
+
+    final s = snapshot;
     final reloading = s.reloading;
     if (!_pasteKeysFocus.hasFocus && _pasteKeysController.text != s.pasteKeys) {
       _pasteKeysController.text = s.pasteKeys;

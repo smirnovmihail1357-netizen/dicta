@@ -199,4 +199,35 @@ void main() {
 
     await tester.pumpWidget(const SizedBox.shrink());
   });
+
+  testWidgets('a refused model selection surfaces the daemon string in a snackbar',
+      (tester) async {
+    const refusal = 'идёт запись — смену модели отложи';
+    final fake = FakeDictaEngine(
+      const DictaStatus(connected: true, state: DaemonState.idle),
+      fetchSettingsReply: readFixture(),
+      // A real daemon refusal: error set, note absent, so no success marker.
+      setReplyMap: const <String, dynamic>{'error': refusal},
+    );
+    await tester.pumpWidget(buildFakeApp(fake));
+    await tick(tester);
+    await openModels(tester);
+    final before = fake.fetchCount;
+
+    await tester.tap(
+      find.byKey(const Key('modelSelectButton-large-v3-turbo-q5_0')),
+    );
+    await tester.pump();
+    await tester.tap(find.text('продолжить'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 100));
+
+    // .arb title + verbatim daemon body, both in the error tone.
+    expect(find.text('не удалось выбрать модель'), findsOneWidget);
+    expect(find.text(refusal), findsOneWidget);
+    // A refusal is not a successful set: no refetch of the active marker.
+    expect(fake.fetchCount, before);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
 }

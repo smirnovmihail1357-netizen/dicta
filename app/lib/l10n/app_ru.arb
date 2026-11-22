@@ -253,6 +253,14 @@
   "@confGroupSystem": {
     "description": "Settings group title: system"
   },
+  "confFetching": "настройки загружаются…",
+  "@confFetching": {
+    "description": "Honest loading caption while the settings snapshot has not landed yet"
+  },
+  "confFetchFailed": "не удалось получить настройки",
+  "@confFetchFailed": {
+    "description": "Honest error card title when the settings snapshot fetch fails, never a daemon note"
+  },
   "confMinLevelLabel": "порог",
   "@confMinLevelLabel": {
     "description": "Label of the min_level setting"
@@ -366,6 +374,10 @@
   "@modelSelectButton": {
     "description": "Selects an inactive model (an ENGINE set)"
   },
+  "modelSelectFailed": "не удалось выбрать модель",
+  "@modelSelectFailed": {
+    "description": "Snackbar title above the daemon's verbatim model-selection refusal"
+  },
   "modelDeleteButton": "удалить",
   "@modelDeleteButton": {
     "description": "Deletes an inactive model file"
@@ -397,6 +409,10 @@
   "modelFetchFailed": "не удалось получить список моделей",
   "@modelFetchFailed": {
     "description": "Honest error row when the settings snapshot failed to load, not an empty list"
+  },
+  "modelFetchNetworkError": "ошибка сети или таймаут",
+  "@modelFetchNetworkError": {
+    "description": "Honest error line when an HF search/tree fetch throws a non-HTTP exception such as a timeout or socket error"
   },
   "modelFetchRetry": "повторить",
   "@modelFetchRetry": {

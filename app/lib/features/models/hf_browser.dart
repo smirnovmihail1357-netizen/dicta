@@ -36,6 +36,10 @@ class _HfBrowserState extends ConsumerState<HfBrowser> {
   String? _fetchError;
   bool _searched = false;
 
+  /// A network fetch is in flight; search/tree buttons are disabled and the
+  /// state is always cleared in finally (success, HTTP error, or catch-all).
+  bool _fetchInFlight = false;
+
   void _snack(String message) {
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
@@ -55,6 +59,7 @@ class _HfBrowserState extends ConsumerState<HfBrowser> {
 
   Future<void> _search({bool append = false}) async {
     final url = browseUrl(_query, _sort, _asrOnly, _offset);
+    setState(() => _fetchInFlight = true);
     try {
       final body = await ref.read(hfClientProvider).fetchText(url);
       if (!mounted) return;
@@ -85,11 +90,22 @@ class _HfBrowserState extends ConsumerState<HfBrowser> {
             ? AppLocalizations.of(context)!.modelRepoClosed
             : 'HTTP ${error.statusCode}';
       });
+    } catch (_) {
+      // TimeoutException / SocketException / DNS at the 30 s transport seam
+      // are NOT HfHttpException: previously they escaped as unhandled async
+      // errors and left the UI silent with a disabled button. Show an honest
+      // localised line instead (phase-4 UI review top-3).
+      if (!mounted) return;
+      setState(() => _fetchError =
+          AppLocalizations.of(context)!.modelFetchNetworkError);
+    } finally {
+      if (mounted) setState(() => _fetchInFlight = false);
     }
   }
 
   Future<void> _openTree(String repo, String subpath) async {
     final url = treeUrlAt(repo, subpath);
+    setState(() => _fetchInFlight = true);
     try {
       final body = await ref.read(hfClientProvider).fetchText(url);
       if (!mounted) return;
@@ -107,6 +123,14 @@ class _HfBrowserState extends ConsumerState<HfBrowser> {
             ? AppLocalizations.of(context)!.modelRepoClosed
             : 'HTTP ${error.statusCode}';
       });
+    } catch (_) {
+      // Same honest catch-all as _search: a timeout/socket error while opening
+      // a repo tree must not escape the tap handler or hang the UI.
+      if (!mounted) return;
+      setState(() => _fetchError =
+          AppLocalizations.of(context)!.modelFetchNetworkError);
+    } finally {
+      if (mounted) setState(() => _fetchInFlight = false);
     }
   }
 
@@ -187,28 +211,35 @@ class _HfBrowserState extends ConsumerState<HfBrowser> {
           style: Theme.of(context).textTheme.titleMedium,
         ),
         const SizedBox(height: 8),
-        Row(
-          children: [
-            Expanded(child: Text(l10n.modelVramLabel)),
-            SizedBox(
-              width: 180,
-              child: Slider(
-                key: const Key('modelVramSlider'),
-                min: 2,
-                max: 32,
-                divisions: 30,
-                value: vram,
-                label: vram.toInt().toString(),
-                // UI-only: never an engine.set (there is no daemon key).
-                // Slider requires onChanged; keep it a no-op so the notifier
-                // is written once per gesture, on release (IN-05).
-                onChanged: (_) {},
-                onChangeEnd: (value) =>
-                    ref.read(vramLimitGbProvider.notifier).set(value),
-              ),
+        // A11y (Pillar 5): name the VRAM slider with its .arb label so tab
+        // order never reads a bare "24" without saying what it limits.
+        MergeSemantics(
+          child: Semantics(
+            label: l10n.modelVramLabel,
+            child: Row(
+              children: [
+                Expanded(child: Text(l10n.modelVramLabel)),
+                SizedBox(
+                  width: 180,
+                  child: Slider(
+                    key: const Key('modelVramSlider'),
+                    min: 2,
+                    max: 32,
+                    divisions: 30,
+                    value: vram,
+                    label: vram.toInt().toString(),
+                    // UI-only: never an engine.set (there is no daemon key).
+                    // Slider requires onChanged; keep it a no-op so the notifier
+                    // is written once per gesture, on release (IN-05).
+                    onChanged: (_) {},
+                    onChangeEnd: (value) =>
+                        ref.read(vramLimitGbProvider.notifier).set(value),
+                  ),
+                ),
+                Text('${vram.toInt()}', style: AppTextStyles.mutedOf(context)),
+              ],
             ),
-            Text('${vram.toInt()}', style: AppTextStyles.mutedOf(context)),
-          ],
+          ),
         ),
         ...kCatalog.asMap().entries.map((entry) {
           final item = entry.value;
@@ -298,12 +329,27 @@ class _HfBrowserState extends ConsumerState<HfBrowser> {
           alignment: Alignment.centerLeft,
           child: FilledButton(
             key: const Key('modelSearchButton'),
-            onPressed: () {
-              // Every explicit search starts again from the first page.
-              _offset = 0;
-              _search();
-            },
-            child: Text(l10n.modelSearchButton),
+            onPressed: _fetchInFlight
+                ? null
+                : () {
+                    // Every explicit search starts again from the first page.
+                    _offset = 0;
+                    _search();
+                  },
+            child: _fetchInFlight
+                ? Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const SizedBox(
+                        width: 14,
+                        height: 14,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      ),
+                      const SizedBox(width: 8),
+                      Text(l10n.modelSearchButton),
+                    ],
+                  )
+                : Text(l10n.modelSearchButton),
           ),
         ),
         if (_fetchError != null) ...[
@@ -325,17 +371,19 @@ class _HfBrowserState extends ConsumerState<HfBrowser> {
                   fontFeatures: const [FontFeature.tabularFigures()],
                 ),
               ),
-              onTap: () => _openTree(repo.id, ''),
+              onTap: _fetchInFlight ? null : () => _openTree(repo.id, ''),
             ),
           ),
           Align(
             alignment: Alignment.centerLeft,
             child: TextButton(
               key: const Key('modelShowMoreButton'),
-              onPressed: () {
-                _offset += 20;
-                _search(append: true);
-              },
+              onPressed: _fetchInFlight
+                  ? null
+                  : () {
+                      _offset += 20;
+                      _search(append: true);
+                    },
               child: Text(l10n.modelShowMore),
             ),
           ),
@@ -351,7 +399,8 @@ class _HfBrowserState extends ConsumerState<HfBrowser> {
               const Spacer(),
               TextButton(
                 key: const Key('modelTreeBackButton'),
-                onPressed: _subpath.isEmpty ? null : _goBack,
+                onPressed:
+                    _fetchInFlight || _subpath.isEmpty ? null : _goBack,
                 child: Text(l10n.modelSubdirBack),
               ),
             ],
@@ -364,7 +413,9 @@ class _HfBrowserState extends ConsumerState<HfBrowser> {
                       padding: const EdgeInsets.only(right: 8),
                       child: OutlinedButton(
                         key: Key('modelSubdir-$dir'),
-                        onPressed: () => _openTree(_repo!, dir),
+                        onPressed: _fetchInFlight
+                            ? null
+                            : () => _openTree(_repo!, dir),
                         child: Text(destName(dir)),
                       ),
                     ),

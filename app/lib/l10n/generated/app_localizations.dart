@@ -454,6 +454,18 @@ abstract class AppLocalizations {
   /// **'система'**
   String get confGroupSystem;
 
+  /// Honest loading caption while the settings snapshot has not landed yet
+  ///
+  /// In ru, this message translates to:
+  /// **'настройки загружаются…'**
+  String get confFetching;
+
+  /// Honest error card title when the settings snapshot fetch fails, never a daemon note
+  ///
+  /// In ru, this message translates to:
+  /// **'не удалось получить настройки'**
+  String get confFetchFailed;
+
   /// Label of the min_level setting
   ///
   /// In ru, this message translates to:
@@ -622,6 +634,12 @@ abstract class AppLocalizations {
   /// **'выбрать'**
   String get modelSelectButton;
 
+  /// Snackbar title above the daemon's verbatim model-selection refusal
+  ///
+  /// In ru, this message translates to:
+  /// **'не удалось выбрать модель'**
+  String get modelSelectFailed;
+
   /// Deletes an inactive model file
   ///
   /// In ru, this message translates to:
@@ -669,6 +687,12 @@ abstract class AppLocalizations {
   /// In ru, this message translates to:
   /// **'не удалось получить список моделей'**
   String get modelFetchFailed;
+
+  /// Honest error line when an HF search/tree fetch throws a non-HTTP exception such as a timeout or socket error
+  ///
+  /// In ru, this message translates to:
+  /// **'ошибка сети или таймаут'**
+  String get modelFetchNetworkError;
 
   /// Retry the failed settings snapshot fetch from the models screen
   ///

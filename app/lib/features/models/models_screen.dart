@@ -46,8 +46,32 @@ class ModelsScreen extends ConsumerWidget {
       final reply = await ref.read(engineProvider).set('model', path);
       // The daemon's success note is data (main.rs:737), not a refusal. Only a
       // real error stops the mandatory done -> invalidate + await refetch that
-      // makes the active-model marker follow the switched model.
-      if (reply.error != null) return;
+      // makes the active-model marker follow the switched model. A refusal is
+      // never silent: show it verbatim (phase-3 inject-failure snackbar canon:
+      // .arb title + daemon body, both in the error tone).
+      if (reply.error != null) {
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    l10n.modelSelectFailed,
+                    style: TextStyle(color: colors.error),
+                  ),
+                  Text(
+                    reply.error!,
+                    style: TextStyle(color: colors.error),
+                  ),
+                ],
+              ),
+            ),
+          );
+        }
+        return;
+      }
       try {
         ref.invalidate(settingsSnapshotProvider);
         await ref.read(settingsSnapshotProvider.future);
@@ -75,7 +99,11 @@ class ModelsScreen extends ConsumerWidget {
               child: Text(l10n.modelDecline),
             ),
             FilledButton(
-              style: FilledButton.styleFrom(backgroundColor: colors.error),
+              // Destructive canon: error background + onError foreground.
+              style: FilledButton.styleFrom(
+                backgroundColor: colors.error,
+                foregroundColor: colors.onError,
+              ),
               onPressed: () => Navigator.of(context).pop(true),
               child: Text(l10n.modelDeleteConfirm),
             ),

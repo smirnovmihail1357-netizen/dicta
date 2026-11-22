@@ -28,6 +28,7 @@ class FakeDictaEngine implements DictaEngine {
     this.cancelReply,
     this.statusError,
     this.onSet,
+    this.fetchSettingsGate,
   });
 
   /// Mutable snapshot: tests rewrite it between real poller ticks to script

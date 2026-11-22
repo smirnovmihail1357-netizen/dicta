@@ -1,5 +1,6 @@
 // TRACER: one settings key end-to-end through the real seam
 // (slider -> set -> SetReply snapshot -> form, no refetch).
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
@@ -544,6 +545,86 @@ void main() {
     await tester.pump(const Duration(seconds: 3));
     await tester.pump();
     expect(fake.fetchCount, countAfterFailure);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
+  // ---- Phase-4 UI audit top-1: honest fetch states ------------------------
+
+  testWidgets('a failed settings fetch shows a retry card, never fabricated defaults',
+      (tester) async {
+    final fake = FakeDictaEngine(
+      const DictaStatus(connected: true, state: DaemonState.idle),
+      // A daemon error reply promotes settingsSnapshotProvider to AsyncError.
+      fetchSettingsReply: const <String, dynamic>{
+        'error': 'демон недоступен',
+      },
+    );
+    await tester.pumpWidget(buildFakeApp(fake));
+    await tick(tester);
+    await openSettings(tester);
+
+    expect(find.byKey(const Key('confFetchError')), findsOneWidget);
+    expect(find.text('не удалось получить настройки'), findsOneWidget);
+    expect(find.byKey(const Key('confFetchRetryButton')), findsOneWidget);
+    // No form built out of const SettingsReply() zeros: a dead daemon must
+    // never look like a fully populated "current values" form.
+    expect(find.byKey(const Key('confPasteDelaySlider')), findsNothing);
+    expect(find.byKey(const Key('confInjectModeSegments')), findsNothing);
+    expect(find.byKey(const Key('confModelDropdown')), findsNothing);
+    // A failed fetch is a transport state, not a daemon note: no status line.
+    expect(find.byKey(const Key('confStatus')), findsNothing);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
+  testWidgets('retry after a failed settings fetch refetches and shows the form',
+      (tester) async {
+    final fake = FakeDictaEngine(
+      const DictaStatus(connected: true, state: DaemonState.idle),
+      fetchSettingsReply: const <String, dynamic>{
+        'error': 'демон недоступен',
+      },
+    );
+    await tester.pumpWidget(buildFakeApp(fake));
+    await tick(tester);
+    await openSettings(tester);
+
+    expect(find.byKey(const Key('confFetchError')), findsOneWidget);
+    final before = fake.fetchCount;
+
+    // The daemon comes back before the retry tap.
+    fake.fetchSettingsReply = settingsFixture;
+    await tester.tap(find.byKey(const Key('confFetchRetryButton')));
+    await tick(tester);
+
+    expect(fake.fetchCount, greaterThan(before));
+    expect(find.byKey(const Key('confFetchError')), findsNothing);
+    expect(find.byKey(const Key('confPasteDelaySlider')), findsOneWidget);
+    expect(sliderValue(tester), 150);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
+  testWidgets('in-flight settings fetch shows a spinner, not a populated form',
+      (tester) async {
+    final gate = Completer<void>();
+    final fake = FakeDictaEngine(
+      const DictaStatus(connected: true, state: DaemonState.idle),
+      fetchSettingsReply: settingsFixture,
+      fetchSettingsGate: gate,
+    );
+    await tester.pumpWidget(buildFakeApp(fake));
+    await tick(tester);
+    await openSettings(tester);
+
+    expect(find.byKey(const Key('confFetchSpinner')), findsOneWidget);
+    expect(find.text('настройки загружаются…'), findsOneWidget);
+    expect(find.byKey(const Key('confPasteDelaySlider')), findsNothing);
+
+    gate.complete();
+    await tick(tester);
+    expect(find.byKey(const Key('confPasteDelaySlider')), findsOneWidget);
 
     await tester.pumpWidget(const SizedBox.shrink());
   });
