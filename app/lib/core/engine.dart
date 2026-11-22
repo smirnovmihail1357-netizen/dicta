@@ -6,6 +6,8 @@
 /// serializes and surfaces the reply's error field.
 library;
 
+import 'dart:convert';
+
 enum DaemonState { idle, recording, transcribing }
 
 class DictaStatus {
@@ -26,7 +28,28 @@ class DictaStatus {
         text = null,
         error = null;
 
-  factory DictaStatus.fromReplyLine(String line) => const DictaStatus.disconnected();
+  /// Tolerant parse of one daemon reply line. Malformed or partial input
+  /// becomes a disconnected snapshot instead of escaping as an exception.
+  factory DictaStatus.fromReplyLine(String line) {
+    try {
+      final map = decodeReplyMap(line);
+      final state = switch (map['state']) {
+        'recording' => DaemonState.recording,
+        'transcribing' => DaemonState.transcribing,
+        _ => DaemonState.idle,
+      };
+      return DictaStatus(
+        connected: true,
+        state: state,
+        level: (map['level'] as num?)?.toDouble() ?? 0.0,
+        seconds: (map['seconds'] as num?)?.toDouble() ?? 0.0,
+        text: map['text'] as String?,
+        error: map['error'] as String?,
+      );
+    } catch (_) {
+      return const DictaStatus.disconnected();
+    }
+  }
 
   final bool connected;
   final DaemonState state;
@@ -49,11 +72,20 @@ abstract interface class DictaEngine {
   Future<DictaReply> stop({String? app});
   Future<DictaReply> toggle({String? app});
   Future<DictaReply> cancel();
-  Future<Object> fetchSettings();
+
+  /// Full decoded reply map; SettingsReply.fromReply consumes it (Task 4).
+  Future<Map<String, dynamic>> fetchSettings();
   Future<DictaReply> set(String key, String value);
   Stream<DictaStatus> get statusStream;
 }
 
-String buildStatusLine() => '{}';
+Map<String, dynamic> decodeReplyMap(String line) {
+  final decoded = jsonDecode(line);
+  if (decoded is Map<String, dynamic>) return decoded;
+  throw const FormatException('daemon reply is not a JSON object');
+}
 
-String buildSetLine(String key, String value) => '{}';
+String buildStatusLine() => '${jsonEncode({'cmd': 'status'})}\n';
+
+String buildSetLine(String key, String value) =>
+    '${jsonEncode({'cmd': 'set', 'key': key, 'value': value})}\n';
