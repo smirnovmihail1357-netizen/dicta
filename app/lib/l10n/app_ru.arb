@@ -394,6 +394,14 @@
   "@modelEmpty": {
     "description": "Honest empty state when settings.models is empty"
   },
+  "modelFetchFailed": "не удалось получить список моделей",
+  "@modelFetchFailed": {
+    "description": "Honest error row when the settings snapshot failed to load, not an empty list"
+  },
+  "modelFetchRetry": "повторить",
+  "@modelFetchRetry": {
+    "description": "Retry the failed settings snapshot fetch from the models screen"
+  },
   "modelDeleteBlocked": "модель активна или вне каталога",
   "@modelDeleteBlocked": {
     "description": "Honest message when the delete guard rejects a path"

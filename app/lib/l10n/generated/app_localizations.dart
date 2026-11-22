@@ -664,6 +664,18 @@ abstract class AppLocalizations {
   /// **'моделей нет — скачай из каталога ниже'**
   String get modelEmpty;
 
+  /// Honest error row when the settings snapshot failed to load, not an empty list
+  ///
+  /// In ru, this message translates to:
+  /// **'не удалось получить список моделей'**
+  String get modelFetchFailed;
+
+  /// Retry the failed settings snapshot fetch from the models screen
+  ///
+  /// In ru, this message translates to:
+  /// **'повторить'**
+  String get modelFetchRetry;
+
   /// Honest message when the delete guard rejects a path
   ///
   /// In ru, this message translates to:

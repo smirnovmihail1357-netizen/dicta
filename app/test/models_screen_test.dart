@@ -180,4 +180,23 @@ void main() {
 
     await tester.pumpWidget(const SizedBox.shrink());
   });
+
+  testWidgets('a failed settings fetch is not shown as an empty model list',
+      (tester) async {
+    final fake = FakeDictaEngine(
+      const DictaStatus(connected: true, state: DaemonState.idle),
+      fetchSettingsReply: const <String, dynamic>{
+        'error': 'демон недоступен',
+      },
+    );
+    await tester.pumpWidget(buildFakeApp(fake));
+    await tick(tester);
+    await openModels(tester);
+
+    expect(find.text('не удалось получить список моделей'), findsOneWidget);
+    expect(find.byKey(const Key('modelFetchRetryButton')), findsOneWidget);
+    expect(find.text('моделей нет — скачай из каталога ниже'), findsNothing);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
 }

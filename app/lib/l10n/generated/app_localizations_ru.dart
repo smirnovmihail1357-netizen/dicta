@@ -306,6 +306,12 @@ class AppLocalizationsRu extends AppLocalizations {
   String get modelEmpty => 'моделей нет — скачай из каталога ниже';
 
   @override
+  String get modelFetchFailed => 'не удалось получить список моделей';
+
+  @override
+  String get modelFetchRetry => 'повторить';
+
+  @override
   String get modelDeleteBlocked => 'модель активна или вне каталога';
 
   @override

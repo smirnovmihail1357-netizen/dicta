@@ -19,7 +19,8 @@ class ModelsScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final l10n = AppLocalizations.of(context)!;
     final colors = Theme.of(context).colorScheme;
-    final settings = ref.watch(settingsSnapshotProvider).value;
+    final settingsAsync = ref.watch(settingsSnapshotProvider);
+    final settings = settingsAsync.value;
     final models = settings?.models ?? const <String>[];
     final active = settings?.model ?? '';
 
@@ -124,7 +125,32 @@ class ModelsScreen extends ConsumerWidget {
             style: Theme.of(context).textTheme.titleMedium,
           ),
           const SizedBox(height: 8),
-          if (models.isEmpty)
+          if (settingsAsync is AsyncError)
+            Card(
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Text(
+                      l10n.modelFetchFailed,
+                      key: const Key('modelFetchError'),
+                      style: TextStyle(color: colors.error),
+                    ),
+                    const SizedBox(height: 8),
+                    Align(
+                      alignment: Alignment.centerLeft,
+                      child: OutlinedButton(
+                        key: const Key('modelFetchRetryButton'),
+                        onPressed: () => ref.invalidate(settingsSnapshotProvider),
+                        child: Text(l10n.modelFetchRetry),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            )
+          else if (models.isEmpty && settingsAsync is AsyncData)
             Card(
               child: Padding(
                 padding: const EdgeInsets.all(16),
