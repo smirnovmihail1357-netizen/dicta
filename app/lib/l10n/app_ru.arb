@@ -37,12 +37,9 @@
   "@daemonStateTranscribing": {
     "description": "Daemon state: transcribing"
   },
-  "stateLabel": "состояние: {state}",
-  "@stateLabel": {
-    "description": "Live daemon state label on the dashboard",
-    "placeholders": {
-      "state": {"type": "String", "example": "ожидание"}
-    }
+  "dashStatusCardTitle": "состояние",
+  "@dashStatusCardTitle": {
+    "description": "Noun title of the dashboard status card"
   },
   "levelSeconds": "уровень {level} · {seconds} с",
   "@levelSeconds": {
@@ -202,7 +199,7 @@
   "@diagModelLoading": {
     "description": "Neutral row while the daemon is still loading its model"
   },
-  "diagModelUnavailable": "модель: данных нет",
+  "diagModelUnavailable": "данных о модели нет",
   "@diagModelUnavailable": {
     "description": "Red row when the daemon is unreachable or reports no model"
   },
@@ -210,7 +207,7 @@
   "@diagModelFetching": {
     "description": "Neutral row while the settings snapshot has not landed yet"
   },
-  "diagModelFetchFailed": "модель: не удалось получить данные",
+  "diagModelFetchFailed": "не удалось получить данные о модели",
   "@diagModelFetchFailed": {
     "description": "Distinct row when the settings fetch or parse failed"
   },

@@ -129,6 +129,35 @@ void main() {
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
+  testWidgets('copy snackbar is exposed to assistive technology (AT probe)',
+      (tester) async {
+    final fake = FakeDictaEngine(
+      const DictaStatus(connected: true, state: DaemonState.recording),
+      stopReply: const DictaStatus(
+        connected: true,
+        state: DaemonState.idle,
+        text: 'привет',
+      ),
+    );
+    final handle = tester.ensureSemantics();
+    try {
+      await tester.pumpWidget(buildFakeApp(fake, onCopy: (_) {}));
+      await tick(tester);
+      await captureTextViaStop(tester);
+      await goToHistory(tester);
+
+      await tester.tap(find.byKey(const Key('histCopyButton-1')));
+      await tester.pump();
+      await tester.pump();
+
+      expect(find.bySemanticsLabel('скопировано'), findsOneWidget);
+    } finally {
+      handle.dispose();
+    }
+
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
   testWidgets('re-insert goes through inject and is gated while in flight',
       (tester) async {
     final gate = Completer<void>();

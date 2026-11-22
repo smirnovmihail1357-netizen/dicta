@@ -148,11 +148,11 @@ abstract class AppLocalizations {
   /// **'распознавание'**
   String get daemonStateTranscribing;
 
-  /// Live daemon state label on the dashboard
+  /// Noun title of the dashboard status card
   ///
   /// In ru, this message translates to:
-  /// **'состояние: {state}'**
-  String stateLabel(String state);
+  /// **'состояние'**
+  String get dashStatusCardTitle;
 
   /// Live signal level and elapsed seconds on the dashboard
   ///
@@ -379,7 +379,7 @@ abstract class AppLocalizations {
   /// Red row when the daemon is unreachable or reports no model
   ///
   /// In ru, this message translates to:
-  /// **'модель: данных нет'**
+  /// **'данных о модели нет'**
   String get diagModelUnavailable;
 
   /// Neutral row while the settings snapshot has not landed yet
@@ -391,7 +391,7 @@ abstract class AppLocalizations {
   /// Distinct row when the settings fetch or parse failed
   ///
   /// In ru, this message translates to:
-  /// **'модель: не удалось получить данные'**
+  /// **'не удалось получить данные о модели'**
   String get diagModelFetchFailed;
 
   /// Honest caveat for the model readiness proxy

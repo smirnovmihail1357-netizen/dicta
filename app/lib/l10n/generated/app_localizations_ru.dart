@@ -37,9 +37,7 @@ class AppLocalizationsRu extends AppLocalizations {
   String get daemonStateTranscribing => 'распознавание';
 
   @override
-  String stateLabel(String state) {
-    return 'состояние: $state';
-  }
+  String get dashStatusCardTitle => 'состояние';
 
   @override
   String levelSeconds(String level, String seconds) {
@@ -162,13 +160,13 @@ class AppLocalizationsRu extends AppLocalizations {
   String get diagModelLoading => 'модель загружается…';
 
   @override
-  String get diagModelUnavailable => 'модель: данных нет';
+  String get diagModelUnavailable => 'данных о модели нет';
 
   @override
   String get diagModelFetching => 'данные модели загружаются…';
 
   @override
-  String get diagModelFetchFailed => 'модель: не удалось получить данные';
+  String get diagModelFetchFailed => 'не удалось получить данные о модели';
 
   @override
   String get diagModelNote => 'по данным демона — гарантию даёт живая диктовка';

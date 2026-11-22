@@ -61,11 +61,21 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  Text(
+                    l10n.dashStatusCardTitle,
+                    style: Theme.of(context).textTheme.titleMedium,
+                  ),
                   Semantics(
                     liveRegion: true,
                     child: Text(
-                      l10n.stateLabel(label),
-                      style: Theme.of(context).textTheme.titleMedium,
+                      label,
+                      style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                            color: switch (status.state) {
+                              DaemonState.idle => colors.onSurface,
+                              DaemonState.recording => colors.primary,
+                              DaemonState.transcribing => colors.tertiary,
+                            },
+                          ),
                     ),
                   ),
                   const SizedBox(height: 12),

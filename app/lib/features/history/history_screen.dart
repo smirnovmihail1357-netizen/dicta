@@ -38,6 +38,16 @@ class HistoryScreen extends ConsumerWidget {
                 decoration: InputDecoration(
                   hintText: l10n.histSearchHint,
                   prefixIcon: const Icon(Icons.search),
+                  // Clear suffix only for a non-empty query: one tap removes
+                  // the filter without a second focus stop when it is empty.
+                  suffixIcon: query.isEmpty
+                      ? null
+                      : IconButton(
+                          key: const Key('historyClearSearchButton'),
+                          icon: const Icon(Icons.close),
+                          onPressed: () =>
+                              ref.read(historyQueryProvider.notifier).set(''),
+                        ),
                   border: const OutlineInputBorder(),
                 ),
                 // No debounce and no TextEditingController double state: the
@@ -73,14 +83,19 @@ class HistoryScreen extends ConsumerWidget {
                   ),
                 )
               : filtered.isEmpty
-                  ? Center(
-                      child: Text(
-                        l10n.histSearchNoMatches,
-                        style: AppTextStyles.mutedOf(context),
+                  ? Card(
+                      margin: const EdgeInsets.symmetric(horizontal: 16),
+                      child: Padding(
+                        padding: const EdgeInsets.all(16),
+                        child: Text(
+                          l10n.histSearchNoMatches,
+                          style: Theme.of(context).textTheme.titleMedium,
+                        ),
                       ),
                     )
                   : ListView.builder(
-                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      // Bottom padding keeps the last row off the screen edge.
+                      padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
                       itemCount: filtered.length,
                       // State is already newest-first; no reverse needed.
                       itemBuilder: (context, index) {

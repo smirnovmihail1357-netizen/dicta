@@ -21,7 +21,8 @@ void main() {
     );
     await tester.pumpWidget(buildFakeApp(fake));
     await tick(tester);
-    expect(find.text('состояние: ожидание'), findsOneWidget);
+    expect(find.text('состояние'), findsOneWidget);
+    expect(find.text('ожидание'), findsOneWidget);
 
     fake.statusValue = const DictaStatus(
       connected: true,
@@ -30,7 +31,8 @@ void main() {
       seconds: 65.3,
     );
     await tick(tester);
-    expect(find.text('состояние: запись'), findsOneWidget);
+    expect(find.text('состояние'), findsOneWidget);
+    expect(find.text('запись'), findsOneWidget);
     expect(
       tester
           .widget<LinearProgressIndicator>(find.byType(LinearProgressIndicator))
@@ -44,7 +46,8 @@ void main() {
       state: DaemonState.transcribing,
     );
     await tick(tester);
-    expect(find.text('состояние: распознавание'), findsOneWidget);
+    expect(find.text('состояние'), findsOneWidget);
+    expect(find.text('распознавание'), findsOneWidget);
 
     await tester.pumpWidget(const SizedBox.shrink());
   });
@@ -134,7 +137,8 @@ void main() {
     );
     await tester.pumpWidget(buildFakeApp(fake));
     await tick(tester);
-    expect(find.text('состояние: ожидание'), findsOneWidget);
+    expect(find.text('состояние'), findsOneWidget);
+    expect(find.text('ожидание'), findsOneWidget);
 
     await tester.pumpWidget(const SizedBox.shrink());
   });
