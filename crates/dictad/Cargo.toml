@@ -8,7 +8,15 @@ license.workspace = true
 anyhow.workspace = true
 serde.workspace = true
 serde_json.workspace = true
-dicta-core = { path = "../dicta-core", default-features = false, features = ["vulkan"] }
+# vulkan - собственная фича dictad (default), dep-строка без features:Windows CI
+# собирает CPU-only через --no-default-features, не таща Vulkan upstream.
+dicta-core = { path = "../dicta-core", default-features = false }
+
+[target.'cfg(windows)'.dependencies]
+interprocess = "2.4.8"
+widestring = "1"
+# Единая версия с уже за.lock'енной windows 0.58 (не порождаем вторую мажорную).
+windows = { version = "0.58", features = ["Win32_Foundation", "Win32_Security", "Win32_Security_Authorization", "Win32_System_Threading"] }
 
 [features]
 default = ["vulkan"]
