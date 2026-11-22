@@ -19,7 +19,11 @@ review fixes effective (675269c), security SECURED (01-SECURITY.md, threats_open
 expected: `cd app && flutter run -d linux` — окно открывается, сайдбар переключает
 Дашборд/История/Модели/Настройки, все строки русские, тёмная/светлая тема следует
 акценту KDE (или graceful fallback), баннер «демон недоступен» отсутствует при живом демоне.
-result: [pending]
+result: [pending] — частичные улики от оркестратора 2026-11-22: `flutter run -d linux`
+  запускался на десктопе владельца — окно «Dicta» открылось и сфокусировалось, в логе
+  «dynamic_color: Accent color detected» (акцент KDE подхвачен); AT-SPI-дерево Flutter
+  Linux нестабильно (известное ограничение a11y Flutter), скриншот на Wayland требует
+  portal-диалога — визуальную подпись остаётся дать владельцу.
 source: VERIFICATION backstop truth 1
 coverage_id: APP-01
 
