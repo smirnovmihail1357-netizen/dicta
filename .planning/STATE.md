@@ -1,12 +1,20 @@
 ---
-gsd_state_version: '1.0'  # placeholder; syncStateFrontmatter overwrites on first state.* call
-status: planning
+gsd_state_version: "1.0"
+milestone: v1.1
+milestone_name: «Dicta App»
+current_phase: 1
+current_phase_name: Каркас dicta-app + IPC-клиент
+status: executing
+stopped_at: Roadmap v1.1 создан, файлы ROADMAP.md/STATE.md/REQUIREMENTS.md написаны; коммитов нет (оркестратор коммитит)
+last_updated: "2026-11-22T09:59:23.048Z"
+last_activity: 2026-11-22
+last_activity_desc: Roadmap v1.1 создан (8 фаз, 29/29 требований замаплено)
+state_head: b721a10ab7ef5efd91c68c917cd9c1841615c634
 progress:
   total_phases: 8
   completed_phases: 0
-  total_plans: 0
+  total_plans: 1
   completed_plans: 0
-  percent: 0
 ---
 
 # Project State
@@ -20,9 +28,9 @@ See: .planning/PROJECT.md (updated 2026-11-22)
 
 ## Current Position
 
-Phase: 1 of 8 (Каркас dicta-app + IPC-клиент)
+Phase: 1 (Каркас dicta-app + IPC-клиент) — READY TO EXECUTE
 Plan: 0 of TBD in current phase
-Status: Ready to plan
+Status: Ready to execute
 Last activity: 2026-11-22 — Roadmap v1.1 создан (8 фаз, 29/29 требований замаплено)
 
 Progress: [░░░░░░░░░░] 0%

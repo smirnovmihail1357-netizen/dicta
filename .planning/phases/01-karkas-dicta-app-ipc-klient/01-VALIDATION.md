@@ -40,12 +40,14 @@ created: "2026-11-22"
 
 | Task ID | Plan | Wave | Requirement | Threat Ref | Secure Behavior | Test Type | Automated Command | File Exists | Status |
 |---------|------|------|-------------|------------|-----------------|-----------|-------------------|-------------|--------|
-| TBD | 01 | 0 | APP-01..06 | — | N/A (no secrets, local socket only) | toolchain | `cd app && flutter --version` | ❌ W0 | ⬜ pending |
-| TBD | 01 | 0 | APP-01 | — | N/A | project scaffold | `cd app && flutter analyze` | ❌ W0 | ⬜ pending |
-| TBD | 01 | 1 | APP-04 | — | N/A | unit (golden fixture) | `cd app && flutter test test/settings_model_test.dart` | ❌ W0 | ⬜ pending |
-| TBD | 01 | 1 | APP-02, APP-06 | T-1-01 / — | UDS client only connects to `$XDG_RUNTIME_DIR/dicta.sock`; never logs payload contents | unit (framing + jsonEncode regression) | `cd app && flutter test test/daemon_engine_framing_test.dart` | ❌ W0 | ⬜ pending |
-| TBD | 01 | 2 | APP-03 | — | N/A | widget test (FakeDictaEngine via provider override) | `cd app && flutter test test/shell_test.dart` | ❌ W0 | ⬜ pending |
-| TBD | 01 | 3 | APP-01, APP-02, APP-05 | — | N/A | manual smoke | see Manual-Only Verifications | n/a | n/a | ⬜ pending |
+| 1 | 01 | 0 | APP-01..06 | — | N/A (no secrets, local socket only) | toolchain | `cd app && flutter --version` | ❌ W0 | ⬜ pending |
+| 2 | 01 | 0 | APP-01 | — | N/A | project scaffold | `cd app && flutter analyze` | ❌ W0 | ⬜ pending |
+| 4 | 01 | 1 | APP-04 | — | N/A | unit (golden fixture) | `cd app && flutter test test/settings_model_test.dart` | ❌ W0 | ⬜ pending |
+| 3 | 01 | 1 | APP-02, APP-06 | T-1-01 / — | UDS client only connects to `$XDG_RUNTIME_DIR/dicta.sock`; never logs payload contents | unit (framing + jsonEncode regression) | `cd app && flutter test test/daemon_engine_framing_test.dart` | ❌ W0 | ⬜ pending |
+| 5 | 01 | 2 | APP-03 | — | N/A | widget test (FakeDictaEngine via provider override) | `cd app && flutter test test/shell_test.dart` | ❌ W0 | ⬜ pending |
+| 5 | 01 | 3 | APP-01, APP-02, APP-05 | — | N/A | manual smoke | see Manual-Only Verifications | n/a | n/a | ⬜ pending |
+
+*Task IDs refer to tasks 1–5 of plan 01-01-PLAN.md: Task 1 = SDK install checkpoint, Task 2 = scaffold, Task 3 = tracer/framing+engine, Task 4 = settings golden, Task 5 = shell + manual smokes.*
 
 *Status: ⬜ pending · ✅ green · ❌ red · ⚠️ flaky*
 

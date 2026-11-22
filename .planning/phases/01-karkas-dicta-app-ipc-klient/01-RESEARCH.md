@@ -441,19 +441,22 @@ On KDE Plasma 6, 2.1.0 reads the accent color via the XDG Desktop Portal Setting
 | A5 | fvm (cachyos repo) or AUR `flutter-bin` (paru) installs a usable Flutter 3.50 SDK on cachyos | Environment Availability | Medium — needs verification at execution time; version pinning method differs per install path |
 | A6 | `AppLocalizations.localizationsDelegates` bundle includes the Global* delegates once `flutter_localizations` is a dependency (standard gen-l10n behavior) | Code Examples (l10n) | Low — if not, add the three Global delegates manually |
 
-## Open Questions
+## Open Questions (RESOLVED)
 
 1. **Flutter SDK install path — needs a human decision before execution.**
    - What we know: SDK absent; fvm 4.3.2 in cachyos repos; `paru` present (AUR `flutter-bin` available); manual tarball possible. Build deps all present.
    - What's unclear: which install path the user prefers (system package vs version manager vs ~/ tarball).
    - Recommendation: plan a Wave 0 task `checkpoint:human-verify` "install Flutter SDK 3.50.0" with `flutter --version && flutter doctor` as its verification.
+   - **RESOLVED:** Task 1 of 01-01-PLAN.md is exactly that `checkpoint:human-verify` install gate (fvm 4.3.2 / AUR flutter-bin / official tarball, verified by `flutter --version` + `flutter doctor`); the human picks the install path at the checkpoint, everything after it is autonomous.
 2. **Config.toml `socket=` override support in Phase 1.**
    - What we know: Rust clients read full Config; Dart has no TOML parser dependency yet.
    - What's unclear: whether Phase 1 must honor a custom socket path from config.toml.
    - Recommendation: mirror `default_socket_path()` (XDG_RUNTIME_DIR) for Phase 1; note the limitation in code comment; revisit in Phase 4 config work. (Or one-line scan for `^socket = "…"` — the dicta-ui precedent, ugly but tested.)
+   - **RESOLVED:** deferred per assumption A3 — Phase 1 mirrors `default_socket_path()` only (XDG_RUNTIME_DIR → /run/user/<uid>) plus a `DICTA_SOCK` env override for tests; implemented in 01-01-PLAN.md Task 3 (`resolveSocketPath()` with a code comment citing the deferral) and carried in the plan's flagged_assumptions. TOML parsing is revisited in Phase 4 config work.
 3. **Per-tick connect vs held connection for non-status commands.**
    - What we know: daemon keeps non-status connections open; both client styles exist in the repo (dictactl per-command, dicta-settings persistent).
    - Recommendation: per-command connections everywhere — uniform, stateless, matches the poll cycle; no connection-state machine to get wrong.
+   - **RESOLVED:** per-command fresh connections everywhere — pinned as a plan truth in 01-01-PLAN.md must_haves («Command ordering needs no guarantee and none is implemented: every command opens its own fresh UDS connection…») and stated in the engine.dart library doc (01-01-PLAN.md Task 3, APP-06 ordering answer).
 
 ## Environment Availability
 
