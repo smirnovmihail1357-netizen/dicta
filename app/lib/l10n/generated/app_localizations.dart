@@ -441,6 +441,174 @@ abstract class AppLocalizations {
   /// In ru, this message translates to:
   /// **'задержка перед вставкой, мс'**
   String get confPasteDelayLabel;
+
+  /// Settings group title: audio recording
+  ///
+  /// In ru, this message translates to:
+  /// **'запись'**
+  String get confGroupRecord;
+
+  /// Settings group title: speech engine (all ENGINE keys)
+  ///
+  /// In ru, this message translates to:
+  /// **'движок'**
+  String get confGroupEngine;
+
+  /// Settings group title: system
+  ///
+  /// In ru, this message translates to:
+  /// **'система'**
+  String get confGroupSystem;
+
+  /// Label of the min_level setting
+  ///
+  /// In ru, this message translates to:
+  /// **'порог'**
+  String get confMinLevelLabel;
+
+  /// Label of the auto_stop setting
+  ///
+  /// In ru, this message translates to:
+  /// **'авто-стоп'**
+  String get confAutoStopLabel;
+
+  /// Label of the auto_stop_level setting
+  ///
+  /// In ru, this message translates to:
+  /// **'порог авто-стопа'**
+  String get confAutoStopLevelLabel;
+
+  /// Label of the auto_stop_after_ms setting
+  ///
+  /// In ru, this message translates to:
+  /// **'пауза перед стопом, мс'**
+  String get confAutoStopAfterLabel;
+
+  /// Label of the auto_stop_grace_ms setting
+  ///
+  /// In ru, this message translates to:
+  /// **'задержка авто-стопа, мс'**
+  String get confAutoStopGraceLabel;
+
+  /// Label of the max_record_ms setting
+  ///
+  /// In ru, this message translates to:
+  /// **'максимум записи, мс'**
+  String get confMaxRecordLabel;
+
+  /// Label of the inject_mode setting
+  ///
+  /// In ru, this message translates to:
+  /// **'способ вставки'**
+  String get confInjectModeLabel;
+
+  /// Label of the paste_keys setting
+  ///
+  /// In ru, this message translates to:
+  /// **'горячие клавиши вставки'**
+  String get confPasteKeysLabel;
+
+  /// Hint for the free-form paste_keys field
+  ///
+  /// In ru, this message translates to:
+  /// **'ctrl+v'**
+  String get confPasteKeysHint;
+
+  /// Label of the clipboard_restore_ms setting
+  ///
+  /// In ru, this message translates to:
+  /// **'возврат буфера, мс'**
+  String get confClipboardRestoreLabel;
+
+  /// Label of the atspi_allow_any_role setting
+  ///
+  /// In ru, this message translates to:
+  /// **'atspi: любой роли'**
+  String get confAtspiLabel;
+
+  /// Label of the model setting
+  ///
+  /// In ru, this message translates to:
+  /// **'модель'**
+  String get confModelLabel;
+
+  /// Label of the use_gpu setting
+  ///
+  /// In ru, this message translates to:
+  /// **'gpu'**
+  String get confUseGpuLabel;
+
+  /// Label of the gpu_device setting
+  ///
+  /// In ru, this message translates to:
+  /// **'устройство gpu'**
+  String get confGpuDeviceLabel;
+
+  /// Label of the n_threads setting
+  ///
+  /// In ru, this message translates to:
+  /// **'потоки'**
+  String get confThreadsLabel;
+
+  /// Label of the beam_size setting
+  ///
+  /// In ru, this message translates to:
+  /// **'размер луча'**
+  String get confBeamLabel;
+
+  /// Label of the language setting (an ENGINE key)
+  ///
+  /// In ru, this message translates to:
+  /// **'язык'**
+  String get confLanguageLabel;
+
+  /// Label of the read-only config_path field
+  ///
+  /// In ru, this message translates to:
+  /// **'путь конфигурации'**
+  String get confConfigPathLabel;
+
+  /// Hint marking keys that reload the engine
+  ///
+  /// In ru, this message translates to:
+  /// **'эти настройки перезагружают модель (~секунды)'**
+  String get confEngineHint;
+
+  /// Confirm dialog title before any ENGINE set
+  ///
+  /// In ru, this message translates to:
+  /// **'перезагрузить модель?'**
+  String get confEngineConfirmTitle;
+
+  /// Confirm dialog body explaining the engine reload
+  ///
+  /// In ru, this message translates to:
+  /// **'изменение перезагрузит модель — на секунды диктовка будет недоступна'**
+  String get confEngineConfirmBody;
+
+  /// Confirm action in the ENGINE dialog
+  ///
+  /// In ru, this message translates to:
+  /// **'продолжить'**
+  String get confConfirm;
+
+  /// Decline action in the ENGINE dialog
+  ///
+  /// In ru, this message translates to:
+  /// **'отмена'**
+  String get confDecline;
+
+  /// Seconds suffix for millisecond slider labels
+  ///
+  /// In ru, this message translates to:
+  /// **'с'**
+  String get confSeconds;
+
+  /// Milliseconds suffix for slider labels
+  ///
+  /// In ru, this message translates to:
+  /// **'мс'**
+  String get confMilliseconds;
 }
 
 class _AppLocalizationsDelegate

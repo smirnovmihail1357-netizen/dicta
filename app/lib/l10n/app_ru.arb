@@ -246,5 +246,118 @@
   "confPasteDelayLabel": "задержка перед вставкой, мс",
   "@confPasteDelayLabel": {
     "description": "Label of the paste_delay_ms setting"
+  },
+
+  "confGroupRecord": "запись",
+  "@confGroupRecord": {
+    "description": "Settings group title: audio recording"
+  },
+  "confGroupEngine": "движок",
+  "@confGroupEngine": {
+    "description": "Settings group title: speech engine (all ENGINE keys)"
+  },
+  "confGroupSystem": "система",
+  "@confGroupSystem": {
+    "description": "Settings group title: system"
+  },
+  "confMinLevelLabel": "порог",
+  "@confMinLevelLabel": {
+    "description": "Label of the min_level setting"
+  },
+  "confAutoStopLabel": "авто-стоп",
+  "@confAutoStopLabel": {
+    "description": "Label of the auto_stop setting"
+  },
+  "confAutoStopLevelLabel": "порог авто-стопа",
+  "@confAutoStopLevelLabel": {
+    "description": "Label of the auto_stop_level setting"
+  },
+  "confAutoStopAfterLabel": "пауза перед стопом, мс",
+  "@confAutoStopAfterLabel": {
+    "description": "Label of the auto_stop_after_ms setting"
+  },
+  "confAutoStopGraceLabel": "задержка авто-стопа, мс",
+  "@confAutoStopGraceLabel": {
+    "description": "Label of the auto_stop_grace_ms setting"
+  },
+  "confMaxRecordLabel": "максимум записи, мс",
+  "@confMaxRecordLabel": {
+    "description": "Label of the max_record_ms setting"
+  },
+  "confInjectModeLabel": "способ вставки",
+  "@confInjectModeLabel": {
+    "description": "Label of the inject_mode setting"
+  },
+  "confPasteKeysLabel": "горячие клавиши вставки",
+  "@confPasteKeysLabel": {
+    "description": "Label of the paste_keys setting"
+  },
+  "confPasteKeysHint": "ctrl+v",
+  "@confPasteKeysHint": {
+    "description": "Hint for the free-form paste_keys field"
+  },
+  "confClipboardRestoreLabel": "возврат буфера, мс",
+  "@confClipboardRestoreLabel": {
+    "description": "Label of the clipboard_restore_ms setting"
+  },
+  "confAtspiLabel": "atspi: любой роли",
+  "@confAtspiLabel": {
+    "description": "Label of the atspi_allow_any_role setting"
+  },
+  "confModelLabel": "модель",
+  "@confModelLabel": {
+    "description": "Label of the model setting"
+  },
+  "confUseGpuLabel": "gpu",
+  "@confUseGpuLabel": {
+    "description": "Label of the use_gpu setting"
+  },
+  "confGpuDeviceLabel": "устройство gpu",
+  "@confGpuDeviceLabel": {
+    "description": "Label of the gpu_device setting"
+  },
+  "confThreadsLabel": "потоки",
+  "@confThreadsLabel": {
+    "description": "Label of the n_threads setting"
+  },
+  "confBeamLabel": "размер луча",
+  "@confBeamLabel": {
+    "description": "Label of the beam_size setting"
+  },
+  "confLanguageLabel": "язык",
+  "@confLanguageLabel": {
+    "description": "Label of the language setting (an ENGINE key)"
+  },
+  "confConfigPathLabel": "путь конфигурации",
+  "@confConfigPathLabel": {
+    "description": "Label of the read-only config_path field"
+  },
+  "confEngineHint": "эти настройки перезагружают модель (~секунды)",
+  "@confEngineHint": {
+    "description": "Hint marking keys that reload the engine"
+  },
+  "confEngineConfirmTitle": "перезагрузить модель?",
+  "@confEngineConfirmTitle": {
+    "description": "Confirm dialog title before any ENGINE set"
+  },
+  "confEngineConfirmBody": "изменение перезагрузит модель — на секунды диктовка будет недоступна",
+  "@confEngineConfirmBody": {
+    "description": "Confirm dialog body explaining the engine reload"
+  },
+  "confConfirm": "продолжить",
+  "@confConfirm": {
+    "description": "Confirm action in the ENGINE dialog"
+  },
+  "confDecline": "отмена",
+  "@confDecline": {
+    "description": "Decline action in the ENGINE dialog"
+  },
+  "confSeconds": "с",
+  "@confSeconds": {
+    "description": "Seconds suffix for millisecond slider labels"
+  },
+  "confMilliseconds": "мс",
+  "@confMilliseconds": {
+    "description": "Milliseconds suffix for slider labels"
   }
 }

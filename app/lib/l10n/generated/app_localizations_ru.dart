@@ -193,4 +193,89 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get confPasteDelayLabel => 'задержка перед вставкой, мс';
+
+  @override
+  String get confGroupRecord => 'запись';
+
+  @override
+  String get confGroupEngine => 'движок';
+
+  @override
+  String get confGroupSystem => 'система';
+
+  @override
+  String get confMinLevelLabel => 'порог';
+
+  @override
+  String get confAutoStopLabel => 'авто-стоп';
+
+  @override
+  String get confAutoStopLevelLabel => 'порог авто-стопа';
+
+  @override
+  String get confAutoStopAfterLabel => 'пауза перед стопом, мс';
+
+  @override
+  String get confAutoStopGraceLabel => 'задержка авто-стопа, мс';
+
+  @override
+  String get confMaxRecordLabel => 'максимум записи, мс';
+
+  @override
+  String get confInjectModeLabel => 'способ вставки';
+
+  @override
+  String get confPasteKeysLabel => 'горячие клавиши вставки';
+
+  @override
+  String get confPasteKeysHint => 'ctrl+v';
+
+  @override
+  String get confClipboardRestoreLabel => 'возврат буфера, мс';
+
+  @override
+  String get confAtspiLabel => 'atspi: любой роли';
+
+  @override
+  String get confModelLabel => 'модель';
+
+  @override
+  String get confUseGpuLabel => 'gpu';
+
+  @override
+  String get confGpuDeviceLabel => 'устройство gpu';
+
+  @override
+  String get confThreadsLabel => 'потоки';
+
+  @override
+  String get confBeamLabel => 'размер луча';
+
+  @override
+  String get confLanguageLabel => 'язык';
+
+  @override
+  String get confConfigPathLabel => 'путь конфигурации';
+
+  @override
+  String get confEngineHint => 'эти настройки перезагружают модель (~секунды)';
+
+  @override
+  String get confEngineConfirmTitle => 'перезагрузить модель?';
+
+  @override
+  String get confEngineConfirmBody =>
+      'изменение перезагрузит модель — на секунды диктовка будет недоступна';
+
+  @override
+  String get confConfirm => 'продолжить';
+
+  @override
+  String get confDecline => 'отмена';
+
+  @override
+  String get confSeconds => 'с';
+
+  @override
+  String get confMilliseconds => 'мс';
 }
