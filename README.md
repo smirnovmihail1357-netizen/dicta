@@ -156,6 +156,12 @@ the live config and writes `~/.config/dicta/config.toml`. The answer is shown in
 away — a rejected value appears in red at the bottom, and a model reload is announced with
 «модель загружается…». The overlay panel stays: quick record/stop control is still there.
 
+The **Model** tab also downloads ggml models straight from Hugging Face: pick one from the
+catalog (approximate size and a one-line note are shown), press «скачать», watch the progress
+bar, and cancel if needed. `curl` writes to a `.part` file and resumes an interrupted download
+with `-C -`; the finished `.bin` lands next to the current model and appears in the list above.
+The terminal equivalent is `tools/fetch-model.sh`.
+
 ```bash
 dictactl settings                       # open the settings window
 ~/.local/bin/dicta-settings             # or launch it directly

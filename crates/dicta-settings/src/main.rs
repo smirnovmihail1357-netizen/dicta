@@ -5,10 +5,14 @@
 //! Демон проверяет значение, применяет его к живому конфигу и пишет config.toml;
 //! отказ демона показывается красной строкой внизу окна.
 
+mod catalog;
 mod net;
 mod state;
 
-use std::path::PathBuf;
+use std::fs;
+use std::path::{Path, PathBuf};
+use std::process::{Child, Command, Stdio};
+use std::time::Duration;
 
 use eframe::egui;
 
@@ -35,15 +39,29 @@ impl Tab {
     }
 }
 
+/// Идущая загрузка модели: курл в фоне плюс данные для полосы прогресса.
+struct Download {
+    child: Child,
+    file: String,
+    dest: PathBuf,
+    expected: u64,
+}
+
 struct App {
     socket: PathBuf,
     client: Option<Client>,
     settings: Settings,
     /// Ответ демона с ошибкой (или ошибка соединения) — красная строка внизу.
     error: Option<String>,
+    /// Зелёная строка-подсказка внизу окна (например, «модель скачана»); ошибка важнее её.
+    flash_info: Option<String>,
     tab: Tab,
     /// Произвольные клавиши вставки: шлём демону по потере фокуса, не на каждый символ.
     paste_keys_edit: String,
+    /// Выбранная строка каталога моделей Hugging Face.
+    catalog_pick: usize,
+    /// Фоновая загрузка ggml-модели (одновременно только одна).
+    download: Option<Download>,
 }
 
 impl App {
@@ -53,8 +71,11 @@ impl App {
             client: None,
             settings: Settings::default(),
             error: None,
+            flash_info: None,
             tab: Tab::Record,
             paste_keys_edit: String::new(),
+            catalog_pick: 0,
+            download: None,
         };
         app.reconnect();
         app
@@ -97,6 +118,120 @@ impl App {
                 self.error = Some(err.to_string());
                 self.client = None;
             }
+        }
+    }
+
+    /// Перечитать снимок: скачанный файл сразу появится в `settings.models`.
+    fn refresh_snapshot(&mut self) {
+        let Some(client) = self.client.as_mut() else {
+            return;
+        };
+        match client.call(net::settings_json()) {
+            Ok(reply) => {
+                let (settings, error) = from_reply(&reply);
+                self.settings = settings;
+                self.error = error;
+            }
+            Err(err) => {
+                self.error = Some(err.to_string());
+                self.client = None;
+            }
+        }
+    }
+
+    /// Скачать выбранную модель: `.part` не удаляем при ошибке — curl докачает его (`-C -`).
+    fn start_download(&mut self) {
+        if self.download.is_some() {
+            return;
+        }
+        let entry = &catalog::CATALOG[self.catalog_pick];
+        let file = entry.file.to_string();
+        let expected = entry.approx_bytes;
+        // Кладём рядом с текущей моделью: демон листает .bin из её parent-каталога.
+        let dest = catalog::dest_dir(&self.settings.model).join(&file);
+        if dest.exists() {
+            self.flash_info = Some(format!("{file} уже есть — выбери её в списке выше"));
+            return;
+        }
+        if let Some(dir) = dest.parent().filter(|dir| !dir.as_os_str().is_empty()) {
+            if let Err(err) = fs::create_dir_all(dir) {
+                self.error = Some(format!("папка моделей {}: {err}", dir.display()));
+                return;
+            }
+        }
+        let part = catalog::part_of(&dest);
+        let url = catalog::url_for(&file);
+        let child = Command::new("curl")
+            .args(["-L", "--fail", "--retry", "3", "-C", "-", "-o"])
+            .arg(&part)
+            .arg(&url)
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .spawn();
+        match child {
+            Ok(child) => {
+                self.error = None;
+                self.flash_info = None;
+                self.download = Some(Download {
+                    child,
+                    file,
+                    dest,
+                    expected,
+                });
+            }
+            Err(err) => self.error = Some(format!("curl не найден: {err}")),
+        }
+    }
+
+    /// Отмена: убить курл и стереть `.part`, чтобы следующий старт начал с нуля.
+    fn cancel_download(&mut self) {
+        let Some(mut download) = self.download.take() else {
+            return;
+        };
+        let _ = download.child.kill();
+        let _ = download.child.wait(); // убрать зомби после kill
+        let _ = fs::remove_file(catalog::part_of(&download.dest));
+        self.flash_info = Some(format!("загрузка {} прервана", download.file));
+    }
+
+    /// Поллинг курла: пока идёт загрузка, просим перерисовать окно через 500 мс.
+    fn poll_download(&mut self, ctx: &egui::Context) {
+        let polled = match self.download.as_mut() {
+            Some(download) => match download.child.try_wait() {
+                Ok(None) => {
+                    ctx.request_repaint_after(Duration::from_millis(500));
+                    return;
+                }
+                Ok(Some(status)) => Some(Ok(status)),
+                Err(err) => Some(Err(err.to_string())),
+            },
+            None => None,
+        };
+        let Some(polled) = polled else {
+            return;
+        };
+        // try_wait уже подобрал процесс, можно забирать состояние без wait().
+        let done = self.download.take().expect("загрузка только что была");
+        match polled {
+            Ok(status) if status.success() => {
+                match fs::rename(catalog::part_of(&done.dest), &done.dest) {
+                    Ok(()) => {
+                        self.refresh_snapshot();
+                        self.flash_info = Some(format!(
+                            "модель {} скачана — выбери её в списке выше",
+                            done.file
+                        ));
+                    }
+                    Err(err) => self.error = Some(format!("не удалось переименовать .part: {err}")),
+                }
+            }
+            Ok(status) => {
+                self.error = Some(format!(
+                    "curl упал (код {}): повтор продолжит загрузку, часть файла сохранена",
+                    status.code().unwrap_or(-1)
+                ));
+            }
+            Err(err) => self.error = Some(format!("не удалось проверить curl: {err}")),
         }
     }
 
@@ -182,6 +317,72 @@ impl App {
                 if ui.add(egui::SelectableLabel::new(selected, label)).clicked() {
                     self.set("model", path);
                 }
+            }
+        }
+
+        ui.separator();
+        ui.heading("Скачать с Hugging Face");
+        if let Some(download) = &self.download {
+            // Во время загрузки показываем прогресс вместо каталога.
+            ui.label(format!("скачивание {}", download.file));
+            let len = fs::metadata(catalog::part_of(&download.dest))
+                .map(|meta| meta.len())
+                .unwrap_or(0);
+            let fraction = if download.expected > 0 {
+                (len as f32 / download.expected as f32).min(1.0)
+            } else {
+                0.0
+            };
+            ui.add(egui::ProgressBar::new(fraction).show_percentage());
+            ui.label(format!(
+                "{}: {:.0} из ≈{:.0} МБ",
+                download.file,
+                len as f64 / 1_000_000.0,
+                download.expected as f64 / 1_000_000.0
+            ));
+            if ui.button("отмена").clicked() {
+                self.cancel_download();
+            }
+        } else {
+            let current_model = self.settings.model.clone();
+            for (i, entry) in catalog::CATALOG.iter().enumerate() {
+                let exists = catalog::dest_dir(&current_model).join(entry.file).exists();
+                let name = model_name(entry.file);
+                let caption = if exists {
+                    format!("{name} · есть ✓")
+                } else {
+                    name
+                };
+                ui.horizontal(|ui| {
+                    if ui
+                        .add(egui::SelectableLabel::new(self.catalog_pick == i, caption))
+                        .clicked()
+                    {
+                        self.catalog_pick = i;
+                    }
+                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                        ui.weak(format!(
+                            "≈{} МБ · {}",
+                            entry.approx_bytes / 1_000_000,
+                            entry.note
+                        ));
+                    });
+                });
+            }
+            let pick = &catalog::CATALOG[self.catalog_pick];
+            let exists = catalog::dest_dir(&current_model).join(pick.file).exists();
+            let clicked = ui
+                .add_enabled(
+                    !exists,
+                    egui::Button::new(if exists {
+                        "уже есть"
+                    } else {
+                        "скачать"
+                    }),
+                )
+                .clicked();
+            if clicked {
+                self.start_download();
             }
         }
 
@@ -292,6 +493,8 @@ impl App {
 impl eframe::App for App {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         ctx.set_theme(egui::Theme::Dark);
+        // Курл идёт в фоне: проверяем его и поддержим перерисовку для прогресса.
+        self.poll_download(ctx);
 
         if self.client.is_some() {
             egui::TopBottomPanel::top("tabs").show(ctx, |ui| {
@@ -311,6 +514,8 @@ impl eframe::App for App {
         egui::TopBottomPanel::bottom("status").show(ctx, |ui| {
             if let Some(error) = &self.error {
                 ui.colored_label(egui::Color32::from_rgb(255, 120, 120), error);
+            } else if let Some(info) = &self.flash_info {
+                ui.colored_label(egui::Color32::from_rgb(120, 220, 120), info);
             } else if self.settings.reloading {
                 ui.label("модель загружается…");
             } else {
@@ -420,9 +625,7 @@ fn checkbox(ui: &mut egui::Ui, app: &mut App, key: &'static str, label: &str, va
 
 fn main() -> anyhow::Result<()> {
     let cfg = dicta_core::config::Config::load(
-        std::env::var_os("DICTA_CONFIG")
-            .as_deref()
-            .map(std::path::Path::new),
+        std::env::var_os("DICTA_CONFIG").as_deref().map(Path::new),
     )?;
     let socket = cfg.socket.clone();
 
