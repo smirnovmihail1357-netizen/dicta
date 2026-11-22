@@ -58,6 +58,23 @@ void main() {
     );
   });
 
+  test('head-derived ids are reused after removal but unique among live entries',
+      () {
+    final container = ProviderContainer();
+    addTearDown(container.dispose);
+    final history = container.read(historyProvider.notifier);
+
+    history.add('a'); // id 1
+    history.add('b'); // id 2
+    history.remove(2); // live ids: [1]
+    history.add('c'); // head 1 -> id 2 reused, no live clash
+
+    final entries = container.read(historyProvider);
+    expect(entries.map((e) => e.id).toList(), <int>[2, 1]);
+    expect(entries.map((e) => e.text).toList(), <String>['c', 'a']);
+    expect(entries.length, entries.map((e) => e.id).toSet().length);
+  });
+
   test('formatEntryTime renders HH:mm for the ru locale', () {
     expect(formatEntryTime(DateTime(2026, 1, 1, 9, 5), 'ru'), '09:05');
     expect(formatEntryTime(DateTime(2026, 11, 22, 23, 59), 'ru'), '23:59');

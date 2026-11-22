@@ -21,6 +21,9 @@ class HistoryEntry {
   final DateTime at;
 }
 
+/// Journal state: newest-first, with head-derived ids (`state.first.id + 1`,
+/// or 1 when empty). Ids are unique only among the live entries: removing a
+/// head value lets a later add reuse it, and a full clear restarts from 1 (A1).
 class HistoryNotifier extends Notifier<List<HistoryEntry>> {
   @override
   List<HistoryEntry> build() => const <HistoryEntry>[];

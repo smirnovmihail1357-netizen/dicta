@@ -27,19 +27,23 @@ class HistoryScreen extends ConsumerWidget {
       children: [
         Padding(
           padding: const EdgeInsets.all(16),
-          child: Semantics(
-            label: l10n.histSearchSemantics,
-            child: TextField(
-              key: const Key('historySearchField'),
-              decoration: InputDecoration(
-                hintText: l10n.histSearchHint,
-                prefixIcon: const Icon(Icons.search),
-                border: const OutlineInputBorder(),
+          // Merge the mandated label into the editable node: a bare Semantics
+          // wrapper would create a second, non-editable focus stop (WR-01).
+          child: MergeSemantics(
+            child: Semantics(
+              label: l10n.histSearchSemantics,
+              child: TextField(
+                key: const Key('historySearchField'),
+                decoration: InputDecoration(
+                  hintText: l10n.histSearchHint,
+                  prefixIcon: const Icon(Icons.search),
+                  border: const OutlineInputBorder(),
+                ),
+                // No debounce and no TextEditingController double state: the
+                // provider IS the query and the filter is a pure build function.
+                onChanged: (value) =>
+                    ref.read(historyQueryProvider.notifier).set(value),
               ),
-              // No debounce and no TextEditingController double state: the
-              // provider IS the query and the filter is a pure build function.
-              onChanged: (value) =>
-                  ref.read(historyQueryProvider.notifier).set(value),
             ),
           ),
         ),

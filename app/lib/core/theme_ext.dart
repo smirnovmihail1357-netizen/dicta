@@ -1,7 +1,9 @@
 /// Cross-feature text styles that Material 3 tokens do not cover.
 /// Only the muted caption style lives here: everything else stays on tokens.
-/// This extension must be registered in EVERY ThemeData (main.dart and the
-/// test scaffold in fake_dicta_engine.dart) or [AppTextStyles.mutedOf] asserts.
+/// This extension must be registered in EVERY ThemeData: main.dart (both
+/// themes), buildFakeApp in fake_dicta_engine.dart, and any suite-local
+/// scaffold (see buildTestApp in shell_test.dart) — otherwise
+/// [AppTextStyles.mutedOf] asserts. Check with `grep -rn "AppTextStyles.from" lib test`.
 library;
 
 import 'package:flutter/material.dart';

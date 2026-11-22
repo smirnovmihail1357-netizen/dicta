@@ -132,6 +132,9 @@ Widget buildFakeApp(
   FakeDictaEngine fake, {
   void Function(String text)? onCopy,
   void Function(ProviderContainer container)? captureContainer,
+  // Overridable so a suite can unmount the shell subtree without disposing
+  // the surrounding ProviderScope (e.g. to exercise post-await mounted guards).
+  Widget home = const ShellWidget(),
 }) {
   return ProviderScope(
     // The list type is inferred from ProviderScope.overrides; Riverpod 3.5
@@ -155,7 +158,7 @@ Widget buildFakeApp(
           localizationsDelegates: AppLocalizations.localizationsDelegates,
           supportedLocales: AppLocalizations.supportedLocales,
           locale: const Locale('ru'),
-          home: const ShellWidget(),
+          home: home,
         );
       },
     ),

@@ -5,7 +5,9 @@ import 'dart:async';
 
 import 'package:dicta_app/core/engine.dart';
 import 'package:dicta_app/features/history/history.dart';
+import 'package:dicta_app/features/shell/shell.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/semantics.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:intl/intl.dart';
@@ -136,7 +138,12 @@ void main() {
       ),
       injectGate: gate,
     );
-    await tester.pumpWidget(buildFakeApp(fake, onCopy: (_) {}));
+    ProviderContainer? container;
+    await tester.pumpWidget(buildFakeApp(
+      fake,
+      onCopy: (_) {},
+      captureContainer: (c) => container = c,
+    ));
     await tick(tester);
     await captureTextViaStop(tester);
     await goToHistory(tester);
@@ -151,6 +158,9 @@ void main() {
     await tester.pump();
     await tester.pump();
     expect(find.text('текст вставлен'), findsOneWidget);
+    // The re-insert path is inject, never a second capture: journal length is
+    // unchanged by the echo (IN-01).
+    expect(container!.read(historyProvider), hasLength(1));
 
     await tester.pumpWidget(const SizedBox.shrink());
   });
@@ -183,6 +193,87 @@ void main() {
     expect(find.text('журнал пуст'), findsOneWidget);
 
     await tester.pumpWidget(const SizedBox.shrink());
+  });
+
+  testWidgets('search field exposes one merged semantics node with its label',
+      (tester) async {
+    final fake = FakeDictaEngine(
+      const DictaStatus(connected: true, state: DaemonState.idle),
+    );
+    await tester.pumpWidget(buildFakeApp(fake, onCopy: (_) {}));
+    await tick(tester);
+    await goToHistory(tester);
+
+    final handle = tester.ensureSemantics();
+    // WR-01: MergeSemantics folds the mandated label and the localized hint
+    // into ONE editable node ("поиск по журналу\nпоиск по тексту"). Flutter
+    // merges labels, so match by pattern as its finder docs recommend.
+    expect(find.bySemanticsLabel(RegExp(r'^поиск по журналу')), findsOneWidget);
+    final root = tester.binding.renderViews.first.owner!.semanticsOwner!
+        .rootSemanticsNode!;
+    final labelled = <SemanticsNode>[];
+    void collect(SemanticsNode node) {
+      if (node.label.startsWith('поиск по журналу')) labelled.add(node);
+      node.visitChildren((child) {
+        collect(child);
+        return true;
+      });
+    }
+
+    collect(root);
+    expect(labelled, hasLength(1));
+    // The node carrying the label is the editable field itself: one focus stop.
+    expect(labelled.single.hasFlag(SemanticsFlag.isTextField), isTrue);
+
+    handle.dispose();
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
+  testWidgets('unmount during in-flight inject leaves the dead context alone',
+      (tester) async {
+    final gate = Completer<void>();
+    final fake = FakeDictaEngine(
+      const DictaStatus(connected: true, state: DaemonState.recording),
+      stopReply: const DictaStatus(
+        connected: true,
+        state: DaemonState.idle,
+        text: 'привет',
+      ),
+      injectGate: gate,
+    );
+    final showShell = ValueNotifier<bool>(true);
+    addTearDown(showShell.dispose);
+    Widget app() => buildFakeApp(
+      fake,
+      onCopy: (_) {},
+      home: ValueListenableBuilder<bool>(
+        valueListenable: showShell,
+        builder: (_, visible, _) =>
+            visible ? const ShellWidget() : const SizedBox.shrink(),
+      ),
+    );
+    await tester.pumpWidget(app());
+    await tick(tester);
+    await captureTextViaStop(tester);
+    await goToHistory(tester);
+
+    await tester.tap(find.byKey(const Key('histInjectButton-1')));
+    await tester.pump();
+    expect(fake.injectTexts, <String>['привет']);
+
+    // The shell uses IndexedStack, so switching tabs keeps HistoryScreen
+    // mounted. Swap only the shell subtree (ProviderScope stays alive, so the
+    // notifier can still settle) to deactivate this context and exercise
+    // `if (!context.mounted) return;` after the inject await.
+    showShell.value = false;
+    await tester.pump();
+    gate.complete();
+    await tester.pump();
+    await tester.pump();
+
+    // The guard returns before showSnackBar on the unmounted context.
+    expect(tester.takeException(), isNull);
+    expect(find.text('текст вставлен'), findsNothing);
   });
 
   testWidgets('empty journal states the honest A4 limitation', (tester) async {
