@@ -492,6 +492,10 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             ),
           ]),
           _group(l10n.confGroupSystem, [
+            // Language is an ENGINE key too: mark it here as well, not only
+            // inside the "движок" group (IN-06).
+            Text(l10n.confEngineHint, style: AppTextStyles.mutedOf(context)),
+            const SizedBox(height: 8),
             _segmented<String>(
               label: l10n.confLanguageLabel,
               key: 'confLanguageSegments',

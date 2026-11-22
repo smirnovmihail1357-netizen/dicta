@@ -100,10 +100,7 @@ List<String> parseTreeDirs(String json) => _array(json)
     .toList(growable: false);
 
 /// Flat name of a model file: the last `/`-separated path segment.
-String destName(String path) {
-  final parts = path.split('/');
-  return parts.isEmpty ? path : parts.last;
-}
+String destName(String path) => path.split('/').last;
 
 /// File name from a direct link: last segment, query part removed.
 /// Returns null when there is no `/` or the name is empty (hf.rs:155-165).

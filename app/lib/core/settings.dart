@@ -164,7 +164,8 @@ class SetReply {
   factory SetReply.fromReply(Map<String, dynamic> reply) {
     final parsed = SettingsReply.fromReply(reply);
     return SetReply(
-      note: reply['text'] as String?,
+      // Poisoned replies never throw (module contract, IN-03).
+      note: reply['text'] is String ? reply['text'] as String : null,
       error: parsed.error,
       settings: parsed.settings,
     );

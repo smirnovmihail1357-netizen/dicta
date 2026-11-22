@@ -200,7 +200,10 @@ class _HfBrowserState extends ConsumerState<HfBrowser> {
                 value: vram,
                 label: vram.toInt().toString(),
                 // UI-only: never an engine.set (there is no daemon key).
-                onChanged: (value) =>
+                // Slider requires onChanged; keep it a no-op so the notifier
+                // is written once per gesture, on release (IN-05).
+                onChanged: (_) {},
+                onChangeEnd: (value) =>
                     ref.read(vramLimitGbProvider.notifier).set(value),
               ),
             ),

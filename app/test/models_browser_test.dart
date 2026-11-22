@@ -108,7 +108,7 @@ void main() {
     await reveal(tester, find.byKey(const Key('modelVramSlider')));
     final vram = tester.widget<Slider>(find.byKey(const Key('modelVramSlider')));
     expect(vram.value, 24);
-    vram.onChanged!(2);
+    vram.onChangeEnd!(2);
     await tester.pump();
     expect(fake.setCalls, isEmpty);
     expect(container.read(vramLimitGbProvider), 2);

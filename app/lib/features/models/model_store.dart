@@ -8,8 +8,7 @@ import 'dart:io';
 /// Port of dicta-settings main.rs:932-936: last segment, minus `.bin`, minus
 /// the `ggml-` prefix.
 String modelName(String path) {
-  final segments = path.split('/');
-  var name = segments.isEmpty ? path : segments.last;
+  var name = path.split('/').last;
   if (name.endsWith('.bin')) name = name.substring(0, name.length - 4);
   if (name.startsWith('ggml-')) name = name.substring(5);
   return name;
