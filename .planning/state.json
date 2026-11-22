@@ -1,0 +1,53 @@
+{
+  "contract": "1.0.0",
+  "flavor": "core",
+  "milestone": "v1.1 — «Dicta App»",
+  "phases": [
+    {
+      "number": "1",
+      "name": "Каркас dicta-app + IPC-клиент",
+      "status": "pending"
+    },
+    {
+      "number": "2",
+      "name": "Дашборд записи + диагностика окружения",
+      "status": "pending"
+    },
+    {
+      "number": "3",
+      "name": "История диктовок",
+      "status": "pending"
+    },
+    {
+      "number": "4",
+      "name": "Настройки + браузер моделей",
+      "status": "pending"
+    },
+    {
+      "number": "5",
+      "name": "Трей + хоткей-экран",
+      "status": "pending"
+    },
+    {
+      "number": "6",
+      "name": "Windows CI + каркас",
+      "status": "pending"
+    },
+    {
+      "number": "7",
+      "name": "Windows диктовка MVP",
+      "status": "pending"
+    },
+    {
+      "number": "8",
+      "name": "Декомиссия dicta-settings",
+      "status": "pending"
+    }
+  ],
+  "next": {
+    "command": "/gsd-progress --next",
+    "label": "Advance to the next step",
+    "reason": "Phase 1 of 8 · executing"
+  },
+  "updated_at": "2026-11-22T09:59:23.060Z"
+}

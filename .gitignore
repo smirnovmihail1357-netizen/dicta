@@ -4,3 +4,4 @@
 *.wav
 *.log
 .DS_Store
+.planning/research/.cache/
