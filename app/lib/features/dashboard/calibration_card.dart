@@ -28,11 +28,9 @@ class LevelHistogramPainter extends CustomPainter {
       final height =
           (level * size.height).clamp(2.0, size.height).toDouble();
       final left = size.width - (samples.length - i) * barWidth;
-      final color = level > 0.6
-          ? colors.primary
-          : level > 0.3
-              ? colors.tertiary
-              : colors.outline;
+      // One data colour with alpha by level: no arbitrary tier roles
+      // (outline/tertiary) and no false role semantics.
+      final color = colors.primary.withValues(alpha: 0.35 + level * 0.65);
       canvas.drawRect(
         Rect.fromLTWH(left, size.height - height, barWidth, height),
         Paint()..color = color,
@@ -43,7 +41,7 @@ class LevelHistogramPainter extends CustomPainter {
       Offset(x, 0),
       Offset(x, size.height),
       Paint()
-        ..color = colors.error
+        ..color = colors.primary
         ..strokeWidth = 2,
     );
   }
@@ -63,6 +61,40 @@ class CalibrationCard extends ConsumerStatefulWidget {
 class _CalibrationCardState extends ConsumerState<CalibrationCard> {
   double? _marker;
   String? _error;
+
+  /// Local-only move: no I/O until the gesture or slider drag is released.
+  void _previewMarker(double value) {
+    setState(() => _marker = value.clamp(0.0, 1.0).toDouble());
+  }
+
+  /// One set command per completed interaction. Shared by the histogram drag
+  /// and the accessible Slider so both paths stay on the same pending value.
+  Future<void> _commitMarker(double value) async {
+    final next = value.clamp(0.0, 1.0).toDouble();
+    setState(() => _marker = next);
+    // Panel format {:.2}; one command per completed gesture/slider release.
+    final reply = await ref
+        .read(engineProvider)
+        .set('min_level', next.toStringAsFixed(2));
+    // No ref use after await until the element is known alive.
+    if (!mounted) return;
+    if (reply.error != null) {
+      // Keep the locally chosen marker on failure: no stale snapshot read
+      // must overwrite the value we just sent.
+      setState(() => _error = reply.error);
+      return;
+    }
+    ref.invalidate(settingsSnapshotProvider);
+    // A FutureProvider's snapshot is the PREVIOUS AsyncData right after
+    // refresh/invalidate in Riverpod 3.5 - await the refetch (CR-01) instead
+    // of reading .value synchronously.
+    final fresh = await ref.read(settingsSnapshotProvider.future);
+    if (!mounted) return;
+    setState(() {
+      _error = null;
+      _marker = fresh.minLevel; // daemon's canonical {:.2} value
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -88,53 +120,48 @@ class _CalibrationCardState extends ConsumerState<CalibrationCard> {
                 final width = constraints.maxWidth;
                 return GestureDetector(
                   key: const Key('calibrationSurface'),
+                  // Mouse shortcut only; the Slider below is the keyboard/AT
+                  // path. Both feed the same pending value and commit helper.
                   onHorizontalDragUpdate: (details) {
-                    final next =
-                        (details.localPosition.dx / width).clamp(0.0, 1.0);
-                    // Local pending copy: no I/O until the gesture ends.
-                    setState(() => _marker = next.toDouble());
+                    _previewMarker(details.localPosition.dx / width);
                   },
-                  onHorizontalDragEnd: (_) async {
-                    final value = _marker ?? marker;
-                    // Panel format {:.2}; one command per completed gesture.
-                    final reply = await ref
-                        .read(engineProvider)
-                        .set('min_level', value.toStringAsFixed(2));
-                    // No ref use after await until the element is known alive.
-                    if (!mounted) return;
-                    if (reply.error != null) {
-                      // Keep the locally dragged marker on failure: no stale
-                      // snapshot read must overwrite the value we just sent.
-                      setState(() => _error = reply.error);
-                      return;
-                    }
-                    ref.invalidate(settingsSnapshotProvider);
-                    // A FutureProvider's snapshot is the PREVIOUS AsyncData
-                    // right after refresh/invalidate in Riverpod 3.5 - await
-                    // the refetch instead of reading .value synchronously.
-                    final fresh = await ref.read(settingsSnapshotProvider.future);
-                    if (!mounted) return;
-                    setState(() {
-                      _error = null;
-                      _marker = fresh.minLevel; // daemon's canonical {:.2} value
-                    });
-                  },
-                  child: SizedBox(
-                    height: 120,
-                    child: CustomPaint(
-                      key: const Key('calibrationPainter'),
-                      painter: LevelHistogramPainter(
-                        samples: samples,
-                        marker: marker,
-                        colors: colors,
+                  onHorizontalDragEnd: (_) => _commitMarker(_marker ?? marker),
+                  child: Semantics(
+                    container: true,
+                    label: l10n.calibrationHistogramLabel,
+                    child: SizedBox(
+                      height: 120,
+                      child: CustomPaint(
+                        key: const Key('calibrationPainter'),
+                        painter: LevelHistogramPainter(
+                          samples: samples,
+                          marker: marker,
+                          colors: colors,
+                        ),
+                        child: const SizedBox.expand(),
                       ),
-                      child: const SizedBox.expand(),
                     ),
                   ),
                 );
               },
             ),
             const SizedBox(height: 8),
+            Text(
+              l10n.calibrationThreshold(marker.toStringAsFixed(2)),
+              style: TextStyle(
+                color: colors.onSurfaceVariant,
+                fontFeatures: const [FontFeature.tabularFigures()],
+              ),
+            ),
+            Slider(
+              key: const Key('calibrationSlider'),
+              // Panel format is {:.2}, so 100 steps match one commit value.
+              value: marker.clamp(0.0, 1.0).toDouble(),
+              divisions: 100,
+              label: marker.toStringAsFixed(2),
+              onChanged: _previewMarker,
+              onChangeEnd: _commitMarker,
+            ),
             Text(
               l10n.calibrationApplyHint,
               style: TextStyle(color: colors.onSurfaceVariant),

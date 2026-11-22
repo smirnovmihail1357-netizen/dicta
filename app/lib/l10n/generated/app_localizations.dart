@@ -250,6 +250,18 @@ abstract class AppLocalizations {
   /// **'ошибка команды'**
   String get dashCommandFailed;
 
+  /// Body shown when a command failed without a verbatim daemon error
+  ///
+  /// In ru, this message translates to:
+  /// **'команда не выполнена'**
+  String get dashCommandFailedBody;
+
+  /// Local snackbar confirmation after a successful re-inject
+  ///
+  /// In ru, this message translates to:
+  /// **'текст вставлен'**
+  String get dashInjected;
+
   /// Title of the live level histogram and calibration card
   ///
   /// In ru, this message translates to:
@@ -273,6 +285,18 @@ abstract class AppLocalizations {
   /// In ru, this message translates to:
   /// **'включён авто-стоп — для калибровки нажимай отмена'**
   String get calibrationAutoStopHint;
+
+  /// Numeric readout of the current silence threshold, always visible next to the histogram
+  ///
+  /// In ru, this message translates to:
+  /// **'порог {value}'**
+  String calibrationThreshold(String value);
+
+  /// Static read-only semantics label for the level histogram; the Slider below is the accessible control
+  ///
+  /// In ru, this message translates to:
+  /// **'гистограмма уровня звука'**
+  String get calibrationHistogramLabel;
 
   /// Title of the onboarding diagnostics checklist
   ///

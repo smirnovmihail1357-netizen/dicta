@@ -15,8 +15,10 @@ Future<void> tick(WidgetTester tester) async {
   await tester.pump();
 }
 
+// M3 hierarchy uses Elevated/Filled.tonal/Outlined: assert against their
+// shared base so a button's visual variant does not break the matrix test.
 bool enabled(WidgetTester tester, String key) =>
-    tester.widget<ElevatedButton>(find.byKey(Key(key))).onPressed != null;
+    tester.widget<ButtonStyleButton>(find.byKey(Key(key))).onPressed != null;
 
 void main() {
   testWidgets('start/stop/cancel matrix across all four states', (tester) async {

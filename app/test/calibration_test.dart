@@ -163,6 +163,62 @@ void main() {
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
+  testWidgets('accessible slider previews locally, then commits exactly one '
+      'set on release', (tester) async {
+    late final FakeDictaEngine fake;
+    fake = FakeDictaEngine(
+      const DictaStatus(connected: true, state: DaemonState.idle),
+      fetchSettingsReply: settingsFixture,
+      onSet: (_, value) {
+        fake.fetchSettingsReply = <String, dynamic>{
+          'settings': <String, dynamic>{'min_level': double.parse(value)},
+        };
+      },
+    );
+    await tester.pumpWidget(buildFakeApp(fake));
+    await tick(tester);
+
+    final slider = tester
+        .widget<Slider>(find.byKey(const Key('calibrationSlider')));
+    expect(slider.value, closeTo(0.35, 1e-6));
+
+    // onChanged is a local preview: no I/O, but the numeric readout follows.
+    slider.onChanged!(0.42);
+    await tester.pump();
+    expect(fake.setCalls, isEmpty);
+    expect(find.text('порог 0.42'), findsOneWidget);
+
+    // onChangeEnd is the single commit, with the panel's {:.2} format.
+    slider.onChangeEnd!(0.42);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 100));
+    await tester.pump();
+
+    expect(fake.setCalls.length, 1);
+    expect(fake.setCalls.single.key, 'min_level');
+    expect(fake.setCalls.single.value, '0.42');
+    // CR-01: the readout settles on the daemon's canonical value.
+    expect(find.text('порог 0.42'), findsOneWidget);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
+  testWidgets('threshold readout is always visible; the histogram is a '
+      'read-only labelled visualisation', (tester) async {
+    final fake = FakeDictaEngine(
+      const DictaStatus(connected: true, state: DaemonState.idle),
+      fetchSettingsReply: settingsFixture,
+    );
+    await tester.pumpWidget(buildFakeApp(fake));
+    await tick(tester);
+
+    expect(find.text('порог 0.35'), findsOneWidget);
+    expect(find.byKey(const Key('calibrationSlider')), findsOneWidget);
+    expect(find.bySemanticsLabel('гистограмма уровня звука'), findsOneWidget);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
   testWidgets('auto_stop hint and verbatim set error', (tester) async {
     final settings = settingsFixture['settings'] as Map<String, dynamic>;
     final autoStopFixture = <String, dynamic>{

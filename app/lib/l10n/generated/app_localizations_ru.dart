@@ -95,6 +95,12 @@ class AppLocalizationsRu extends AppLocalizations {
   String get dashCommandFailed => 'ошибка команды';
 
   @override
+  String get dashCommandFailedBody => 'команда не выполнена';
+
+  @override
+  String get dashInjected => 'текст вставлен';
+
+  @override
   String get calibrationTitle => 'порог тишины';
 
   @override
@@ -106,6 +112,14 @@ class AppLocalizationsRu extends AppLocalizations {
   @override
   String get calibrationAutoStopHint =>
       'включён авто-стоп — для калибровки нажимай отмена';
+
+  @override
+  String calibrationThreshold(String value) {
+    return 'порог $value';
+  }
+
+  @override
+  String get calibrationHistogramLabel => 'гистограмма уровня звука';
 
   @override
   String get diagTitle => 'диагностика';

@@ -60,31 +60,42 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
-                    l10n.stateLabel(label),
-                    style: Theme.of(context).textTheme.titleMedium,
-                  ),
-                  const SizedBox(height: 12),
-                  AnimatedContainer(
-                    duration: const Duration(milliseconds: 120),
-                    curve: Curves.easeOut,
-                    child: LinearProgressIndicator(
-                      value: status.level.clamp(0.0, 1.0).toDouble(),
-                      minHeight: 8,
+                  Semantics(
+                    liveRegion: true,
+                    child: Text(
+                      l10n.stateLabel(label),
+                      style: Theme.of(context).textTheme.titleMedium,
                     ),
                   ),
                   const SizedBox(height: 12),
-                  Text(
-                    l10n.dashRecordingTime(_formatSeconds(status.seconds)),
-                    style: TextStyle(color: colors.onSurfaceVariant),
+                  LinearProgressIndicator(
+                    value: status.level.clamp(0.0, 1.0).toDouble(),
+                    minHeight: 8,
+                  ),
+                  const SizedBox(height: 12),
+                  Semantics(
+                    excludeSemantics: true,
+                    child: Text(
+                      l10n.dashRecordingTime(_formatSeconds(status.seconds)),
+                      style: TextStyle(
+                        color: colors.onSurfaceVariant,
+                        fontFeatures: const [FontFeature.tabularFigures()],
+                      ),
+                    ),
                   ),
                   const SizedBox(height: 4),
-                  Text(
-                    l10n.levelSeconds(
-                      status.level.toStringAsFixed(2),
-                      status.seconds.toStringAsFixed(1),
+                  Semantics(
+                    excludeSemantics: true,
+                    child: Text(
+                      l10n.levelSeconds(
+                        status.level.toStringAsFixed(2),
+                        status.seconds.toStringAsFixed(1),
+                      ),
+                      style: TextStyle(
+                        color: colors.onSurfaceVariant,
+                        fontFeatures: const [FontFeature.tabularFigures()],
+                      ),
                     ),
-                    style: TextStyle(color: colors.onSurfaceVariant),
                   ),
                 ],
               ),
@@ -112,7 +123,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                       ),
                       const SizedBox(width: 8),
                       Expanded(
-                        child: ElevatedButton(
+                        child: FilledButton.tonal(
                           key: const Key('dashStopButton'),
                           onPressed: canStop
                               ? () => ref
@@ -124,8 +135,14 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                       ),
                       const SizedBox(width: 8),
                       Expanded(
-                        child: ElevatedButton(
+                        child: OutlinedButton(
                           key: const Key('dashCancelButton'),
+                          // Destructive intent, but not filled error: cancelling
+                          // never destroys recorded data.
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: colors.error,
+                            side: BorderSide(color: colors.error),
+                          ),
                           onPressed: canCancel
                               ? () => ref
                                   .read(dictaControlProvider.notifier)

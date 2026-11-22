@@ -115,6 +115,14 @@
   "@dashCommandFailed": {
     "description": "Neutral label above a failed start/stop/cancel error; inject keeps its own heading"
   },
+  "dashCommandFailedBody": "команда не выполнена",
+  "@dashCommandFailedBody": {
+    "description": "Body shown when a command failed without a verbatim daemon error"
+  },
+  "dashInjected": "текст вставлен",
+  "@dashInjected": {
+    "description": "Local snackbar confirmation after a successful re-inject"
+  },
   "calibrationTitle": "порог тишины",
   "@calibrationTitle": {
     "description": "Title of the live level histogram and calibration card"
@@ -130,6 +138,17 @@
   "calibrationAutoStopHint": "включён авто-стоп — для калибровки нажимай отмена",
   "@calibrationAutoStopHint": {
     "description": "Warns that silence may stop recording before calibration finishes"
+  },
+  "calibrationThreshold": "порог {value}",
+  "@calibrationThreshold": {
+    "description": "Numeric readout of the current silence threshold, always visible next to the histogram",
+    "placeholders": {
+      "value": {"type": "String", "example": "0.35"}
+    }
+  },
+  "calibrationHistogramLabel": "гистограмма уровня звука",
+  "@calibrationHistogramLabel": {
+    "description": "Static read-only semantics label for the level histogram; the Slider below is the accessible control"
   },
   "diagTitle": "диагностика",
   "@diagTitle": {

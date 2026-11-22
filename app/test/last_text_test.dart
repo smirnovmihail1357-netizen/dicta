@@ -121,6 +121,32 @@ void main() {
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
+  testWidgets('successful inject confirms with a transient snackbar',
+      (tester) async {
+    final fake = FakeDictaEngine(
+      const DictaStatus(connected: true, state: DaemonState.recording),
+      stopReply: const DictaStatus(
+        connected: true,
+        state: DaemonState.idle,
+        text: 'привет',
+      ),
+    );
+    await tester.pumpWidget(buildFakeApp(fake, onCopy: (_) {}));
+    await tick(tester);
+    await captureTextViaStop(tester);
+
+    expect(find.text('текст вставлен'), findsNothing);
+    await tester.tap(find.byKey(const Key('dashInjectButton')));
+    await tester.pump();
+    await tester.pump();
+
+    expect(fake.injectTexts, <String>['привет']);
+    expect(find.text('текст вставлен'), findsOneWidget);
+    expect(find.text('ошибка вставки'), findsNothing);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
   testWidgets('empty captured text keeps both actions disabled',
       (tester) async {
     final fake = FakeDictaEngine(

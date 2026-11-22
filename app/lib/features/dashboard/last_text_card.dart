@@ -66,9 +66,20 @@ class LastTextCard extends ConsumerWidget {
                   child: ElevatedButton(
                     key: const Key('dashInjectButton'),
                     onPressed: hasText && !busy
-                        ? () => ref
-                            .read(dictaControlProvider.notifier)
-                            .inject(text)
+                        ? () async {
+                            await ref
+                                .read(dictaControlProvider.notifier)
+                                .inject(text);
+                            // No BuildContext/ref use after await while dead.
+                            if (!context.mounted) return;
+                            final result = ref.read(dictaControlProvider);
+                            if (result.lastError == null &&
+                                !result.genericFailure) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(content: Text(l10n.dashInjected)),
+                              );
+                            }
+                          }
                         : null,
                     child: Text(l10n.dashInjectButton),
                   ),
@@ -77,19 +88,24 @@ class LastTextCard extends ConsumerWidget {
             ),
             const SizedBox(height: 8),
             Text(l10n.dashInjectHint, style: weak),
-            if (control.lastError != null && control.lastError!.isNotEmpty) ...[
+            if ((control.lastError != null && control.lastError!.isNotEmpty) ||
+                control.genericFailure) ...[
               const SizedBox(height: 8),
               Text(
-                // The error text is shared by all commands; only inject gets
-                // the inject-specific heading (phase 2 WR-01).
+                // The heading is shared by all commands; only inject gets
+                // the inject-specific one (phase 2 WR-01).
                 control.lastErrorCommand == DictaCommand.inject
                     ? l10n.dashInjectFailed
                     : l10n.dashCommandFailed,
                 style: TextStyle(color: colors.error),
               ),
-              // Daemon error text is data: shown verbatim, never invented.
+              // Daemon error text is data: shown verbatim. A command that
+              // threw before a daemon reply uses the localised body instead —
+              // no user-visible Russian text is stored in Dart.
               Text(
-                control.lastError!,
+                control.genericFailure
+                    ? l10n.dashCommandFailedBody
+                    : control.lastError!,
                 style: TextStyle(color: colors.error),
               ),
             ],

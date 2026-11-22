@@ -29,15 +29,18 @@ class _ShellWidgetState extends ConsumerState<ShellWidget> {
       body: Column(
         children: [
           if (!status.connected)
-            Container(
-              width: double.infinity,
-              color: colors.errorContainer,
-              padding:
-                  const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
-              child: Text(
-                l10n.daemonUnavailable,
-                textAlign: TextAlign.center,
-                style: TextStyle(color: colors.onErrorContainer),
+            Semantics(
+              liveRegion: true,
+              child: Container(
+                width: double.infinity,
+                color: colors.errorContainer,
+                padding:
+                    const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
+                child: Text(
+                  l10n.daemonUnavailable,
+                  textAlign: TextAlign.center,
+                  style: TextStyle(color: colors.onErrorContainer),
+                ),
               ),
             ),
           Expanded(

@@ -8,10 +8,11 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 // Unicode escapes: the Cyrillic gate counts literals even in comments.
+// The daemon's own notice stays a protocol value; the generic user-facing
+// failure body lives in app_ru.arb (dashCommandFailedBody) and is read at the
+// point of display, never stored as text in this file.
 const _cancelNotice =
     '\u0437\u0430\u043f\u0438\u0441\u044c \u043e\u0442\u043c\u0435\u043d\u0435\u043d\u0430';
-const _commandFailed =
-    '\u043a\u043e\u043c\u0430\u043d\u0434\u0430 \u043d\u0435 \u0432\u044b\u043f\u043e\u043b\u043d\u0435\u043d\u0430';
 
 /// Which command produced [DictaControlState.lastError]. The last-text card
 /// uses it to avoid blaming inject for a failed stop/cancel/start (WR-01).
@@ -23,6 +24,7 @@ class DictaControlState {
     this.lastText,
     this.lastError,
     this.lastErrorCommand,
+    this.genericFailure = false,
   });
 
   final bool commandInFlight;
@@ -30,11 +32,16 @@ class DictaControlState {
   final String? lastError;
   final DictaCommand? lastErrorCommand;
 
+  /// True when a command threw before the daemon could supply an error body.
+  /// The card renders the localised dashCommandFailedBody for this case.
+  final bool genericFailure;
+
   DictaControlState copyWith({
     bool? commandInFlight,
     String? lastText,
     String? lastError,
     DictaCommand? lastErrorCommand,
+    bool? genericFailure,
     bool clearLastText = false,
     bool clearLastError = false,
   }) {
@@ -46,6 +53,8 @@ class DictaControlState {
       lastErrorCommand: clearLastError
           ? null
           : lastErrorCommand ?? this.lastErrorCommand,
+      genericFailure:
+          clearLastError ? false : genericFailure ?? this.genericFailure,
     );
   }
 }
@@ -69,7 +78,7 @@ class DictaControlNotifier extends Notifier<DictaControlState> {
     } catch (_) {
       state = state.copyWith(
         commandInFlight: false,
-        lastError: _commandFailed,
+        genericFailure: true,
         lastErrorCommand: DictaCommand.start,
       );
     }
@@ -90,7 +99,7 @@ class DictaControlNotifier extends Notifier<DictaControlState> {
     } catch (_) {
       state = state.copyWith(
         commandInFlight: false,
-        lastError: _commandFailed,
+        genericFailure: true,
         lastErrorCommand: DictaCommand.stop,
       );
     }
@@ -111,7 +120,7 @@ class DictaControlNotifier extends Notifier<DictaControlState> {
     } catch (_) {
       state = state.copyWith(
         commandInFlight: false,
-        lastError: _commandFailed,
+        genericFailure: true,
         lastErrorCommand: DictaCommand.cancel,
       );
     }
@@ -132,7 +141,7 @@ class DictaControlNotifier extends Notifier<DictaControlState> {
     } catch (_) {
       state = state.copyWith(
         commandInFlight: false,
-        lastError: _commandFailed,
+        genericFailure: true,
         lastErrorCommand: DictaCommand.inject,
       );
     }

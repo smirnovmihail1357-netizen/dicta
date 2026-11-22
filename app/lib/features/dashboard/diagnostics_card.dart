@@ -96,7 +96,7 @@ class DiagnosticsCard extends ConsumerWidget {
             const SizedBox(height: 12),
             Align(
               alignment: Alignment.centerLeft,
-              child: ElevatedButton(
+              child: TextButton(
                 key: const Key('diagRecheckButton'),
                 onPressed: () {
                   ref.read(dictaStatusProvider.notifier).poll();
