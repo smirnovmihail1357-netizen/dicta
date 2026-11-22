@@ -5,9 +5,26 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:dart_ipc/dart_ipc.dart';
+// dart_ipc.connect delegates to this settable platform instance. Faking it is
+// the only way to drive a connect that hangs past the 2 s budget: on Unix,
+// Socket.connect to a missing path fails at once instead of retrying like the
+// Windows pipe implementation does.
+import 'package:dart_ipc/src/dart_ipc_platform_interface.dart';
 import 'package:dicta_app/core/engine.dart';
 import 'package:dicta_app/core/windows_engine.dart';
 import 'package:flutter_test/flutter_test.dart';
+
+class _FakeConnectPlatform extends DartIpcPlatform {
+  _FakeConnectPlatform(this.connector);
+
+  final Future<Socket> Function(String path) connector;
+
+  @override
+  Future<ServerSocket> bind(String path) => throw UnimplementedError();
+
+  @override
+  Future<Socket> connect(String path) => connector(path);
+}
 
 void main() {
   late ServerSocket server;
@@ -80,6 +97,26 @@ void main() {
     } finally {
       await silentClients.cancel();
       await silentServer.close();
+    }
+  });
+
+  test('connect timeout reports its own budget, not the command budget',
+      () async {
+    final never = Completer<Socket>();
+    final previous = DartIpcPlatform.instance;
+    DartIpcPlatform.instance = _FakeConnectPlatform((_) => never.future);
+    try {
+      final engine = WindowsPipeEngine('fake-pipe');
+      final startReply = await engine.start();
+      expect(startReply.ok, isFalse);
+      expect(startReply.error, contains('\u0442\u0430\u0439\u043c\u0430\u0443\u0442 2 \u0441'));
+      expect(startReply.error, isNot(contains('120')));
+
+      final setReply = await engine.set('key', 'value');
+      expect(setReply.error, contains('\u0442\u0430\u0439\u043c\u0430\u0443\u0442 2 \u0441'));
+      expect(setReply.error, isNot(contains('30')));
+    } finally {
+      DartIpcPlatform.instance = previous;
     }
   });
 }

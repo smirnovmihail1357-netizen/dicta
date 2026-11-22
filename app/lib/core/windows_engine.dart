@@ -74,6 +74,12 @@ class WindowsPipeEngine implements DictaEngine {
     late final Socket socket;
     try {
       socket = await _connect();
+    } on TimeoutException {
+      // Connect has its own 2 s budget - report THAT, not the command budget.
+      // A silent pipe must be distinguishable from a wedged 120 s paste.
+      throw _PipeTransportException(
+        '$_daemonNotResponding $pipePath: ${_timeoutHint(_connectTimeout)}',
+      );
     } on IOException catch (error) {
       // Error type and pipe path only - never log reply payloads (no text).
       throw _PipeTransportException(
