@@ -7,6 +7,7 @@ import 'package:dicta_app/core/providers.dart';
 import 'package:dicta_app/core/theme_ext.dart';
 import 'package:dicta_app/features/dashboard/dashboard_screen.dart';
 import 'package:dicta_app/features/history/history_screen.dart';
+import 'package:dicta_app/features/settings/settings_screen.dart';
 import 'package:dicta_app/l10n/generated/app_localizations.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -84,7 +85,7 @@ class _ShellWidgetState extends ConsumerState<ShellWidget> {
                       DashboardScreen(),
                       HistoryScreen(),
                       _SectionPlaceholder(),
-                      _SectionPlaceholder(),
+                      SettingsScreen(),
                     ],
                   ),
                 ),

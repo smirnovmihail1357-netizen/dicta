@@ -429,6 +429,18 @@ abstract class AppLocalizations {
   /// In ru, this message translates to:
   /// **'запусти: systemctl --user start dictad'**
   String get diagStartHint;
+
+  /// Settings group title: text insertion
+  ///
+  /// In ru, this message translates to:
+  /// **'вставка'**
+  String get confGroupInsert;
+
+  /// Label of the paste_delay_ms setting
+  ///
+  /// In ru, this message translates to:
+  /// **'задержка перед вставкой, мс'**
+  String get confPasteDelayLabel;
 }
 
 class _AppLocalizationsDelegate

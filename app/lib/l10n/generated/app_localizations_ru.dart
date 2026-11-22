@@ -187,4 +187,10 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get diagStartHint => 'запусти: systemctl --user start dictad';
+
+  @override
+  String get confGroupInsert => 'вставка';
+
+  @override
+  String get confPasteDelayLabel => 'задержка перед вставкой, мс';
 }

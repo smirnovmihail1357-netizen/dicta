@@ -237,5 +237,14 @@
   "diagStartHint": "запусти: systemctl --user start dictad",
   "@diagStartHint": {
     "description": "Repair hint shown next to red daemon rows"
+  },
+
+  "confGroupInsert": "вставка",
+  "@confGroupInsert": {
+    "description": "Settings group title: text insertion"
+  },
+  "confPasteDelayLabel": "задержка перед вставкой, мс",
+  "@confPasteDelayLabel": {
+    "description": "Label of the paste_delay_ms setting"
   }
 }
