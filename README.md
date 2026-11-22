@@ -192,6 +192,14 @@ cannot force the window on top; right-click its title bar → "Keep Above Others
 it), or add a Window Rule for the `dicta-settings` class. The window is not a recording indicator:
 live level and seconds remain in the overlay.
 
+## History journal (dicta-app)
+
+Dictations made through `dicta-app` (the Record → Stop buttons) are added automatically to a journal with their time. The History tab lists them newest first, searches by text and offers copy, re-insert and delete for each entry.
+
+The journal lives in memory only: entries survive while the app is running and are cleared on app restart.
+
+Dictations made with the daemon's global hotkey never enter the journal: the daemon protocol returns dictated text only in replies to the app's own commands.
+
 ## Where the pill sits
 
 The pill can be dragged with the mouse: press it and pull — after 60 px of movement the overlay
