@@ -195,6 +195,54 @@ abstract class AppLocalizations {
   /// In ru, this message translates to:
   /// **'распознаю…'**
   String get dashTranscribing;
+
+  /// Title of the last recognized text card
+  ///
+  /// In ru, this message translates to:
+  /// **'последний текст'**
+  String get dashLastTextTitle;
+
+  /// Honest empty state: hotkey dictations are not visible to the app
+  ///
+  /// In ru, this message translates to:
+  /// **'нет распознанного текста'**
+  String get dashNoText;
+
+  /// Explains why the last text card can be empty
+  ///
+  /// In ru, this message translates to:
+  /// **'текст появится после остановки записи из приложения'**
+  String get dashNoTextHint;
+
+  /// Copies the last recognized text through the clipboard seam
+  ///
+  /// In ru, this message translates to:
+  /// **'скопировать'**
+  String get dashCopyButton;
+
+  /// Local snackbar confirmation after an explicit copy click
+  ///
+  /// In ru, this message translates to:
+  /// **'скопировано'**
+  String get dashCopied;
+
+  /// Re-inserts the last recognized text with the daemon inject command
+  ///
+  /// In ru, this message translates to:
+  /// **'вставить заново'**
+  String get dashInjectButton;
+
+  /// Honest note about inject focus; cross-window path is the daemon hotkey
+  ///
+  /// In ru, this message translates to:
+  /// **'вставка идёт в активное окно'**
+  String get dashInjectHint;
+
+  /// Label above the daemon's verbatim inject error
+  ///
+  /// In ru, this message translates to:
+  /// **'ошибка вставки'**
+  String get dashInjectFailed;
 }
 
 class _AppLocalizationsDelegate

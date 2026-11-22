@@ -78,5 +78,37 @@
   "dashTranscribing": "распознаю…",
   "@dashTranscribing": {
     "description": "Spinner caption tied to the polled transcribing state"
+  },
+  "dashLastTextTitle": "последний текст",
+  "@dashLastTextTitle": {
+    "description": "Title of the last recognized text card"
+  },
+  "dashNoText": "нет распознанного текста",
+  "@dashNoText": {
+    "description": "Honest empty state: hotkey dictations are not visible to the app"
+  },
+  "dashNoTextHint": "текст появится после остановки записи из приложения",
+  "@dashNoTextHint": {
+    "description": "Explains why the last text card can be empty"
+  },
+  "dashCopyButton": "скопировать",
+  "@dashCopyButton": {
+    "description": "Copies the last recognized text through the clipboard seam"
+  },
+  "dashCopied": "скопировано",
+  "@dashCopied": {
+    "description": "Local snackbar confirmation after an explicit copy click"
+  },
+  "dashInjectButton": "вставить заново",
+  "@dashInjectButton": {
+    "description": "Re-inserts the last recognized text with the daemon inject command"
+  },
+  "dashInjectHint": "вставка идёт в активное окно",
+  "@dashInjectHint": {
+    "description": "Honest note about inject focus; cross-window path is the daemon hotkey"
+  },
+  "dashInjectFailed": "ошибка вставки",
+  "@dashInjectFailed": {
+    "description": "Label above the daemon's verbatim inject error"
   }
 }

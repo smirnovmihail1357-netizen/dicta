@@ -6,6 +6,7 @@ library;
 import 'package:dicta_app/core/engine.dart';
 import 'package:dicta_app/core/providers.dart';
 import 'package:dicta_app/features/dashboard/dicta_control.dart';
+import 'package:dicta_app/features/dashboard/last_text_card.dart';
 import 'package:dicta_app/features/dashboard/level_history.dart';
 import 'package:dicta_app/l10n/generated/app_localizations.dart';
 import 'package:flutter/material.dart';
@@ -154,6 +155,8 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
               ),
             ),
           ),
+          const SizedBox(height: 12),
+          const LastTextCard(),
         ],
       ),
     );

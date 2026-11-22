@@ -65,4 +65,29 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get dashTranscribing => 'распознаю…';
+
+  @override
+  String get dashLastTextTitle => 'последний текст';
+
+  @override
+  String get dashNoText => 'нет распознанного текста';
+
+  @override
+  String get dashNoTextHint =>
+      'текст появится после остановки записи из приложения';
+
+  @override
+  String get dashCopyButton => 'скопировать';
+
+  @override
+  String get dashCopied => 'скопировано';
+
+  @override
+  String get dashInjectButton => 'вставить заново';
+
+  @override
+  String get dashInjectHint => 'вставка идёт в активное окно';
+
+  @override
+  String get dashInjectFailed => 'ошибка вставки';
 }

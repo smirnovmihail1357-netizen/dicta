@@ -10,6 +10,7 @@ class FakeDictaEngine implements DictaEngine {
   FakeDictaEngine(
     this.statusValue, {
     this.stopGate,
+    this.injectGate,
     this.fetchSettingsReply,
     this.stopReply,
     this.injectReply,
@@ -21,6 +22,9 @@ class FakeDictaEngine implements DictaEngine {
 
   /// When set, stop() stays in flight until this completer is resolved.
   Completer<void>? stopGate;
+
+  /// When set, inject() stays in flight until this completer is resolved.
+  Completer<void>? injectGate;
 
   /// Reply returned by fetchSettings(); null means an empty map.
   Map<String, dynamic>? fetchSettingsReply;
@@ -55,6 +59,8 @@ class FakeDictaEngine implements DictaEngine {
   @override
   Future<DictaStatus> inject({required String text, String? app}) async {
     injectTexts.add(text);
+    final gate = injectGate;
+    if (gate != null) await gate.future;
     return injectReply ??
         DictaStatus(
           connected: true,
