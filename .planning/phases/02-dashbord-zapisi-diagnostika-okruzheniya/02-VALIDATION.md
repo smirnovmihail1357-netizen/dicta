@@ -52,7 +52,7 @@ order; row 4 carries Threat Ref T-2-01 (inject payload discipline). Legend same 
 | Task 4 | 01 | 2 | DASH-03 | T-2-01 | inject only sends user's last text via jsonEncode; never logs payload | widget (stop-reply text → card; copy via clipboard seam; inject framing/disabled-при-пустом/error shown) | `cd app && flutter test test/last_text_test.dart` | ✅ | ✅ green |
 | Task 5 | 01 | 2 | DASH-04 | — | N/A | widget (drag release → ровно один `set('min_level','0.42')`, формат {:.2}) | `cd app && flutter test test/calibration_test.dart` | ✅ | ✅ green |
 | Task 6 | 01 | 3 | DIAG-01 | — | N/A | widget (green/neutral/red/«перепроверить») + smoke по живому демону | `cd app && flutter test test/diagnostics_test.dart && dart run tool/diag_smoke.dart` | ✅ | ✅ green |
-| Task 7 | 01 | 3 | all | — | N/A | manual smoke | see Manual-Only Verifications | n/a | n/a | ⬜ pending |
+| Task 7 | 01 | 3 | all | — | N/A | phase gate: 45 tests, analyze clean, gate 0, live smoke, crates/pubspec diff empty | see Manual-Only Verifications | n/a | n/a | ✅ green |
 
 *Status: ⬜ pending · ✅ green · ❌ red · ⚠️ flaky*
 
