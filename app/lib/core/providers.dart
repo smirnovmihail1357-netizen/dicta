@@ -1,9 +1,11 @@
 import 'dart:async';
+import 'dart:io' show Platform;
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'daemon_engine.dart';
 import 'engine.dart';
+import 'windows_engine.dart';
 import 'hf/download_engine.dart';
 import 'hf/hf_client.dart';
 import 'settings.dart';
@@ -13,8 +15,9 @@ import 'window_shell.dart';
 /// DaemonEngine holds no disposable resource: every command opens and closes
 /// its own socket, and the retired statusStream broadcast controller was its
 /// only long-lived state (phase 2 IN-04).
-final engineProvider = Provider<DictaEngine>((ref) =>
-    DaemonEngine(resolveSocketPath()));
+final engineProvider = Provider<DictaEngine>((ref) => Platform.isWindows
+    ? WindowsPipeEngine()
+    : DaemonEngine(resolveSocketPath()));
 
 final dictaStatusProvider =
     NotifierProvider<DictaStatusNotifier, DictaStatus>(DictaStatusNotifier.new);
