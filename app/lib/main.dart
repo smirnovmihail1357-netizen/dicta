@@ -1,5 +1,5 @@
 import 'package:dicta_app/features/shell/shell.dart';
-import 'package:dicta_app/l10n/app_localizations.dart';
+import 'package:dicta_app/l10n/generated/app_localizations.dart';
 import 'package:dynamic_color/dynamic_color.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';

@@ -41,6 +41,12 @@ class DaemonEngine implements DictaEngine {
   @override
   Stream<DictaStatus> get statusStream => _statusController.stream;
 
+  /// Closes the broadcast controller. Called by engineProvider's ref.onDispose
+  /// so every ProviderScope (including each widget-test scope) releases it.
+  void dispose() {
+    _statusController.close();
+  }
+
   static const _connectTimeout = Duration(seconds: 2);
   static const _statusTimeout = Duration(seconds: 2);
   static const _settingsTimeout = Duration(seconds: 30);
@@ -80,7 +86,12 @@ class DaemonEngine implements DictaEngine {
       final map = decodeReplyMap(await _call(line, timeout: timeout));
       final error = map['error'] as String?;
       return DictaReply(ok: error == null, error: error);
+    } on SocketException catch (error) {
+      // Transport failure: _call already wrapped this with the actionable
+      // daemon-not-responding / "systemctl --user start dictad" hint.
+      return DictaReply(ok: false, error: error.message);
     } catch (_) {
+      // JSON/format/EOF failures only — never mask a SocketException again.
       return DictaReply(ok: false, error: _badReply);
     }
   }

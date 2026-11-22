@@ -5,7 +5,7 @@ library;
 
 import 'package:dicta_app/core/engine.dart';
 import 'package:dicta_app/core/providers.dart';
-import 'package:dicta_app/l10n/app_localizations.dart';
+import 'package:dicta_app/l10n/generated/app_localizations.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 

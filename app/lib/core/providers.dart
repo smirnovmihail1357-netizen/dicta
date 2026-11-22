@@ -6,7 +6,9 @@ import 'daemon_engine.dart';
 import 'engine.dart';
 
 final engineProvider = Provider<DictaEngine>((ref) {
-  return DaemonEngine(resolveSocketPath());
+  final engine = DaemonEngine(resolveSocketPath());
+  ref.onDispose(engine.dispose);
+  return engine;
 });
 
 final dictaStatusProvider =
@@ -17,24 +19,33 @@ final dictaStatusProvider =
 class DictaStatusNotifier extends Notifier<DictaStatus> {
   Timer? _timer;
   bool _inFlight = false;
+  bool _disposed = false;
   Duration _backoff = const Duration(milliseconds: 200);
 
   @override
   DictaStatus build() {
+    _disposed = false;
     _timer = Timer.periodic(const Duration(milliseconds: 100), (_) => poll());
-    ref.onDispose(() => _timer?.cancel());
+    ref.onDispose(() {
+      _disposed = true;
+      _timer?.cancel();
+    });
     return const DictaStatus.disconnected();
   }
 
   Future<void> poll() async {
-    if (_inFlight) return;
+    if (_inFlight || _disposed) return;
     _inFlight = true;
     try {
-      state = await ref.read(engineProvider).status();
+      final snapshot = await ref.read(engineProvider).status();
+      if (_disposed) return;
+      state = snapshot;
       _backoff = const Duration(milliseconds: 200);
     } catch (_) {
+      if (_disposed) return;
       state = const DictaStatus.disconnected();
       await Future<void>.delayed(_backoff);
+      if (_disposed) return;
       final doubled = _backoff * 2;
       _backoff = doubled > const Duration(seconds: 2)
           ? const Duration(seconds: 2)
