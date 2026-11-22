@@ -55,5 +55,12 @@
       "level": {"type": "String", "example": "0.00"},
       "seconds": {"type": "String", "example": "0.0"}
     }
+  },
+  "dashRecordingTime": "время {time}",
+  "@dashRecordingTime": {
+    "description": "Elapsed recording time derived from the daemon seconds field",
+    "placeholders": {
+      "time": {"type": "String", "example": "01:05"}
+    }
   }
 }

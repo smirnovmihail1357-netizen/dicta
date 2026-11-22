@@ -3,8 +3,8 @@
 /// lives under features/ (APP-03 seam).
 library;
 
-import 'package:dicta_app/core/engine.dart';
 import 'package:dicta_app/core/providers.dart';
+import 'package:dicta_app/features/dashboard/dashboard_screen.dart';
 import 'package:dicta_app/l10n/generated/app_localizations.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -76,7 +76,7 @@ class _ShellWidgetState extends ConsumerState<ShellWidget> {
                   child: IndexedStack(
                     index: _selected,
                     children: const [
-                      _DashboardPlaceholder(),
+                      DashboardScreen(),
                       _SectionPlaceholder(),
                       _SectionPlaceholder(),
                       _SectionPlaceholder(),
@@ -104,42 +104,6 @@ class _SectionPlaceholder extends StatelessWidget {
         style: TextStyle(
           color: Theme.of(context).colorScheme.onSurfaceVariant,
         ),
-      ),
-    );
-  }
-}
-
-class _DashboardPlaceholder extends ConsumerWidget {
-  const _DashboardPlaceholder();
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final l10n = AppLocalizations.of(context)!;
-    final status = ref.watch(dictaStatusProvider);
-    final label = switch (status.state) {
-      DaemonState.idle => l10n.daemonStateIdle,
-      DaemonState.recording => l10n.daemonStateRecording,
-      DaemonState.transcribing => l10n.daemonStateTranscribing,
-    };
-    final weak = TextStyle(
-      color: Theme.of(context).colorScheme.onSurfaceVariant,
-    );
-
-    return Center(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Text(l10n.stateLabel(label)),
-          Text(
-            l10n.levelSeconds(
-              status.level.toStringAsFixed(2),
-              status.seconds.toStringAsFixed(1),
-            ),
-            style: weak,
-          ),
-          const SizedBox(height: 16),
-          Text(l10n.placeholderScreen, style: weak),
-        ],
       ),
     );
   }

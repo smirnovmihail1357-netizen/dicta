@@ -101,6 +101,28 @@ class DaemonEngine implements DictaEngine {
       _commandLine('${jsonEncode({'cmd': cmd, 'app': ?app})}\n',
           timeout: timeout);
 
+  /// Action replies carry a full status snapshot (including the last text).
+  /// Transport and format failures become a typed snapshot with an error,
+  /// never an exception escaping to the UI.
+  Future<DictaStatus> _snapshotCommand(String line,
+      {required Duration timeout}) async {
+    try {
+      return DictaStatus.fromReplyLine(await _call(line, timeout: timeout));
+    } on SocketException catch (error) {
+      return DictaStatus(
+        connected: false,
+        state: DaemonState.idle,
+        error: error.message,
+      );
+    } catch (_) {
+      return DictaStatus(
+        connected: false,
+        state: DaemonState.idle,
+        error: _badReply,
+      );
+    }
+  }
+
   @override
   Future<DictaStatus> status() async {
     final status = DictaStatus.fromReplyLine(
@@ -115,8 +137,14 @@ class DaemonEngine implements DictaEngine {
       _command('start', app, timeout: _injectTimeout);
 
   @override
-  Future<DictaReply> stop({String? app}) =>
-      _command('stop', app, timeout: _injectTimeout);
+  Future<DictaStatus> stop({String? app}) => _snapshotCommand(
+        '${jsonEncode({'cmd': 'stop', 'app': ?app})}\n',
+        timeout: _injectTimeout,
+      );
+
+  @override
+  Future<DictaStatus> inject({required String text, String? app}) =>
+      _snapshotCommand(buildInjectLine(text, app), timeout: _injectTimeout);
 
   @override
   Future<DictaReply> toggle({String? app}) =>

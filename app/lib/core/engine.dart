@@ -69,7 +69,14 @@ class DictaReply {
 abstract interface class DictaEngine {
   Future<DictaStatus> status();
   Future<DictaReply> start({String? app});
-  Future<DictaReply> stop({String? app});
+
+  /// The reply is a snapshot: it is the only place the recognized text ever
+  /// appears (status never carries text).
+  Future<DictaStatus> stop({String? app});
+
+  /// Inserts text into the active window with the daemon's 120 s budget.
+  Future<DictaStatus> inject({required String text, String? app});
+
   Future<DictaReply> toggle({String? app});
   Future<DictaReply> cancel();
 
@@ -89,3 +96,6 @@ String buildStatusLine() => '${jsonEncode({'cmd': 'status'})}\n';
 
 String buildSetLine(String key, String value) =>
     '${jsonEncode({'cmd': 'set', 'key': key, 'value': value})}\n';
+
+String buildInjectLine(String text, String? app) =>
+    '${jsonEncode({'cmd': 'inject', 'text': text, 'app': ?app})}\n';

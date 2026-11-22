@@ -165,6 +165,12 @@ abstract class AppLocalizations {
   /// In ru, this message translates to:
   /// **'уровень {level} · {seconds} с'**
   String levelSeconds(String level, String seconds);
+
+  /// Elapsed recording time derived from the daemon seconds field
+  ///
+  /// In ru, this message translates to:
+  /// **'время {time}'**
+  String dashRecordingTime(String time);
 }
 
 class _AppLocalizationsDelegate

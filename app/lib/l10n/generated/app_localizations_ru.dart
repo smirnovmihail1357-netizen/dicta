@@ -48,4 +48,9 @@ class AppLocalizationsRu extends AppLocalizations {
   String levelSeconds(String level, String seconds) {
     return 'уровень $level · $seconds с';
   }
+
+  @override
+  String dashRecordingTime(String time) {
+    return 'время $time';
+  }
 }

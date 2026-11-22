@@ -11,6 +11,8 @@ class FakeDictaEngine implements DictaEngine {
     this.statusValue, {
     this.stopGate,
     this.fetchSettingsReply,
+    this.stopReply,
+    this.injectReply,
   });
 
   /// Mutable snapshot: tests rewrite it between real poller ticks to script
@@ -22,6 +24,10 @@ class FakeDictaEngine implements DictaEngine {
 
   /// Reply returned by fetchSettings(); null means an empty map.
   Map<String, dynamic>? fetchSettingsReply;
+
+  /// Scripted action replies (Task 2): default snapshots carry no text.
+  DictaStatus? stopReply;
+  DictaStatus? injectReply;
 
   /// Every set(key, value) call is recorded here in order.
   final List<({String key, String value})> setCalls = [];
@@ -39,10 +45,22 @@ class FakeDictaEngine implements DictaEngine {
   Future<DictaReply> start({String? app}) async => const DictaReply(ok: true);
 
   @override
-  Future<DictaReply> stop({String? app}) async {
+  Future<DictaStatus> stop({String? app}) async {
     final gate = stopGate;
     if (gate != null) await gate.future;
-    return const DictaReply(ok: true);
+    return stopReply ??
+        const DictaStatus(connected: true, state: DaemonState.idle);
+  }
+
+  @override
+  Future<DictaStatus> inject({required String text, String? app}) async {
+    injectTexts.add(text);
+    return injectReply ??
+        DictaStatus(
+          connected: true,
+          state: DaemonState.idle,
+          text: text,
+        );
   }
 
   @override
