@@ -8,7 +8,6 @@ license.workspace = true
 anyhow.workspace = true
 hound.workspace = true
 regex = "1"
-libc = "0.2"
 serde.workspace = true
 toml.workspace = true
 dirs.workspace = true
@@ -17,6 +16,9 @@ whisper-rs-sys.workspace = true
 atspi = { version = "0.22", optional = true, default-features = false, features = ["proxies", "async-std"] }
 futures = { version = "0.3", optional = true }
 zbus = { version = "4.2", optional = true }
+
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"   # capture.rs/hotkey.rs/inject.rs — только unix-модули
 
 [target.'cfg(windows)'.dependencies]
 cpal = "0.18.2"

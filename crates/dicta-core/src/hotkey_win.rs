@@ -9,7 +9,7 @@ use std::io::{Error, ErrorKind, Result};
 use windows::Win32::Foundation::GetLastError;
 use windows::Win32::UI::Input::KeyboardAndMouse::{
     RegisterHotKey, HOT_KEY_MODIFIERS, VIRTUAL_KEY, MOD_ALT, MOD_CONTROL, MOD_NOREPEAT, MOD_SHIFT,
-    MOD_WIN, VK_ESCAPE, VK_F1, VK_INSERT, VK_M, VK_RETURN, VK_SPACE, VK_TAB, VK_V,
+    MOD_WIN, VK_ESCAPE, VK_F1, VK_INSERT, VK_RETURN, VK_SPACE, VK_TAB,
 };
 use windows::Win32::UI::WindowsAndMessaging::{GetMessageW, MSG, WM_HOTKEY};
 
@@ -81,9 +81,10 @@ pub fn listen(spec: &str, mut on_press: impl FnMut() + Send + 'static) -> Result
     loop {
         let outcome = unsafe { GetMessageW(&mut msg, None, 0, 0) };
         if outcome.0 == -1 {
+            let code = unsafe { GetLastError() };
             return Err(Error::new(
                 ErrorKind::Other,
-                format!("GetMessageW не удался: {:?}", GetLastError()),
+                format!("GetMessageW не удался: {code:?}"),
             ));
         }
         if outcome.0 == 0 {
@@ -99,6 +100,7 @@ pub fn listen(spec: &str, mut on_press: impl FnMut() + Send + 'static) -> Result
 #[cfg(test)]
 mod tests {
     use super::*;
+    use windows::Win32::UI::Input::KeyboardAndMouse::{VK_M, VK_V};
 
     #[test]
     fn parses_alt_v_into_mod_and_vk() {
