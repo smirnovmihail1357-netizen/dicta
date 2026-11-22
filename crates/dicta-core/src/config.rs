@@ -259,12 +259,15 @@ fn default_model_path() -> PathBuf {
         .join("ggml-medium-q5_0.bin")
 }
 
+// На Windows поле socket хранит полное имя именованного канала; инициатива
+// слушателя — в transport_win (DICTA_PIPE → дефолт).
+#[cfg(windows)]
 fn default_socket_path() -> PathBuf {
-    // На Windows поле socket хранит полное имя именованного канала; инициатива
-    // слушателя — в transport_win (DICTA_PIPE → дефолт).
-    #[cfg(windows)]
-    return PathBuf::from(DEFAULT_PIPE_NAME);
+    PathBuf::from(DEFAULT_PIPE_NAME)
+}
 
+#[cfg(not(windows))]
+fn default_socket_path() -> PathBuf {
     let runtime = std::env::var_os("XDG_RUNTIME_DIR").map(PathBuf::from);
     match runtime {
         Some(dir) if !dir.as_os_str().is_empty() => dir.join("dicta.sock"),
