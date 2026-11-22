@@ -15,7 +15,8 @@ dicta-core = { path = "../dicta-core", default-features = false }
 [target.'cfg(windows)'.dependencies]
 interprocess = "2.4.8"
 widestring = "1"
-# Единая версия с уже за.lock'енной windows 0.58 (не порождаем вторую мажорную).
+# windows 0.58 запинен для прямых зависимостей. cpal 0.18 замыкает windows 0.62
+# транзитивно: сосуществование двух мажорных в Cargo.lock принято и изолировано за cpal.
 windows = { version = "0.58", features = ["Win32_Foundation", "Win32_Security", "Win32_Security_Authorization", "Win32_System_Threading"] }
 
 [features]
