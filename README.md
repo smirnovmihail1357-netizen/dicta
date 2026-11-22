@@ -225,7 +225,9 @@ dicta-ui --edge right               # move it to the right side
 `dicta-app` lives on in the system tray (SNI / StatusNotifierItem). The window's
 X hides it to the tray — the process stays alive and the icon remains. The only
 honest way to quit is the **Exit** item in the tray menu (`destroy()` is called
-from that item alone).
+from that item alone). Exiting does not interrupt an active recording: the daemon
+owns its lifecycle, so the recording finishes on the daemon hotkey or auto-stop
+— by design.
 
 The menu offers: Show/Hide Window, Start, Stop, Cancel, Settings (opens the
 window on the Settings tab) and Exit. The icon is blue when idle and red while
