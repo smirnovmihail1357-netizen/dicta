@@ -9,6 +9,7 @@ jobs:
   build:
     name: flutter build windows (release zip)
     runs-on: windows-latest
+    timeout-minutes: 30   # RESEARCH A3: 15-25 min + headroom
     defaults:
       run:
         working-directory: app
