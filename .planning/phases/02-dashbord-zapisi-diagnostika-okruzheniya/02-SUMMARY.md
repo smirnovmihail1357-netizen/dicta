@@ -138,3 +138,8 @@ These four backstop items stay open for `/gsd-verify-work` (visual/acoustic/real
    the cross-window path is the daemon hotkey; caption is honest.
 4. **DIAG-01 manual rows:** verify hotkey and paste paths by hand (`dictactl toggle`, live
    dictation); the app never triggers either.
+
+## Self-Check: PASSED
+
+All created files present; all 8 commits (`603d410` → `8d2b432`) are ancestors of HEAD;
+`crates/` and `app/pubspec.{yaml,lock}` byte-identical to `2714e27`; working tree clean.
