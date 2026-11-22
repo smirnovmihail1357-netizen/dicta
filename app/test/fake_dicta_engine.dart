@@ -28,6 +28,7 @@ class FakeDictaEngine implements DictaEngine {
     this.injectReply,
     this.setReplyMap,
     this.cancelReply,
+    this.startReply,
     this.statusError,
     this.onSet,
     this.fetchSettingsGate,
@@ -58,6 +59,10 @@ class FakeDictaEngine implements DictaEngine {
   /// Scripted cancel reply (WR-04): lets tests pin the daemon's cancellation
   /// notice exactly, including the "suppress honest noise" branch.
   DictaReply? cancelReply;
+
+  /// Scripted start reply (WR-01): pin a daemon error body to prove the tray
+  /// path surfaces it instead of swallowing it.
+  DictaReply? startReply;
 
   /// When set, status() throws instead of returning a snapshot (WR-04 backoff).
   Object? statusError;
@@ -105,7 +110,7 @@ class FakeDictaEngine implements DictaEngine {
   @override
   Future<DictaReply> start({String? app}) async {
     startCalls++;
-    return const DictaReply(ok: true);
+    return startReply ?? const DictaReply(ok: true);
   }
 
   @override
@@ -183,6 +188,8 @@ Widget buildFakeApp(
   DownloadEngine? downloadEngine,
   TrayService? tray,
   WindowShell? window,
+  // WR-01: lets a tray test observe the snackbar raised for a reply error.
+  GlobalKey<ScaffoldMessengerState>? scaffoldMessengerKey,
   // Overridable so a suite can unmount the shell subtree without disposing
   // the surrounding ProviderScope (e.g. to exercise post-await mounted guards).
   Widget home = const ShellWidget(),
@@ -206,6 +213,7 @@ Widget buildFakeApp(
         // suite must see the same extension or mutedOf(context) would assert.
         final colors = ColorScheme.fromSeed(seedColor: const Color(0xFF35689F));
         return MaterialApp(
+          scaffoldMessengerKey: scaffoldMessengerKey,
           theme: ThemeData(
             colorScheme: colors,
             useMaterial3: true,

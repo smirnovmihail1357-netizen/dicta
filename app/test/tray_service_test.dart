@@ -5,6 +5,7 @@ import 'package:dicta_app/core/providers.dart';
 import 'package:dicta_app/core/tray.dart';
 import 'package:dicta_app/features/shell/shell.dart';
 import 'package:dicta_app/tray_bootstrap.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -79,13 +80,61 @@ void main() {
     expect(window.visible, isTrue);
   });
 
-  test('menu commands reach the fake daemon through DictaControlNotifier', () {
+  test('menu commands reach the fake daemon through DictaControlNotifier',
+      () async {
+    // WR-01 serializes menu commands: wait for each one to resolve before
+    // issuing the next, exactly as a user clicking a settled menu would.
     tray.clickStart();
+    await settle();
     expect(daemon.startCalls, 1);
     tray.clickStop();
+    await settle();
     expect(daemon.stopCalls, 1);
     tray.clickCancel();
+    await settle();
     expect(daemon.cancelCalls, 1);
+  });
+
+  test('WR-01: a rapid double click issues only one command', () async {
+    tray.clickStart();
+    tray.clickStart();
+    await settle();
+    expect(daemon.startCalls, 1);
+
+    // The guard is released on completion; a later deliberate click works.
+    tray.clickStop();
+    await settle();
+    expect(daemon.stopCalls, 1);
+  });
+
+  testWidgets('WR-01: a reply error surfaces in a snackbar, not silence',
+      (tester) async {
+    final messengerKey = GlobalKey<ScaffoldMessengerState>();
+    final errorDaemon = FakeDictaEngine(
+      const DictaStatus(connected: true, state: DaemonState.idle),
+      startReply: const DictaReply(ok: false, error: 'daemon refused'),
+    );
+    final errorTray = FakeTrayService();
+    final errorContainer = ProviderContainer(overrides: [
+      engineProvider.overrideWithValue(errorDaemon),
+      trayServiceProvider.overrideWithValue(errorTray),
+      windowShellProvider.overrideWithValue(window),
+    ]);
+    addTearDown(errorContainer.dispose);
+    await TrayController(errorContainer, errorTray, window,
+        messengerKey: messengerKey).start();
+
+    await tester.pumpWidget(buildFakeApp(
+      errorDaemon,
+      scaffoldMessengerKey: messengerKey,
+      home: const Scaffold(body: SizedBox.expand()),
+    ));
+    errorTray.clickStart();
+    for (var i = 0; i < 5; i++) {
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 20));
+    }
+    expect(find.text('daemon refused'), findsOneWidget);
   });
 
   test('settings menu item shows the window and selects the Settings tab',

@@ -12,17 +12,32 @@ import 'package:dicta_app/core/tray.dart';
 import 'package:dicta_app/core/window_shell.dart';
 import 'package:dicta_app/features/dashboard/dicta_control.dart';
 import 'package:dicta_app/features/shell/shell.dart';
+import 'package:dicta_app/l10n/generated/app_localizations.dart';
+import 'package:flutter/material.dart'
+    show GlobalKey, Locale, ScaffoldMessengerState, SnackBar, Text;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 class TrayController {
-  TrayController(this._container, this._tray, this._window);
+  TrayController(
+    this._container,
+    this._tray,
+    this._window, {
+    this.messengerKey,
+  });
 
   final ProviderContainer _container;
   final TrayService _tray;
   final WindowShell _window;
+  final GlobalKey<ScaffoldMessengerState>? messengerKey;
 
   /// Last icon installed, so the 100 ms status tick only swaps on transitions.
   TrayIconState? _lastIcon;
+
+  /// WR-01: the native menu is a fourth command path beside the dashboard
+  /// buttons. A double click must not send a second command to the daemon.
+  /// Dart's single-threaded event loop makes this check-and-set atomic between
+  /// two callbacks fired before the first command resolves.
+  bool _menuCommandInFlight = false;
 
   Future<void> start() async {
     // Icon and menu before anything else (labels are set inside the service).
@@ -55,12 +70,9 @@ class TrayController {
         await _window.show();
       }
     });
-    _tray.onMenuStart(
-        () => _container.read(dictaControlProvider.notifier).start());
-    _tray.onMenuStop(
-        () => _container.read(dictaControlProvider.notifier).stop());
-    _tray.onMenuCancel(
-        () => _container.read(dictaControlProvider.notifier).cancel());
+    _tray.onMenuStart(() => _command((n) => n.start()));
+    _tray.onMenuStop(() => _command((n) => n.stop()));
+    _tray.onMenuCancel(() => _command((n) => n.cancel()));
     _tray.onMenuSettings(() async {
       await _window.show();
       // Rail order is fixed by phase 1: Settings is destination 3.
@@ -70,5 +82,44 @@ class TrayController {
       await _tray.dispose();
       await _window.destroy();
     });
+  }
+
+  /// WR-01 guard: drop a second click while the first command is still in
+  /// flight. The flag is released in [finally] so a thrown command can never
+  /// leave the menu permanently disabled.
+  void _command(Future<void> Function(DictaControlNotifier notifier) run) {
+    if (_menuCommandInFlight) return;
+    _menuCommandInFlight = true;
+    _runCommand(run);
+  }
+
+  Future<void> _runCommand(
+    Future<void> Function(DictaControlNotifier notifier) run,
+  ) async {
+    try {
+      // Respect a command already started from the dashboard too: both paths
+      // share the notifier's one-at-a-time rule.
+      if (_container.read(dictaControlProvider).commandInFlight) return;
+      await run(_container.read(dictaControlProvider.notifier));
+      await _reportCommandError();
+    } finally {
+      _menuCommandInFlight = false;
+    }
+  }
+
+  /// WR-01: a daemon reply error must not be silent in the tray path. Show it
+  /// through a snackbar while the window is visible; a hidden window has no
+  /// honest surface (the SNI icon cannot carry an error) — skip deliberately.
+  Future<void> _reportCommandError() async {
+    final control = _container.read(dictaControlProvider);
+    final error = control.lastError;
+    if ((error == null || error.isEmpty) && !control.genericFailure) return;
+    if (!await _window.isVisible()) return;
+
+    final l10n = lookupAppLocalizations(const Locale('ru'));
+    // Daemon error text is data; a command that threw before a reply uses the
+    // localised body — same rule as the dashboard's error card.
+    final body = control.genericFailure ? l10n.dashCommandFailedBody : error!;
+    messengerKey?.currentState?.showSnackBar(SnackBar(content: Text(body)));
   }
 }

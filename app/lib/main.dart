@@ -26,17 +26,25 @@ Future<void> main() async {
   // Plugin objects are constructed ONLY here in prod-main. Tests never call
   // main(), and buildFakeApp/buildTestApp override the seams with fakes.
   final container = ProviderContainer();
+  final messengerKey = GlobalKey<ScaffoldMessengerState>();
   await TrayController(
     container,
     container.read(trayServiceProvider),
     container.read(windowShellProvider),
+    messengerKey: messengerKey,
   ).start();
 
-  runApp(UncontrolledProviderScope(container: container, child: const DictaApp()));
+  runApp(UncontrolledProviderScope(
+    container: container,
+    child: DictaApp(messengerKey: messengerKey),
+  ));
 }
 
 class DictaApp extends StatelessWidget {
-  const DictaApp({super.key});
+  const DictaApp({super.key, this.messengerKey});
+
+  /// Lets the tray report a command error through a snackbar (WR-01).
+  final GlobalKey<ScaffoldMessengerState>? messengerKey;
 
   @override
   Widget build(BuildContext context) {
@@ -55,6 +63,7 @@ class DictaApp extends StatelessWidget {
           brightness: Brightness.dark,
         );
         return MaterialApp(
+          scaffoldMessengerKey: messengerKey,
           theme: ThemeData(
             colorScheme: light,
             useMaterial3: true,
