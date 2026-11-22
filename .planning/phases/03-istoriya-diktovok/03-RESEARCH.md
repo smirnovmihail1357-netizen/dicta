@@ -384,10 +384,10 @@ onPressed: busy ? null : () async {
 
 A1-A4 из CONTEXT.md не пересуживаются (разрешены оркестратору автономно); таблица выше — только НОВЫЕ дополнения исследования.
 
-## Open Questions
+## Open Questions (RESOLVED)
 
-1. **Дебаунс поиска не нужен?** Знаем: фильтр по сотням записей дешёвый (A1). Неясно: эстетика «на каждый keystroke». Рекомендация: без дебаунса (KISS), Riverpod сам сжимает rebuild'ы.
-2. **Место ThemeExtension-файла: core/ или features/?** Знаем: стиль跨фичный (5 файлов по всем features + shell). Рекомендация: `app/lib/core/theme_ext.dart` — расширение темы не принадлежит одной фиче.
+1. **Дебаунс поиска не нужен?** Знаем: фильтр по сотням записей дешёвый (A1). Неясно: эстетика «на каждый keystroke». Рекомендация: без дебаунса (KISS), Riverpod сам сжимает rebuild'ы. Резолюция: принят «без дебаунса» (03-01-PLAN must_haves truth + Task 3).
+2. **Место ThemeExtension-файла: core/ или features/?** Знаем: стиль跨фичный (5 файлов по всем features + shell). Рекомендация: `app/lib/core/theme_ext.dart` — расширение темы не принадлежит одной фиче. Резолюция: принят `app/lib/core/theme_ext.dart` (03-01-PLAN Task 1 шаг 5).
 
 ## Environment Availability
 
