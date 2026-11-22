@@ -97,11 +97,14 @@ enum Command {
         #[arg(long)]
         state: Option<String>,
     },
-    /// Настройки демона: показать (`settings`) или изменить (`settings min_level 0.4`).
-    /// Изменение применяется сразу и сохраняется в config.toml.
+    /// Открыть отдельное окно настроек. С ключом и значением — изменить настройку
+    /// из терминала (применяется сразу и сохраняется в config.toml).
     Settings {
         key: Option<String>,
         value: Option<String>,
+        /// Печатать снимок настроек в stdout вместо открытия окна.
+        #[arg(long)]
+        json: bool,
     },
 }
 
@@ -150,6 +153,33 @@ fn ask(socket: &std::path::Path, cmd: &str, app: Option<&str>) -> Result<String>
 
 fn json_quote(value: &str) -> String {
     format!("\"{}\"", value.replace('\\', "\\\\").replace('"', "\\\""))
+}
+
+/// Найти бинарник рядом с dictactl, затем в ~/.local/bin (как dictad ищет dicta-ui).
+fn find_binary(name: &str) -> Option<PathBuf> {
+    let sibling = std::env::current_exe().ok()?.parent()?.join(name);
+    if sibling.exists() {
+        return Some(sibling);
+    }
+    let local = std::env::var_os("HOME")
+        .map(PathBuf::from)?
+        .join(".local/bin")
+        .join(name);
+    local.exists().then_some(local)
+}
+
+/// Запустить окно настроек отдельным процессом и не ждать его завершения.
+fn spawn_settings_window() -> Result<()> {
+    let exe = find_binary("dicta-settings").ok_or_else(|| {
+        anyhow::anyhow!(
+            "dicta-settings не найден рядом с dictactl и в ~/.local/bin — запусти make install"
+        )
+    })?;
+    std::process::Command::new(&exe)
+        .spawn()
+        .map_err(|err| anyhow::anyhow!("не смог запустить {}: {err}", exe.display()))?;
+    println!("окно настроек запущено");
+    Ok(())
 }
 
 fn main() -> Result<()> {
@@ -285,8 +315,9 @@ fn main() -> Result<()> {
             };
             println!("{}", ask_json(&cfg.socket, payload)?);
         }
-        Command::Settings { key, value } => match (key, value) {
-            (None, _) => println!("{}", ask_json(&cfg.socket, "{\"cmd\":\"settings\"}\n")?),
+        Command::Settings { key, value, json } => match (key, value) {
+            (None, _) if json => println!("{}", ask_json(&cfg.socket, "{\"cmd\":\"settings\"}\n")?),
+            (None, _) => spawn_settings_window()?,
             (Some(key), Some(value)) => {
                 let payload = format!(
                     "{{\"cmd\":\"set\",\"key\":{},\"value\":{}}}\n",

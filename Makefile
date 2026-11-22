@@ -18,10 +18,11 @@ install: build
 	install -Dm755 target/release/dictad   $(BIN_DIR)/dictad
 	install -Dm755 target/release/dictactl $(BIN_DIR)/dictactl
 	install -Dm755 target/release/dicta-ui $(BIN_DIR)/dicta-ui
+	install -Dm755 target/release/dicta-settings $(BIN_DIR)/dicta-settings
 	@echo "установлено в $(BIN_DIR); не забудь systemd/install.sh и adapters/kwin/install.sh"
 
 uninstall:
-	rm -f $(BIN_DIR)/dictad $(BIN_DIR)/dictactl $(BIN_DIR)/dicta-ui
+	rm -f $(BIN_DIR)/dictad $(BIN_DIR)/dictactl $(BIN_DIR)/dicta-ui $(BIN_DIR)/dicta-settings
 
 fetch-model:
 	./tools/fetch-model.sh

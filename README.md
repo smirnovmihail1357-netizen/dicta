@@ -22,6 +22,7 @@ Hyprland, Sway, Quickshell and GNOME adapters are included but less exercised.
 | `crates/dictad` | the daemon: Unix socket, recording, inference, text injection, spawns the overlay |
 | `crates/dictactl` | CLI client: `toggle start stop cancel status paste-keys calibrate inject infer atspi-dump atspi-insert` |
 | `crates/dicta-ui` | layer-shell overlay (REC pill + level waveform + "transcribing" scanner) |
+| `crates/dicta-settings` | standalone settings window (eframe/egui): recording, model, insertion, system |
 | `adapters/` | global hotkeys: KWin script (Plasma 6), Hyprland, Sway, Quickshell, GNOME |
 | `systemd/` | `dictad.service` (user service) + oneshot units the DE hotkey calls |
 
@@ -136,7 +137,7 @@ what was saved, or why the value was rejected.
 ```bash
 dictactl panel                    # show/hide
 dictactl panel --state show       # same as Ctrl+Alt+V
-dictactl settings                 # settings snapshot + the .bin models found
+dictactl settings --json          # settings snapshot + the .bin models found
 dictactl settings min_level 0.4   # same as the «min +» button
 dictactl settings model ggml-large-v3-turbo-q5_0   # a bare name is looked up in the model folder
 ```
@@ -145,6 +146,28 @@ dictactl settings model ggml-large-v3-turbo-q5_0   # a bare name is looked up in
 model: the daemon does it on a separate thread and refuses while a recording or transcription is
 running (the panel then says «модель загружается…»). Setting a value that is already set
 reloads and rewrites nothing.
+
+## Settings window
+
+For the full set of settings there is a separate `dicta-settings` window (eframe/egui) with four
+tabs — Recording, Model, Insertion, System. Sliders send their value on release (not on every
+drag frame), checkboxes and labels send on click; the daemon validates the value, applies it to
+the live config and writes `~/.config/dicta/config.toml`. The answer is shown in the window right
+away — a rejected value appears in red at the bottom, and a model reload is announced with
+«модель загружается…». The overlay panel stays: quick record/stop control is still there.
+
+```bash
+dictactl settings                       # open the settings window
+~/.local/bin/dicta-settings             # or launch it directly
+dictactl settings --json                # print the snapshot to stdout instead of opening the window
+dictactl settings min_level 0.4         # unchanged: change one setting from a terminal
+```
+
+Bind `~/.local/bin/dicta-settings` to a hotkey if you like — in KDE: System Settings → Shortcuts →
+Custom Shortcuts → Edit → New → Global Shortcut → Command/URL. Under KWin/Wayland the toolkit
+cannot force the window on top; right-click its title bar → "Keep Above Others" (KWin remembers
+it), or add a Window Rule for the `dicta-settings` class. The window is not a recording indicator:
+live level and seconds remain in the overlay.
 
 ## Where the pill sits
 
