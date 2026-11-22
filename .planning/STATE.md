@@ -2,18 +2,18 @@
 gsd_state_version: "1.0"
 milestone: v1.1
 milestone_name: «Dicta App»
-current_phase: 5
-current_phase_name: Трей + хоткей-экран
+current_phase: 6
+current_phase_name: Windows CI + каркас
 status: executing
 stopped_at: Roadmap v1.1 создан, файлы ROADMAP.md/STATE.md/REQUIREMENTS.md написаны; коммитов нет (оркестратор коммитит)
-last_updated: "2026-11-22T15:35:47.128Z"
+last_updated: "2026-11-22T17:31:48.844Z"
 last_activity: 2026-11-22
 last_activity_desc: Roadmap v1.1 создан (8 фаз, 29/29 требований замаплено)
-state_head: b81178be7677da1fe13fedede5e7b488a88c06a0
+state_head: eb344e6cb8ef8edde988526a2aba88c0cc2d4c44
 progress:
   total_phases: 8
   completed_phases: 0
-  total_plans: 5
+  total_plans: 6
   completed_plans: 4
 ---
 
@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-11-22)
 
 ## Current Position
 
-Phase: 5 (Трей + хоткей-экран) — READY TO EXECUTE
+Phase: 6 (Windows CI + каркас) — READY TO EXECUTE
 Status: planned
 Total Plans in Phase: 1
 Plans Completed in Phase: 0

@@ -103,7 +103,8 @@ Plans:
   2. Отдельная Windows-ветка создана от запушенного main (22 коммита запушены до ветвления); Linux-фазы не блокируются этим workstream'ом
   3. Windows-сборка приложения показывает ту же оболочку и подключается к движку через развилку фазы (по умолчанию named pipe `\\.\pipe\dicta` с тем же JSON-протоколом); решение моста подтверждено в plan-phase
   4. Пути конфига/моделей на Windows — %APPDATA%/%LOCALAPPDATA% без хардкода юниксовых путей; named pipe защищён DACL текущего пользователя
-**Plans**: TBD
+**Plans**: 1/1 plans executed
+- [x] 06-01-PLAN.md
 **UI hint**: yes
 **⚠ Research flag**: фазовое решение моста (named-pipe vs FRB-embed) + детали CI на виндовом раннере — `/gsd-plan-phase --research-phase`
 
@@ -142,6 +143,6 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8.
 | 3. История диктовок | 0/1 | Planned     | - |
 | 4. Настройки + браузер моделей | 1/1 | In Progress | - |
 | 5. Трей + хоткей-экран | 1/1 | In Progress | - |
-| 6. Windows CI + каркас | 0/TBD | Not started | - |
+| 6. Windows CI + каркас | 1/1 | In Progress | - |
 | 7. Windows диктовка MVP | 0/TBD | Not started | - |
 | 8. Декомиссия dicta-settings | 0/TBD | Not started | - |
