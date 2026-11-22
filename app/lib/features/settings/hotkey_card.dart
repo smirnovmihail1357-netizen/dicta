@@ -3,6 +3,7 @@
 /// never registers a global hotkey (must-NOT 1/3, HK-02).
 library;
 
+import 'dart:async' show TimeoutException;
 import 'dart:io';
 
 import 'package:dicta_app/core/config_path.dart';
@@ -13,20 +14,33 @@ import 'package:dicta_app/l10n/generated/app_localizations.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+/// Injectable fallback path (tests override it instead of mutating
+/// Platform.environment — the resolveConfigPath() precedent).
+final hotkeyConfigPathProvider = Provider<String>((_) => resolveConfigPath());
+
 /// Fetch-on-demand, never polled (settingsSnapshotProvider precedent). The
 /// daemon's own config_path is primary; the pure resolver is only a fallback
 /// for a dead daemon or a snapshot without a path. Reads the same settings
 /// reply the shared snapshot parses — directly, so there is no nested-future
-/// disposal race — and surfaces a failed file read as an AsyncError.
+/// disposal race.
+///
+/// A transport failure (dead daemon) falls back to the config file; a PROTOCOL
+/// error (reply.error) is promoted to AsyncError and never masked as a file
+/// fallback. A failed file read is also an AsyncError (errors-as-data).
 final hotkeyConfigTextProvider = FutureProvider<String>((ref) async {
-  var path = resolveConfigPath();
+  var path = ref.read(hotkeyConfigPathProvider);
   try {
     final reply = await ref.read(engineProvider).fetchSettings();
-    final snapshot = SettingsReply.fromReply(reply).settings;
+    final parsed = SettingsReply.fromReply(reply);
+    if (parsed.error != null) {
+      throw StateError('settings reply error: ${parsed.error}');
+    }
+    final snapshot = parsed.settings;
     if (snapshot.configPath.isNotEmpty) path = snapshot.configPath;
-  } catch (_) {
-    // Dead daemon: fall back to the known config path. A file read failure is
-    // still surfaced as an AsyncError by this provider (errors-as-data).
+  } on IOException {
+    // Dead daemon: fall back to the known config path.
+  } on TimeoutException {
+    // Same: transport unavailability is not a protocol error.
   }
   return File(path).readAsString();
 });

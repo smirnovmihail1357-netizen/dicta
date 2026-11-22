@@ -90,9 +90,15 @@ class DictaStatusNotifier extends Notifier<DictaStatus> {
       if (_disposed) return;
       state = snapshot;
       _backoff = const Duration(milliseconds: 200);
-    } catch (_) {
+    } catch (e) {
       if (_disposed) return;
-      state = const DictaStatus.disconnected();
+      // IN-02: disconnected now carries the cause (error runtimeType only —
+      // never payload), matching windows_engine.dart's type/path-only errors.
+      state = DictaStatus(
+        connected: false,
+        state: DaemonState.idle,
+        error: e.runtimeType.toString(),
+      );
       await Future<void>.delayed(_backoff);
       if (_disposed) return;
       final doubled = _backoff * 2;
