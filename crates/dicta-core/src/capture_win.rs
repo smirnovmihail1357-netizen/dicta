@@ -119,7 +119,7 @@ impl Recorder {
     }
 
     /// Остановить поток и вернуть сэмплы, приведённые к 16 кГц.
-    pub fn stop(mut self) -> Result<Vec<i16>> {
+    pub fn stop(self) -> Result<Vec<i16>> {
         self.stream.pause().context("не удалось остановить cpal-поток")?;
         let raw = std::mem::take(&mut *self.samples.lock().unwrap());
         if self.overflow.load(Ordering::Relaxed) {

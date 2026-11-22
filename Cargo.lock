@@ -984,6 +984,7 @@ dependencies = [
  "toml",
  "whisper-rs",
  "whisper-rs-sys",
+ "windows 0.58.0",
  "zbus",
 ]
 
