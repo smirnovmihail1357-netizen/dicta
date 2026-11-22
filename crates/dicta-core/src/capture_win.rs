@@ -41,7 +41,11 @@ impl Recorder {
             Some(mic) => host
                 .devices()
                 .context("не удалось перечислить устройства WASAPI")?
-                .find(|d| d.name().map(|n| n.contains(mic.as_str())).unwrap_or(false))
+                .find(|d| {
+                    d.description()
+                        .map(|desc| desc.name().contains(mic.as_str()))
+                        .unwrap_or(false)
+                })
                 .ok_or_else(|| anyhow::anyhow!("микрофон '{mic}' не найден (WASAPI)"))?,
             None => host
                 .default_input_device()
@@ -52,7 +56,7 @@ impl Recorder {
         let config = device
             .default_input_config()
             .context("нет конфигурации ввода WASAPI")?;
-        let rate = config.sample_rate().0;
+        let rate = config.sample_rate(); // cpal 0.18: SampleRate = u32 (native)
         let channels = config.channels() as usize;
         let sample_format = config.sample_format();
         let stream_config: cpal::StreamConfig = config.into();
@@ -67,7 +71,7 @@ impl Recorder {
                 let buf = samples.clone();
                 let ovf = overflow.clone();
                 device.build_input_stream(
-                    &stream_config,
+                    stream_config,
                     move |data: &[i16], _| {
                         let mut out = buf.lock().unwrap();
                         if is_overflow(out.len(), max_samples) {
@@ -86,7 +90,7 @@ impl Recorder {
                 let buf = samples.clone();
                 let ovf = overflow.clone();
                 device.build_input_stream(
-                    &stream_config,
+                    stream_config,
                     move |data: &[f32], _| {
                         let mut out = buf.lock().unwrap();
                         if is_overflow(out.len(), max_samples) {
