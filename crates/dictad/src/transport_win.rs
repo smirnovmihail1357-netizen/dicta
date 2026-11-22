@@ -16,7 +16,7 @@ use interprocess::os::windows::security_descriptor::SecurityDescriptor;
 use interprocess::TryClone;
 use widestring::U16CString;
 use windows::core::PWSTR;
-use windows::Win32::Foundation::{GetLastError, HANDLE, HLOCAL, LocalFree};
+use windows::Win32::Foundation::{CloseHandle, GetLastError, HANDLE, HLOCAL, LocalFree};
 use windows::Win32::Security::Authorization::ConvertSidToStringSidW;
 use windows::Win32::Security::{
     GetTokenInformation, TokenUser, TOKEN_QUERY, TOKEN_USER,
@@ -75,8 +75,12 @@ fn current_user_sid_string() -> Result<String> {
             &mut needed,
         )
         .map_err(|e| anyhow::anyhow!("GetTokenInformation(TokenUser): {e}"))?;
+        // Токен больше не нужен: SID уже скопирован в buf (IN-04).
+        let _ = CloseHandle(token);
 
-        let user = &*(buf.as_ptr() as *const TOKEN_USER);
+        // Vec<u8> не гарантирует выравнивание под TOKEN_USER — читаем копию,
+        // а не ссылку (иначе UB на не-x64, IN-04).
+        let user = (buf.as_ptr() as *const TOKEN_USER).read_unaligned();
         let mut sid_wide = PWSTR::null();
         ConvertSidToStringSidW(user.User.Sid, &mut sid_wide)
             .map_err(|e| anyhow::anyhow!("ConvertSidToStringSidW: {e}"))?;
