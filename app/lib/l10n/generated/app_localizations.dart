@@ -298,6 +298,12 @@ abstract class AppLocalizations {
   /// **'удалено'**
   String get histDeleted;
 
+  /// Snackbar action that restores a just-deleted journal entry at its original index
+  ///
+  /// In ru, this message translates to:
+  /// **'вернуть'**
+  String get histUndo;
+
   /// Semantic label of the history journal search field
   ///
   /// In ru, this message translates to:

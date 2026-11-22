@@ -5,6 +5,7 @@ import 'dart:async';
 
 import 'package:dicta_app/core/engine.dart';
 import 'package:dicta_app/features/history/history.dart';
+import 'package:dicta_app/features/history/history_screen.dart';
 import 'package:dicta_app/features/shell/shell.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/semantics.dart';
@@ -30,8 +31,10 @@ Future<void> goToHistory(WidgetTester tester) async {
   await tick(tester);
 }
 
+// Shared base of ElevatedButton / FilledButton / OutlinedButton: the row's
+// priority matrix mixes all three, so the gate helper must not assume one.
 bool rowButtonEnabled(WidgetTester tester, String key) =>
-    tester.widget<ElevatedButton>(find.byKey(Key(key))).onPressed != null;
+    tester.widget<ButtonStyleButton>(find.byKey(Key(key))).onPressed != null;
 
 void main() {
   testWidgets('captured dictation is listed with an HH:mm timestamp',
@@ -191,6 +194,132 @@ void main() {
     expect(find.text('привет'), findsNothing);
     expect(find.text('удалено'), findsOneWidget);
     expect(find.text('журнал пуст'), findsOneWidget);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
+  testWidgets('undo restores a deleted entry at its original index',
+      (tester) async {
+    final fake = FakeDictaEngine(
+      const DictaStatus(connected: true, state: DaemonState.recording),
+      stopReply: const DictaStatus(
+        connected: true,
+        state: DaemonState.idle,
+        text: 'первый',
+      ),
+    );
+    ProviderContainer? container;
+    await tester.pumpWidget(
+      buildFakeApp(fake, onCopy: (_) {}, captureContainer: (c) => container = c),
+    );
+    await tick(tester);
+    await captureTextViaStop(tester);
+    fake.stopReply = const DictaStatus(
+      connected: true,
+      state: DaemonState.idle,
+      text: 'второй',
+    );
+    await captureTextViaStop(tester);
+    await goToHistory(tester);
+
+    // Newest-first: ['второй', 'первый'].
+    expect(
+      container!.read(historyProvider).map((e) => e.text).toList(),
+      <String>['второй', 'первый'],
+    );
+
+    // Delete the older entry (index 1); undo must put it back in that slot.
+    await tester.tap(find.byKey(const Key('histDeleteButton-1')));
+    await tester.pump();
+    // Let the snackbar finish its slide-in so its action is hit-testable.
+    await tester.pump(const Duration(milliseconds: 400));
+    await tester.pump();
+    expect(
+      container!.read(historyProvider).map((e) => e.text).toList(),
+      <String>['второй'],
+    );
+    expect(find.text('удалено'), findsOneWidget);
+    expect(find.text('вернуть'), findsOneWidget);
+
+    await tester.tap(find.text('вернуть'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
+    await tester.pump();
+    expect(
+      container!.read(historyProvider).map((e) => e.text).toList(),
+      <String>['второй', 'первый'],
+    );
+    expect(find.text('первый'), findsOneWidget);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
+  testWidgets('failed inject reports the daemon error in a snackbar',
+      (tester) async {
+    final fake = FakeDictaEngine(
+      const DictaStatus(connected: true, state: DaemonState.recording),
+      stopReply: const DictaStatus(
+        connected: true,
+        state: DaemonState.idle,
+        text: 'привет',
+      ),
+      injectReply: const DictaStatus(
+        connected: true,
+        state: DaemonState.idle,
+        error: 'нет активного окна',
+      ),
+    );
+    await tester.pumpWidget(buildFakeApp(fake, onCopy: (_) {}));
+    await tick(tester);
+    await captureTextViaStop(tester);
+    await goToHistory(tester);
+
+    await tester.tap(find.byKey(const Key('histInjectButton-1')));
+    await tester.pump();
+    await tester.pump();
+    await tester.pump();
+
+    // dashInjectFailed heading + verbatim daemon body (last_text_card canon).
+    expect(find.text('ошибка вставки'), findsOneWidget);
+    expect(find.text('нет активного окна'), findsOneWidget);
+    expect(find.text('текст вставлен'), findsNothing);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
+  testWidgets('row buttons express priority: inject tonal, copy elevated, delete outlined-error',
+      (tester) async {
+    final fake = FakeDictaEngine(
+      const DictaStatus(connected: true, state: DaemonState.recording),
+      stopReply: const DictaStatus(
+        connected: true,
+        state: DaemonState.idle,
+        text: 'привет',
+      ),
+    );
+    await tester.pumpWidget(buildFakeApp(fake, onCopy: (_) {}));
+    await tick(tester);
+    await captureTextViaStop(tester);
+    await goToHistory(tester);
+
+    // The priority action is tonal, copy stays the plain elevated default,
+    // delete is outlined with the error foreground.
+    expect(
+      tester.widget<FilledButton>(find.byKey(const Key('histInjectButton-1'))),
+      isA<FilledButton>(),
+    );
+    expect(
+      tester.widget<ElevatedButton>(find.byKey(const Key('histCopyButton-1'))),
+      isA<ElevatedButton>(),
+    );
+    final delete = tester.widget<OutlinedButton>(
+        find.byKey(const Key('histDeleteButton-1')));
+    final error = Theme.of(tester.element(find.byType(HistoryScreen)))
+        .colorScheme
+        .error;
+    final states = <WidgetState>{};
+    expect(delete.style?.foregroundColor?.resolve(states), error);
+    expect(delete.style?.side?.resolve(states)?.color, error);
 
     await tester.pumpWidget(const SizedBox.shrink());
   });

@@ -147,6 +147,10 @@
   "@histDeleted": {
     "description": "Local snackbar confirmation after deleting a journal entry"
   },
+  "histUndo": "вернуть",
+  "@histUndo": {
+    "description": "Snackbar action that restores a just-deleted journal entry at its original index"
+  },
   "histSearchSemantics": "поиск по журналу",
   "@histSearchSemantics": {
     "description": "Semantic label of the history journal search field"

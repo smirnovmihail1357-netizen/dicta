@@ -16,6 +16,7 @@ class HistoryScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final l10n = AppLocalizations.of(context)!;
+    final colors = Theme.of(context).colorScheme;
     final entries = ref.watch(historyProvider);
     final query = ref.watch(historyQueryProvider);
     final busy = ref.watch(dictaControlProvider).commandInFlight;
@@ -123,7 +124,10 @@ class HistoryScreen extends ConsumerWidget {
                                     ),
                                     const SizedBox(width: 8),
                                     Expanded(
-                                      child: ElevatedButton(
+                                      // Re-insert is the priority action on the
+                                      // row: tonal sits above the plain copy
+                                      // button, matching the dashboard canon.
+                                      child: FilledButton.tonal(
                                         key: Key('histInjectButton-${entry.id}'),
                                         // The single insertion path stays
                                         // behind the commandInFlight guard.
@@ -148,6 +152,39 @@ class HistoryScreen extends ConsumerWidget {
                                                           l10n.dashInjected),
                                                     ),
                                                   );
+                                                } else {
+                                                  // Mirror the last-text card's
+                                                  // inject-failure display: a
+                                                  // verbatim daemon body, or the
+                                                  // localised generic one.
+                                                  ScaffoldMessenger.of(context)
+                                                      .showSnackBar(
+                                                    SnackBar(
+                                                      content: Column(
+                                                        mainAxisSize:
+                                                            MainAxisSize.min,
+                                                        crossAxisAlignment:
+                                                            CrossAxisAlignment
+                                                                .start,
+                                                        children: [
+                                                          Text(
+                                                            l10n.dashInjectFailed,
+                                                            style: TextStyle(
+                                                                color: colors
+                                                                    .error),
+                                                          ),
+                                                          Text(
+                                                            result.genericFailure
+                                                                ? l10n.dashCommandFailedBody
+                                                                : result.lastError!,
+                                                            style: TextStyle(
+                                                                color: colors
+                                                                    .error),
+                                                          ),
+                                                        ],
+                                                      ),
+                                                    ),
+                                                  );
                                                 }
                                               },
                                         child: Text(l10n.dashInjectButton),
@@ -161,7 +198,18 @@ class HistoryScreen extends ConsumerWidget {
                                   // Local removal only: no daemon command.
                                   child: OutlinedButton(
                                     key: Key('histDeleteButton-${entry.id}'),
+                                    // Destructive intent: error foreground on
+                                    // an outlined shell (cancel-button canon).
+                                    style: OutlinedButton.styleFrom(
+                                      foregroundColor: colors.error,
+                                      side: BorderSide(color: colors.error),
+                                    ),
                                     onPressed: () {
+                                      // Capture the position in the full
+                                      // journal (not the filtered view) before
+                                      // removal so undo restores the order.
+                                      final removalIndex = entries.indexWhere(
+                                          (e) => e.id == entry.id);
                                       ref
                                           .read(historyProvider.notifier)
                                           .remove(entry.id);
@@ -169,6 +217,13 @@ class HistoryScreen extends ConsumerWidget {
                                           .showSnackBar(
                                         SnackBar(
                                           content: Text(l10n.histDeleted),
+                                          action: SnackBarAction(
+                                            label: l10n.histUndo,
+                                            onPressed: () => ref
+                                                .read(historyProvider.notifier)
+                                                .restoreAt(
+                                                    removalIndex, entry),
+                                          ),
                                         ),
                                       );
                                     },

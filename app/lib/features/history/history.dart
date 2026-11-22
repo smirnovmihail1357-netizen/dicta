@@ -42,6 +42,16 @@ class HistoryNotifier extends Notifier<List<HistoryEntry>> {
   void remove(int id) {
     state = state.where((entry) => entry.id != id).toList();
   }
+
+  /// Re-insert a just-removed entry at its original position. The index is
+  /// clamped so a concurrent append between removal and undo cannot push the
+  /// restore out of bounds; the journal order is otherwise preserved.
+  void restoreAt(int index, HistoryEntry entry) {
+    final restored = List<HistoryEntry>.from(state);
+    final safeIndex = index.clamp(0, restored.length).toInt();
+    restored.insert(safeIndex, entry);
+    state = restored;
+  }
 }
 
 final historyProvider =

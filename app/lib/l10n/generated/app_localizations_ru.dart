@@ -120,6 +120,9 @@ class AppLocalizationsRu extends AppLocalizations {
   String get histDeleted => 'удалено';
 
   @override
+  String get histUndo => 'вернуть';
+
+  @override
   String get histSearchSemantics => 'поиск по журналу';
 
   @override
