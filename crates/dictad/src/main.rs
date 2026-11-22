@@ -10,8 +10,10 @@
 //!         "panel":bool,"settings":{…}}
 
 use std::io::{BufRead, BufReader, Write};
+#[cfg(unix)]
 use std::os::unix::fs::PermissionsExt;
-use std::os::unix::net::{UnixListener, UnixStream};
+#[cfg(unix)]
+use std::os::unix::net::UnixListener;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
@@ -19,8 +21,18 @@ use std::thread;
 use std::time::{Duration, Instant};
 
 use anyhow::{Context, Result};
+#[cfg(unix)]
 use dicta_core::inject::{self, Combo};
-use dicta_core::{capture::Recorder, Config, Engine};
+#[cfg(windows)]
+use dicta_core::{combo::Combo, inject_win as inject};
+#[cfg(unix)]
+use dicta_core::capture::Recorder;
+#[cfg(windows)]
+use dicta_core::capture_win::Recorder;
+use dicta_core::{Config, Engine};
+
+#[cfg(windows)]
+mod transport_win;
 
 #[derive(serde::Deserialize)]
 struct Req {
@@ -140,24 +152,30 @@ fn main() -> Result<()> {
     let socket = cfg.socket.clone();
     let paste_combo = Combo::parse(&cfg.paste_keys)?;
 
-    if let Some(parent) = socket.parent() {
-        std::fs::create_dir_all(parent).ok();
-    }
-    if socket.exists() {
-        // Убиваем上一个 демон, если он оставил сокет (или просим systemd сделать это).
-        match std::os::unix::net::UnixStream::connect(&socket) {
-            Ok(_) => anyhow::bail!(
-                "на {} уже кто-то слушает — сначала останови старый dictad",
-                socket.display()
-            ),
-            Err(_) => {
-                std::fs::remove_file(&socket).ok();
+    // Именованные пайпы не переживают владельца: stale-сокет — только Unix.
+    #[cfg(unix)]
+    {
+        if let Some(parent) = socket.parent() {
+            std::fs::create_dir_all(parent).ok();
+        }
+        if socket.exists() {
+            // Убиваем上一个 демон, если он оставил сокет (или просим systemd сделать это).
+            match std::os::unix::net::UnixStream::connect(&socket) {
+                Ok(_) => anyhow::bail!(
+                    "на {} уже кто-то слушает — сначала останови старый dictad",
+                    socket.display()
+                ),
+                Err(_) => {
+                    std::fs::remove_file(&socket).ok();
+                }
             }
         }
     }
 
+    #[cfg(unix)]
     let listener = UnixListener::bind(&socket)
         .with_context(|| format!("не могу создать {}", socket.display()))?;
+    #[cfg(unix)]
     let _ = std::fs::set_permissions(&socket, std::fs::Permissions::from_mode(0o600));
     let handler = Arc::new(Mutex::new(Handler {
         cfg: cfg.clone(),
@@ -298,11 +316,21 @@ fn main() -> Result<()> {
         thread::spawn(move || {
             let mut backoff = Duration::from_secs(10);
             loop {
-                let outcome = dicta_core::hotkey::listen(&hotkey_spec, || {
-                    if let Err(err) = do_toggle(&handler, &state, &started_at) {
-                        eprintln!("dictad: {err}");
+                // Клоны Arc делают колбэк 'static + Send (контракт Windows-потока).
+                let on_press = {
+                    let handler = handler.clone();
+                    let state = state.clone();
+                    let started_at = started_at.clone();
+                    move || {
+                        if let Err(err) = do_toggle(&handler, &state, &started_at) {
+                            eprintln!("dictad: {err}");
+                        }
                     }
-                });
+                };
+                #[cfg(unix)]
+                let outcome = dicta_core::hotkey::listen(&hotkey_spec, on_press);
+                #[cfg(windows)]
+                let outcome = dicta_core::hotkey_win::listen(&hotkey_spec, on_press);
                 match outcome {
                     Ok(()) => break,
                     Err(err) => {
@@ -323,10 +351,17 @@ fn main() -> Result<()> {
     }
 
     // По --ui поднимаем оверлей сами: демон + индикатор одной командой.
+    // На Windows оверлей вне вехи — честная ошибка, без спавна (must-NOT 3).
+    #[cfg(unix)]
     if std::env::args().any(|a| a == "--ui") || std::env::var("DICTA_UI").is_ok() {
         thread::spawn(spawn_ui);
     }
+    #[cfg(windows)]
+    if std::env::args().any(|a| a == "--ui") || std::env::var("DICTA_UI").is_ok() {
+        eprintln!("dictad: оверлей доступен только на Linux");
+    }
 
+    #[cfg(unix)]
     for stream in listener.incoming() {
         let Ok(stream) = stream else { continue };
         let handler = handler.clone();
@@ -337,12 +372,36 @@ fn main() -> Result<()> {
         let reloading = reloading.clone();
         let socket2: PathBuf = socket.clone();
         thread::spawn(move || {
+            let stream2 = match stream.try_clone() {
+                Ok(s) => s,
+                Err(err) => {
+                    eprintln!("dictad: {err}");
+                    return;
+                }
+            };
             if let Err(err) = serve_conn(
-                stream, handler, state, level, started_at, panel, reloading, socket2,
+                BufReader::new(stream2),
+                stream,
+                handler,
+                state,
+                level,
+                started_at,
+                panel,
+                reloading,
+                socket2,
             ) {
                 eprintln!("dictad: {err}");
             }
         });
+    }
+
+    #[cfg(windows)]
+    {
+        let pipe_name = transport_win::resolve_pipe_name();
+        eprintln!("dictad: пайп {}", pipe_name);
+        transport_win::serve(
+            &pipe_name, handler, state, level, started_at, panel, reloading,
+        )?;
     }
 
     Ok(())
@@ -808,7 +867,8 @@ fn elapsed_seconds(started_at: &Arc<AtomicU64>, state: &Arc<AtomicUsize>) -> f32
 }
 
 fn serve_conn(
-    stream: UnixStream,
+    mut reader: impl BufRead,
+    mut writer: impl Write,
     handler: Arc<Mutex<Handler>>,
     state: Arc<AtomicUsize>,
     level: Arc<AtomicU32>,
@@ -817,8 +877,6 @@ fn serve_conn(
     reloading: Arc<AtomicBool>,
     socket: PathBuf,
 ) -> Result<()> {
-    let mut reader = BufReader::new(stream.try_clone()?);
-    let mut writer = stream;
     let mut line = String::new();
     while reader.read_line(&mut line)? > 0 {
         let req: Req = serde_json::from_str(line.trim())?;
@@ -910,7 +968,11 @@ fn serve_conn(
                         app.as_deref(),
                     ) {
                         Ok(()) => {
+                            #[cfg(unix)]
                             eprintln!("dictad: inject {keys} в {app:?}: {text:?}");
+                            // Windows: только клавиши/приложение/длина — текст не логируется (must-NOT 5).
+                            #[cfg(windows)]
+                            eprintln!("dictad: inject {keys} в {app:?}: len={} (текст не логируется)", text.len());
                             h.last_error = None;
                             Res {
                                 state: State::Idle.as_str(),
@@ -1178,9 +1240,16 @@ fn run_stop(
         if let Ok(mut h) = handler.lock() {
             h.last_text = Some(text.clone());
         }
+        #[cfg(unix)]
         eprintln!(
             "dictad: \"{text}\" (записано {spoken:?}, распознано за {inferred:?}, вставка {keys} в {:?})",
             app
+        );
+        // Windows: без payload — только приложение/ключи/длина/тайминги (must-NOT 5).
+        #[cfg(windows)]
+        eprintln!(
+            "dictad: распознано за {inferred:?}, вставка {keys} в {app:?}, len={} (текст не логируется)",
+            text.len()
         );
 
         // Шаг 8. Состояние понижаем только Transcribing→Idle: пользователь мог начать
@@ -1224,7 +1293,8 @@ fn do_toggle(
     }
 }
 
-/// Держит оверлей dicta-ui живым, пока работает демон.
+/// Держит оверлей dicta-ui живым, пока работает демон (только Linux).
+#[cfg(unix)]
 fn spawn_ui() {
     let exe = std::env::current_exe().ok().and_then(|path| {
         let sibling = path.parent()?.join("dicta-ui");

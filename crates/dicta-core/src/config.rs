@@ -243,14 +243,28 @@ impl Config {
     }
 }
 
+/// Имя канала по умолчанию (windows_engine.dart:22 kDictaPipe) — env-шов
+/// DICTA_PIPE в слушателе демона может подменить его только для теста.
+#[cfg(windows)]
+pub const DEFAULT_PIPE_NAME: &str = r"\\.\pipe\dicta";
+
 fn default_model_path() -> PathBuf {
-    dirs::data_dir()
-        .unwrap_or_else(|| PathBuf::from("."))
+    // Windows: %LOCALAPPDATA% (dirs::data_dir дал бы Roaming — Pitfall 2).
+    #[cfg(windows)]
+    let base = dirs::data_local_dir();
+    #[cfg(not(windows))]
+    let base = dirs::data_dir();
+    base.unwrap_or_else(|| PathBuf::from("."))
         .join("whisper-cpp")
         .join("ggml-medium-q5_0.bin")
 }
 
 fn default_socket_path() -> PathBuf {
+    // На Windows поле socket хранит полное имя именованного канала; инициатива
+    // слушателя — в transport_win (DICTA_PIPE → дефолт).
+    #[cfg(windows)]
+    return PathBuf::from(DEFAULT_PIPE_NAME);
+
     let runtime = std::env::var_os("XDG_RUNTIME_DIR").map(PathBuf::from);
     match runtime {
         Some(dir) if !dir.as_os_str().is_empty() => dir.join("dicta.sock"),

@@ -1,3 +1,6 @@
+#![cfg(unix)]
+// CLI-клиент на Windows = Flutter-приложение; windows-ветка бина пустая.
+
 use std::path::PathBuf;
 use std::time::Instant;
 
