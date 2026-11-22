@@ -8,6 +8,7 @@ import 'dart:io';
 import 'package:dicta_app/core/config_path.dart';
 import 'package:dicta_app/core/providers.dart';
 import 'package:dicta_app/core/settings.dart';
+import 'package:dicta_app/core/theme_ext.dart';
 import 'package:dicta_app/l10n/generated/app_localizations.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -75,19 +76,27 @@ class HotkeyCard extends ConsumerWidget {
             _deLine(l10n.hkDeSway),
             _deLine(l10n.hkDeGnome),
             const SizedBox(height: 8),
-            Text(l10n.hkInputGroupHint),
+            Text(
+              l10n.hkInputGroupHint,
+              style: AppTextStyles.mutedOf(context),
+            ),
             const SizedBox(height: 8),
+            // Procedural information, not an error: a neutral surface banner
+            // (05-UI-REVIEW Pillar 2), not the errorContainer of a real failure.
             Container(
               width: double.infinity,
-              color: colors.errorContainer,
+              color: colors.surfaceContainerHighest,
               padding: const EdgeInsets.all(8),
               child: Text(
                 l10n.hkRestartWarning,
-                style: TextStyle(color: colors.onErrorContainer),
+                style: TextStyle(color: colors.onSurfaceVariant),
               ),
             ),
             const SizedBox(height: 8),
-            Text(l10n.hkEditHint),
+            Text(
+              l10n.hkEditHint,
+              style: AppTextStyles.mutedOf(context),
+            ),
           ],
         ),
       ),
