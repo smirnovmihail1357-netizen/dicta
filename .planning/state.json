@@ -16,7 +16,7 @@
     {
       "number": "3",
       "name": "История диктовок",
-      "status": "pending"
+      "status": "in_progress"
     },
     {
       "number": "4",
@@ -47,7 +47,7 @@
   "next": {
     "command": "/gsd-progress --next",
     "label": "Advance to the next step",
-    "reason": "Phase 3 of 8 · executing"
+    "reason": "Phase 4 of 8 · executing"
   },
-  "updated_at": "2026-11-22T12:23:09.644Z"
+  "updated_at": "2026-11-22T13:41:31.244Z"
 }

@@ -1,5 +1,5 @@
 ---
-status: draft
+status: bound-to-plan
 phase: 4
 requirements: [CONF-01, CONF-02, MODEL-01, MODEL-02]
 ---
@@ -26,17 +26,18 @@ requirements: [CONF-01, CONF-02, MODEL-01, MODEL-02]
 
 ## Per-Task Verification Map
 
-| Task ID (TBD → bind after plan) | Requirement | Command | Fails when |
+| Task ID (bound to 04-01-PLAN.md) | Requirement | Command | Fails when |
 |---|---|---|---|
-| TBD | Wave 0: SetReply + миграция | `cd app && flutter test && flutter analyze && bash tool/cyrillic_gate.sh` | батарея < 71 + новых; analyze ≠ 0; cyrillic > 0 |
-| TBD | Wave 0: hf-порт | `cd app && flutter test test/hf_urls_test.dart` | паритетные строки не совпали |
-| TBD | Wave 0: швы+фейки | `cd app && flutter test` + `grep implements` == ожидание | implements != 1 на шов |
-| TBD | CONF-01 форма | `cd app && flutter test test/settings_screen_test.dart` | set-спам (>1 на жест); fetchCount растёт после set |
-| TBD | CONF-02 честные состояния | тот же файл | note-отказ не в дереве; confirm отсутствует; reloading не дизейблит |
-| TBD | MODEL-01 браузер | `cd app && flutter test test/models_screen_test.dart test/download_state_test.dart` | URL не из browseUrl; VRAM-порог не блокирует; прогресс из content-length 302-ловушка |
-| TBD | MODEL-02 модели+удаление | `cd app && flutter test test/model_delete_test.dart` | активная удалена; путь вне dest_dir прошёл; delete без confirm |
-| TBD | Security residual | `cd app && ! grep -n '\$error' tool/status_smoke.dart` | найден $error |
-| TBD | Финальный гейт | `cd app && flutter test && flutter analyze && bash tool/cyrillic_gate.sh` + `git diff --quiet <phase-base> HEAD -- crates/ app/pubspec.yaml app/pubspec.lock` | любой не-ноль; контракт продырявлен |
+| Task 1 | Wave 0: SetReply + миграция | `cd app && flutter test && flutter analyze && bash tool/cyrillic_gate.sh` | батарея < 71 + новых; analyze ≠ 0; cyrillic > 0 |
+| Task 2 | Wave 0: hf-порт | `cd app && flutter test test/hf_urls_test.dart test/hf_parse_test.dart` | паритетные строки не совпали |
+| Task 2 | Wave 0: швы+фейки | `cd app && flutter test` + `grep implements` == ожидание | implements != 1 на шов |
+| Task 3 / Task 4 | CONF-01 форма (tracer → 17 ключей) | `cd app && flutter test test/settings_screen_test.dart` | set-спам (>1 на жест); fetchCount растёт после set |
+| Task 4 | CONF-02 честные состояния | тот же файл | note-отказ не в дереве; confirm отсутствует; reloading не дизейблит |
+| Task 6 / Task 7 | MODEL-01 браузер (менеджер + UI) | `cd app && flutter test test/models_browser_test.dart test/download_state_test.dart` | URL не из browseUrl; VRAM-порог не блокирует; прогресс из content-length 302-ловушка |
+| Task 5 | MODEL-02 модели+удаление | `cd app && flutter test test/model_delete_test.dart` | активная удалена; путь вне dest_dir прошёл; delete без confirm |
+| Task 1 | Security residual | `cd app && ! grep -n '\$error' tool/status_smoke.dart` | найден $error |
+| Task 8 | UI-наследие закрытие | `cd app && flutter test` (миграция dashboard_state_test) | stateLabel остался; liveRegion < 2 на новых экранах |
+| Task 9 | Финальный гейт | `cd app && flutter test && flutter analyze && bash tool/cyrillic_gate.sh` + `git diff --quiet <phase-base> HEAD -- crates/ app/pubspec.yaml app/pubspec.lock` | любой не-ноль; контракт продырявлен |
 
 ## Sampling Rate
 
