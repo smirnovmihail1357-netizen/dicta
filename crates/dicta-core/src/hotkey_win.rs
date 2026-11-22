@@ -8,8 +8,8 @@ use std::io::{Error, ErrorKind, Result};
 
 use windows::Win32::Foundation::GetLastError;
 use windows::Win32::UI::Input::KeyboardAndMouse::{
-    RegisterHotKey, HOT_KEY_MODIFIERS, VIRTUAL_KEY, MOD_ALT, MOD_CONTROL, MOD_NOREPEAT, MOD_SHIFT,
-    MOD_WIN, VK_ESCAPE, VK_F1, VK_INSERT, VK_RETURN, VK_SPACE, VK_TAB,
+    RegisterHotKey, UnregisterHotKey, HOT_KEY_MODIFIERS, VIRTUAL_KEY, MOD_ALT, MOD_CONTROL,
+    MOD_NOREPEAT, MOD_SHIFT, MOD_WIN, VK_ESCAPE, VK_F1, VK_INSERT, VK_RETURN, VK_SPACE, VK_TAB,
 };
 use windows::Win32::UI::WindowsAndMessaging::{GetMessageW, MSG, WM_HOTKEY};
 
@@ -82,6 +82,11 @@ pub fn listen(spec: &str, mut on_press: impl FnMut() + Send + 'static) -> Result
         let outcome = unsafe { GetMessageW(&mut msg, None, 0, 0) };
         if outcome.0 == -1 {
             let code = unsafe { GetLastError() };
+            // Регистрация ещё жива — снимаем её, иначе backoff-ретрай в этом же
+            // потоке вечно бьётся в ERROR_HOTKEY_ALREADY_REGISTERED (IN-01).
+            unsafe {
+                let _ = UnregisterHotKey(None, 1);
+            }
             return Err(Error::new(
                 ErrorKind::Other,
                 format!("GetMessageW не удался: {code:?}"),
@@ -93,6 +98,11 @@ pub fn listen(spec: &str, mut on_press: impl FnMut() + Send + 'static) -> Result
         if msg.message == WM_HOTKEY && msg.wParam.0 as u32 == 1 {
             on_press();
         }
+    }
+    // WM_QUIT: тоже снимаем регистрацию — повторный listen в этом потоке
+    // должен начинаться с чистого листа (IN-01).
+    unsafe {
+        let _ = UnregisterHotKey(None, 1);
     }
     Ok(())
 }
