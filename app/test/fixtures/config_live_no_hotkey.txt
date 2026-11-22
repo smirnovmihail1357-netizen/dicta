@@ -1,0 +1,12 @@
+# Live-like flat config: top-level keys, inline comments, NO hotkey line (daemon default "off").
+language = "ru"                  # interface language
+inject_mode = "paste"            # paste | type
+min_level = 0.35                 # voice gate
+auto_stop = false                # silence detection
+auto_stop_level = 0.2
+auto_stop_after_ms = 1500
+auto_stop_grace_ms = 1200
+max_record_ms = 60000
+use_gpu = true
+gpu_device = 0
+model = "/home/user/.local/share/whisper-cpp/ggml-medium.bin"

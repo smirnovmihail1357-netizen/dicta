@@ -1,0 +1,4 @@
+# Verbatim excerpt from config.example.toml:80 (frozen reference).
+# Встроенная глобальная клавиша демона (evdev, читает /dev/input/event*).
+# Требует доступа: группа input или udev-ACL. "off" — полагаться на клавишу DE.
+hotkey = "ctrl+alt+v"

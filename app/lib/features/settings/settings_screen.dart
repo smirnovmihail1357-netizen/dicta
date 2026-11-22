@@ -8,6 +8,7 @@ import 'dart:async';
 import 'package:dicta_app/core/providers.dart';
 import 'package:dicta_app/core/settings.dart';
 import 'package:dicta_app/core/theme_ext.dart';
+import 'package:dicta_app/features/settings/hotkey_card.dart';
 import 'package:dicta_app/l10n/generated/app_localizations.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -593,6 +594,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               controller: _configPathController,
               readOnly: true,
             ),
+            // HK-01 lives inside the existing system group — no fifth rail item.
+            const HotkeyCard(),
           ]),
           const SizedBox(height: 12),
           Semantics(

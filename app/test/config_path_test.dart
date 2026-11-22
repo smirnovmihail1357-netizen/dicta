@@ -1,0 +1,83 @@
+// Parity tests for the read-only config helpers. The format is copied verbatim
+// from the frozen Rust/TOML reference (config.rs:173-178, config.example.toml:80).
+import 'dart:io';
+
+import 'package:dicta_app/core/config_path.dart';
+import 'package:flutter_test/flutter_test.dart';
+
+void main() {
+  final example = File('test/fixtures/config_example_toml.txt').readAsStringSync();
+  final live = File('test/fixtures/config_live_no_hotkey.txt').readAsStringSync();
+
+  group('extractHotkey (flat TOML, no package)', () {
+    test('example fixture yields the verbatim evdev combination', () {
+      expect(extractHotkey(example), 'ctrl+alt+v');
+    });
+
+    test('live-like config without a hotkey line yields null (daemon off)', () {
+      expect(extractHotkey(live), isNull);
+    });
+
+    test('explicit off is returned verbatim', () {
+      expect(extractHotkey('hotkey = "off"'), 'off');
+    });
+
+    test('leading spaces and extra spaces around = still match', () {
+      expect(extractHotkey('   hotkey   =   "alt+v"'), 'alt+v');
+    });
+
+    test('unquoted garbage is not a value', () {
+      expect(extractHotkey('hotkey = off'), isNull);
+    });
+
+    test('line-based: a section header changes nothing', () {
+      expect(extractHotkey('[audio]\nhotkey="x"'), 'x');
+    });
+  });
+
+  group('resolveConfigPath (parity with config.rs:173-178)', () {
+    test('non-empty override wins', () {
+      expect(
+        resolveConfigPath(
+          configOverride: '/tmp/custom.toml',
+          xdgConfigHome: '/xdg',
+          home: '/home/u',
+        ),
+        '/tmp/custom.toml',
+      );
+    });
+
+    test('empty override falls through to XDG_CONFIG_HOME', () {
+      expect(
+        resolveConfigPath(
+          configOverride: '',
+          xdgConfigHome: '/xdg',
+          home: '/home/u',
+        ),
+        '/xdg/dicta/config.toml',
+      );
+    });
+
+    test('no XDG falls back to HOME/.config', () {
+      expect(
+        resolveConfigPath(
+          configOverride: '',
+          xdgConfigHome: '',
+          home: '/home/u',
+        ),
+        '/home/u/.config/dicta/config.toml',
+      );
+    });
+
+    test('no HOME uses the honest last resort', () {
+      expect(
+        resolveConfigPath(
+          configOverride: '',
+          xdgConfigHome: '',
+          home: '',
+        ),
+        'dicta-config.toml',
+      );
+    });
+  });
+}
