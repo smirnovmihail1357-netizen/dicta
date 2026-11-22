@@ -439,4 +439,72 @@ void main() {
 
     await tester.pumpWidget(const SizedBox.shrink());
   });
+
+  testWidgets('all four unit-suffixed sliders commit raw integers on release',
+      (tester) async {
+    final fake = FakeDictaEngine(
+      const DictaStatus(connected: true, state: DaemonState.idle),
+      fetchSettingsReply: settingsFixture,
+    );
+    await tester.pumpWidget(buildFakeApp(fake));
+    await tick(tester);
+    await openSettings(tester);
+
+    final cases = [
+      (
+        key: 'confAutoStopAfterSlider',
+        setting: 'auto_stop_after_ms',
+        value: 2000.0,
+        readout: '2000',
+      ),
+      (
+        key: 'confAutoStopGraceSlider',
+        setting: 'auto_stop_grace_ms',
+        value: 1300.0,
+        readout: '1300',
+      ),
+      (
+        key: 'confMaxRecordSlider',
+        setting: 'max_record_ms',
+        value: 30000.0,
+        // Displayed as seconds; the daemon still gets raw milliseconds.
+        readout: '30',
+      ),
+      (
+        key: 'confClipboardRestoreSlider',
+        setting: 'clipboard_restore_ms',
+        value: 2600.0,
+        readout: '2600',
+      ),
+    ];
+
+    for (var i = 0; i < cases.length; i++) {
+      final item = cases[i];
+      final finder = find.byKey(Key(item.key));
+      await tester.ensureVisible(finder);
+      await tester.pump();
+      final slider = tester.widget<Slider>(finder);
+      final before = fake.setCalls.length;
+
+      // Drag: the readout follows the pending RAW value (no snap-back).
+      slider.onChanged!(item.value);
+      await tester.pump();
+      expect(fake.setCalls.length, before, reason: '${item.key} no set during drag');
+      final duringDrag =
+          tester.widget<Text>(find.byKey(Key('${item.key}Readout'))).data ?? '';
+      expect(duringDrag, contains(item.readout), reason: '${item.key} readout moved');
+
+      // Release: exactly one set, carrying a bare integer the daemon accepts.
+      slider.onChangeEnd!(item.value);
+      await tester.pump();
+      expect(fake.setCalls.length, before + 1, reason: '${item.key} one set per release');
+      expect(fake.setCalls.last.key, item.setting);
+      expect(fake.setCalls.last.value, matches(r'^\d+$'), reason: '${item.key} raw wire');
+      expect(fake.setCalls.last.value, item.value.toInt().toString());
+      // The value must parse as the daemon's u64/int - no unit suffix.
+      expect(int.tryParse(fake.setCalls.last.value), isNotNull);
+    }
+
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
 }

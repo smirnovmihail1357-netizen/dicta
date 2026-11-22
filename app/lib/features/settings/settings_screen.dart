@@ -50,8 +50,15 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     super.dispose();
   }
 
-  double _sliderValue(String key, num fallback) =>
-      (num.tryParse(_pending[key] ?? '') ?? fallback).toDouble();
+  double _sliderValue(String key, num fallback) {
+    final raw = _pending[key];
+    if (raw == null) return fallback.toDouble();
+    // Pending values are raw wire strings ('1500'). Tolerate a legacy
+    // unit-suffixed value ('1500 мс') too so a readout can never freeze.
+    final match = RegExp(r'^-?\d+(?:\.\d+)?').firstMatch(raw.trim());
+    final parsed = match == null ? null : num.tryParse(match.group(0)!);
+    return (parsed ?? fallback).toDouble();
+  }
 
   bool _flag(String key, bool fallback) {
     final value = _pending[key];
@@ -149,32 +156,39 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     required double max,
     required int divisions,
     required String Function(double) format,
+    // Wire format defaults to the display format. Keys whose readout carries
+    // a unit override it so the daemon receives a bare u64, never '1500 мс'.
+    String Function(double)? wireFormat,
     String? readoutKey,
     bool disabled = false,
-  }) =>
-      Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(label),
-          Slider(
-            key: Key(key),
-            min: min,
-            max: max,
-            divisions: divisions,
-            value: value.clamp(min, max),
-            label: format(value),
-            onChanged: disabled ? null : (v) => _preview(settingKey, format(v)),
-            onChangeEnd: disabled ? null : (v) => _commit(settingKey, format(v)),
+  }) {
+    final wire = wireFormat ?? format;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(label),
+        Slider(
+          key: Key(key),
+          min: min,
+          max: max,
+          divisions: divisions,
+          value: value.clamp(min, max),
+          label: format(value),
+          // One set per release, carrying the RAW wire value. Units live only
+          // in the label/readout (the daemon parses these keys as u64).
+          onChanged: disabled ? null : (v) => _preview(settingKey, wire(v)),
+          onChangeEnd: disabled ? null : (v) => _commit(settingKey, wire(v)),
+        ),
+        Text(
+          format(value),
+          key: Key(readoutKey ?? '${key}Readout'),
+          style: AppTextStyles.mutedOf(context).copyWith(
+            fontFeatures: const [FontFeature.tabularFigures()],
           ),
-          Text(
-            format(value),
-            key: Key(readoutKey ?? '${key}Readout'),
-            style: AppTextStyles.mutedOf(context).copyWith(
-              fontFeatures: const [FontFeature.tabularFigures()],
-            ),
-          ),
-        ],
-      );
+        ),
+      ],
+    );
+  }
 
   Widget _switch({
     required String label,
@@ -307,6 +321,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               max: 60000,
               divisions: 598,
               format: (v) => '${v.toInt()} ${l10n.confMilliseconds}',
+              wireFormat: (v) => v.toInt().toString(),
             ),
             _slider(
               label: l10n.confAutoStopGraceLabel,
@@ -317,6 +332,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               max: 20000,
               divisions: 200,
               format: (v) => '${v.toInt()} ${l10n.confMilliseconds}',
+              wireFormat: (v) => v.toInt().toString(),
             ),
             _slider(
               label: l10n.confMaxRecordLabel,
@@ -327,6 +343,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               max: 600000,
               divisions: 599,
               format: (v) => '${(v / 1000).toStringAsFixed(0)} ${l10n.confSeconds}',
+              wireFormat: (v) => v.toInt().toString(),
             ),
           ]),
           _group(l10n.confGroupInsert, [
@@ -365,6 +382,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               max: 60000,
               divisions: 598,
               format: (v) => '${v.toInt()} ${l10n.confMilliseconds}',
+              wireFormat: (v) => v.toInt().toString(),
             ),
             _slider(
               label: l10n.confPasteDelayLabel,
