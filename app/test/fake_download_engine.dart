@@ -53,19 +53,31 @@ class FakeDownloadEngine implements DownloadEngine {
     }
 
     final total = expectedBytes ?? totalBytes;
-    // A 206 reply appends to .part; a 200 restarts from zero.
-    var received = scenario == FakeDownloadScenario.resume206 ? fromByte : 0;
-    while (received < totalBytes) {
-      final next = received + chunkBytes > totalBytes
-          ? totalBytes
-          : received + chunkBytes;
-      yield DownloadProgress(received: next, total: total);
-      received = next;
-      if (scenario == FakeDownloadScenario.cancelMid) {
-        final gate = downloadGate;
-        if (gate != null) await gate.future;
-        if (_cancelled) throw const DownloadCancelledException();
+    // A 206 reply appends to .part; a 200 restarts from zero. Like the real
+    // engine, the fake writes the bytes so the manager can rename .part.
+    final resume = scenario == FakeDownloadScenario.resume206;
+    var received = resume ? fromByte : 0;
+    final sink = part.openWrite(mode: resume ? FileMode.append : FileMode.write);
+    try {
+      while (received < totalBytes) {
+        final next = received + chunkBytes > totalBytes
+            ? totalBytes
+            : received + chunkBytes;
+        sink.add(List<int>.filled(next - received, 0));
+        yield DownloadProgress(received: next, total: total);
+        received = next;
+        if (scenario == FakeDownloadScenario.cancelMid) {
+          final gate = downloadGate;
+          if (gate != null) await gate.future;
+          if (_cancelled) throw const DownloadCancelledException();
+        }
       }
+      await sink.flush();
+      await sink.close();
+    } catch (_) {
+      // Leave whatever was written for resume/cancel inspection.
+      await sink.close();
+      rethrow;
     }
   }
 }
