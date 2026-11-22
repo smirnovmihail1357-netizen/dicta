@@ -26,6 +26,18 @@ class _FakeConnectPlatform extends DartIpcPlatform {
   Future<Socket> connect(String path) => connector(path);
 }
 
+class _CountingSocket implements Socket {
+  int destroyCount = 0;
+
+  @override
+  void destroy() {
+    destroyCount++;
+  }
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
+}
+
 void main() {
   late ServerSocket server;
   late StreamSubscription<Socket> clients;
@@ -115,6 +127,24 @@ void main() {
       final setReply = await engine.set('key', 'value');
       expect(setReply.error, contains('\u0442\u0430\u0439\u043c\u0430\u0443\u0442 2 \u0441'));
       expect(setReply.error, isNot(contains('30')));
+    } finally {
+      DartIpcPlatform.instance = previous;
+    }
+  });
+
+  test('late connect success is destroyed instead of leaking a handle',
+      () async {
+    final completer = Completer<Socket>();
+    final lateSocket = _CountingSocket();
+    final previous = DartIpcPlatform.instance;
+    DartIpcPlatform.instance = _FakeConnectPlatform((_) => completer.future);
+    try {
+      final reply = await WindowsPipeEngine('fake-pipe').start();
+      expect(reply.ok, isFalse);
+      // The wrapper timed out, but dart_ipc's retry can still succeed later.
+      completer.complete(lateSocket);
+      await Future<void>.delayed(const Duration(milliseconds: 10));
+      expect(lateSocket.destroyCount, 1);
     } finally {
       DartIpcPlatform.instance = previous;
     }

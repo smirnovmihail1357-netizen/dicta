@@ -68,7 +68,15 @@ class WindowsPipeEngine implements DictaEngine {
 
   // dart_ipc.connect has no timeout parameter (public API is just `path`):
   // on Windows a connect to a missing pipe retries for ~5 s, so wrap it.
-  Future<Socket> _connect() => connect(pipePath).timeout(_connectTimeout);
+  Future<Socket> _connect() {
+    final connectFuture = connect(pipePath);
+    return connectFuture.timeout(_connectTimeout, onTimeout: () {
+      // dart_ipc's retry loop cannot be cancelled: reap a late success so no
+      // orphaned Win32 handle is left open for the phase 7 pipe server.
+      connectFuture.then((socket) => socket.destroy()).ignore();
+      throw TimeoutException('connect $pipePath', _connectTimeout);
+    });
+  }
 
   Future<String> _call(String line, {required Duration timeout}) async {
     late final Socket socket;
