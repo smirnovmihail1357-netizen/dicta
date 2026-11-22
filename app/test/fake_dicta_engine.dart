@@ -70,6 +70,11 @@ class FakeDictaEngine implements DictaEngine {
   /// Ready for Task 2: inject() appends its exact text argument here.
   final List<String> injectTexts = [];
 
+  /// When set, fetchSettings() stays in flight until this completer resolves.
+  /// Lets a test hold the settings await open while two downloads are started
+  /// (the one-at-a-time race from WR-02).
+  Completer<void>? fetchSettingsGate;
+
   /// Number of fetchSettings() calls (recheck asserts one refetch).
   int fetchCount = 0;
 
@@ -118,6 +123,8 @@ class FakeDictaEngine implements DictaEngine {
   @override
   Future<Map<String, dynamic>> fetchSettings() async {
     fetchCount++;
+    final gate = fetchSettingsGate;
+    if (gate != null) await gate.future;
     return fetchSettingsReply ?? const <String, dynamic>{};
   }
 

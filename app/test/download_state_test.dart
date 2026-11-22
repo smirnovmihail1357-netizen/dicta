@@ -225,4 +225,33 @@ void main() {
 
     expect(daemon.fetchCount, greaterThan(before));
   });
+
+  test('two starts during the settings await never run concurrently', () async {
+    final gate = Completer<void>();
+    final daemon = FakeDictaEngine(
+      const DictaStatus(connected: true, state: DaemonState.idle),
+      fetchSettingsReply: settingsReply,
+    )..fetchSettingsGate = gate;
+    final fake = FakeDownloadEngine(scenario: FakeDownloadScenario.ok200);
+    final container = containerFor(fake, daemon: daemon);
+    addTearDown(container.dispose);
+    final manager = container.read(downloadManagerProvider.notifier);
+
+    final first =
+        manager.start(url: 'https://hf/first.bin', destName: 'first.bin');
+    final second =
+        manager.start(url: 'https://hf/second.bin', destName: 'second.bin');
+    await Future<void>.delayed(const Duration(milliseconds: 10));
+    // Both starts are parked at the settings await, but only one owns the slot.
+    expect(fake.calls, isEmpty);
+    expect(daemon.fetchCount, 1);
+
+    gate.complete();
+    await Future.wait(<Future<void>>[first, second]);
+    final state = await settle(container);
+
+    expect(state, isA<DownloadDone>());
+    expect(fake.calls.length, 1);
+    expect(fake.calls.single.url, 'https://hf/first.bin');
+  });
 }

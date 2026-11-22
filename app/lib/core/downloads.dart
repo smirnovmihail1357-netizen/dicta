@@ -57,6 +57,10 @@ final downloadManagerProvider =
 class DownloadManager extends Notifier<DownloadState> {
   StreamSubscription<DownloadProgress>? _subscription;
 
+  /// Claimed synchronously before the first await so a second tap in the same
+  /// frame cannot slip past the one-at-a-time guard during a settings refetch.
+  bool _starting = false;
+
   @override
   DownloadState build() {
     ref.onDispose(() => _subscription?.cancel());
@@ -68,33 +72,37 @@ class DownloadManager extends Notifier<DownloadState> {
     required String destName,
     int? expectedBytes,
   }) async {
-    // One download at a time: a second start is silently ignored (main.rs:225).
-    if (state is DownloadActive) return;
-
-    final settings = await ref.read(settingsSnapshotProvider.future);
-    final destDirPath = destDir(settings.model);
-    final destPath = '$destDirPath${Platform.pathSeparator}$destName';
-    final dest = File(destPath);
-    if (dest.existsSync()) {
-      // Never overwrite an installed model (main.rs:230-233).
-      state = DownloadDone(file: destName, alreadyExisted: true);
-      return;
-    }
-
-    final partPath = partOf(destPath);
-    final part = File(partPath);
-    final offset = part.existsSync() ? part.lengthSync() : 0;
-    final dir = Directory(destDirPath);
-    if (!dir.existsSync()) dir.createSync(recursive: true);
-
-    state = DownloadActive(
-      file: destName,
-      url: url,
-      expectedBytes: expectedBytes,
-      received: offset,
-    );
-
+    // One download at a time (main.rs:225). Claim the slot BEFORE the settings
+    // await: the old guard left a whole round-trip window where a second tap
+    // could start a concurrent download over the same .part (WR-02).
+    if (_starting || state is DownloadActive) return;
+    _starting = true;
+    File? failedPart;
     try {
+      final settings = await ref.read(settingsSnapshotProvider.future);
+      final destDirPath = destDir(settings.model);
+      final destPath = '$destDirPath${Platform.pathSeparator}$destName';
+      final dest = File(destPath);
+      if (dest.existsSync()) {
+        // Never overwrite an installed model (main.rs:230-233).
+        state = DownloadDone(file: destName, alreadyExisted: true);
+        return;
+      }
+
+      final partPath = partOf(destPath);
+      final part = File(partPath);
+      failedPart = part;
+      final offset = part.existsSync() ? part.lengthSync() : 0;
+      final dir = Directory(destDirPath);
+      if (!dir.existsSync()) dir.createSync(recursive: true);
+
+      state = DownloadActive(
+        file: destName,
+        url: url,
+        expectedBytes: expectedBytes,
+        received: offset,
+      );
+
       _subscription = ref
           .read(downloadEngineProvider)
           .download(Uri.parse(url), partPath, expectedBytes: expectedBytes)
@@ -115,16 +123,20 @@ class DownloadManager extends Notifier<DownloadState> {
             cancelOnError: true,
           );
     } catch (error) {
-      _handleError(error, part);
+      _handleError(error, failedPart);
+    } finally {
+      // The slot is now held by the DownloadActive state (or released on an
+      // early return / error), so the boolean is only needed for the gap.
+      _starting = false;
     }
   }
 
-  void _handleError(Object error, File part) {
+  void _handleError(Object error, File? part) {
     _subscription?.cancel();
     _subscription = null;
     if (error is DownloadCancelledException) {
       // A deliberate cancel erases .part so a fresh start begins at zero.
-      if (part.existsSync()) part.deleteSync();
+      if (part != null && part.existsSync()) part.deleteSync();
       state = const DownloadCancelled();
       return;
     }
