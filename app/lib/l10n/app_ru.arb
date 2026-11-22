@@ -400,5 +400,129 @@
   "modelDeleteBlocked": "модель активна или вне каталога",
   "@modelDeleteBlocked": {
     "description": "Honest message when the delete guard rejects a path"
+  },
+
+  "modelCatalogTitle": "каталог проверенных",
+  "@modelCatalogTitle": {
+    "description": "Section title for the verified model catalog"
+  },
+  "modelNoteTiny": "сверхбыстрая, для теста",
+  "@modelNoteTiny": {
+    "description": "Catalog hint for ggml-tiny (parity with catalog.rs)"
+  },
+  "modelNoteBase": "быстрая, простые фразы",
+  "@modelNoteBase": {
+    "description": "Catalog hint for ggml-base"
+  },
+  "modelNoteSmall": "баланс скорости и качества",
+  "@modelNoteSmall": {
+    "description": "Catalog hint for ggml-small"
+  },
+  "modelNoteMedium": "хорошее качество",
+  "@modelNoteMedium": {
+    "description": "Catalog hint for ggml-medium"
+  },
+  "modelNoteLargeTurbo": "лучшее качество при высокой скорости",
+  "@modelNoteLargeTurbo": {
+    "description": "Catalog hint for ggml-large-v3-turbo"
+  },
+  "modelNoteLarge": "максимум качества, медленнее",
+  "@modelNoteLarge": {
+    "description": "Catalog hint for ggml-large-v3"
+  },
+  "modelVramLabel": "лимит vram, гб",
+  "@modelVramLabel": {
+    "description": "Label of the UI-only VRAM limit slider"
+  },
+  "modelVramOver": "больше лимита vram",
+  "@modelVramOver": {
+    "description": "Marker on catalog files exceeding the VRAM limit"
+  },
+  "modelAlreadyInstalled": "уже есть",
+  "@modelAlreadyInstalled": {
+    "description": "Marker on catalog files already present in settings.models"
+  },
+  "modelSearchHint": "поиск на hugging face",
+  "@modelSearchHint": {
+    "description": "Hint in the HF search field"
+  },
+  "modelSearchSemantics": "поиск моделей на hugging face",
+  "@modelSearchSemantics": {
+    "description": "Merged semantics label of the HF search field"
+  },
+  "modelSearchButton": "найти",
+  "@modelSearchButton": {
+    "description": "Explicit action that performs one HF fetch"
+  },
+  "modelShowMore": "показать ещё",
+  "@modelShowMore": {
+    "description": "Pagination action: next offset, fetched only on click"
+  },
+  "modelSortDownloads": "загрузки",
+  "@modelSortDownloads": {
+    "description": "HF sort option: downloads"
+  },
+  "modelSortLikes": "лайки",
+  "@modelSortLikes": {
+    "description": "HF sort option: likes"
+  },
+  "modelSortModified": "обновлённые",
+  "@modelSortModified": {
+    "description": "HF sort option: lastModified"
+  },
+  "modelAsrFilter": "только распознавание речи",
+  "@modelAsrFilter": {
+    "description": "ASR-only task filter switch"
+  },
+  "modelResultsEmpty": "ничего не нашлось",
+  "@modelResultsEmpty": {
+    "description": "Honest empty state for an empty HF search result"
+  },
+  "modelTreeEmpty": "файлов .bin нет",
+  "@modelTreeEmpty": {
+    "description": "Honest empty state for a repo tree without .bin files"
+  },
+  "modelSubdirBack": "назад",
+  "@modelSubdirBack": {
+    "description": "Navigate to the parent directory of a repo tree"
+  },
+  "modelRepoClosed": "репозиторий закрыт или не найден",
+  "@modelRepoClosed": {
+    "description": "Honest 401/404 message for HF fetch failures"
+  },
+  "modelDirectLinkLabel": "прямая ссылка на .bin",
+  "@modelDirectLinkLabel": {
+    "description": "Label of the direct download link field"
+  },
+  "modelDirectLinkHint": "https://…/ggml-….bin",
+  "@modelDirectLinkHint": {
+    "description": "Hint for the direct download link field"
+  },
+  "modelDownloadButton": "скачать",
+  "@modelDownloadButton": {
+    "description": "Primary download action"
+  },
+  "modelCancelDownload": "отменить загрузку",
+  "@modelCancelDownload": {
+    "description": "Cancels the in-flight download"
+  },
+  "modelDownloadDone": "модель скачана — выбери её в списке",
+  "@modelDownloadDone": {
+    "description": "Snackbar after a successful download (main.rs:400)"
+  },
+  "modelDownloadCancelled": "загрузка прервана",
+  "@modelDownloadCancelled": {
+    "description": "Snackbar after a deliberate cancel (main.rs:374)"
+  },
+  "modelDownloadFailed": "загрузка не удалась",
+  "@modelDownloadFailed": {
+    "description": "Snackbar prefix for an honest download failure"
+  },
+  "modelDownloadingMb": "{mb} МБ",
+  "@modelDownloadingMb": {
+    "description": "Live megabyte counter when the download size is unknown",
+    "placeholders": {
+      "mb": {"type": "String", "example": "12"}
+    }
   }
 }

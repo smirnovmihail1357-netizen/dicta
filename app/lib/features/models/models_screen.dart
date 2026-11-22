@@ -6,6 +6,7 @@ library;
 import 'package:dicta_app/core/hf/hf_catalog.dart';
 import 'package:dicta_app/core/providers.dart';
 import 'package:dicta_app/core/theme_ext.dart';
+import 'package:dicta_app/features/models/hf_browser.dart';
 import 'package:dicta_app/features/models/model_store.dart';
 import 'package:dicta_app/l10n/generated/app_localizations.dart';
 import 'package:flutter/material.dart';
@@ -155,6 +156,7 @@ class ModelsScreen extends ConsumerWidget {
                 ),
               );
             }),
+          const HfBrowser(),
         ],
       ),
     );

@@ -5,6 +5,8 @@
 import 'dart:async';
 
 import 'package:dicta_app/core/engine.dart';
+import 'package:dicta_app/core/hf/download_engine.dart';
+import 'package:dicta_app/core/hf/hf_client.dart';
 import 'package:dicta_app/core/providers.dart';
 import 'package:dicta_app/core/settings.dart';
 import 'package:dicta_app/core/theme_ext.dart';
@@ -138,6 +140,10 @@ Widget buildFakeApp(
   FakeDictaEngine fake, {
   void Function(String text)? onCopy,
   void Function(ProviderContainer container)? captureContainer,
+  // New seams: null means do NOT override (suites that never open the browser
+  // must stay network-free because HF fetches happen only on user action).
+  HfClient? hfClient,
+  DownloadEngine? downloadEngine,
   // Overridable so a suite can unmount the shell subtree without disposing
   // the surrounding ProviderScope (e.g. to exercise post-await mounted guards).
   Widget home = const ShellWidget(),
@@ -148,6 +154,9 @@ Widget buildFakeApp(
     overrides: [
       engineProvider.overrideWithValue(fake),
       if (onCopy != null) clipboardWriterProvider.overrideWithValue(onCopy),
+      if (hfClient != null) hfClientProvider.overrideWithValue(hfClient),
+      if (downloadEngine != null)
+        downloadEngineProvider.overrideWithValue(downloadEngine),
     ],
     child: Builder(
       builder: (context) {

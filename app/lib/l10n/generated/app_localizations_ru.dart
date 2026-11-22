@@ -309,4 +309,96 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get modelDeleteBlocked => 'модель активна или вне каталога';
+
+  @override
+  String get modelCatalogTitle => 'каталог проверенных';
+
+  @override
+  String get modelNoteTiny => 'сверхбыстрая, для теста';
+
+  @override
+  String get modelNoteBase => 'быстрая, простые фразы';
+
+  @override
+  String get modelNoteSmall => 'баланс скорости и качества';
+
+  @override
+  String get modelNoteMedium => 'хорошее качество';
+
+  @override
+  String get modelNoteLargeTurbo => 'лучшее качество при высокой скорости';
+
+  @override
+  String get modelNoteLarge => 'максимум качества, медленнее';
+
+  @override
+  String get modelVramLabel => 'лимит vram, гб';
+
+  @override
+  String get modelVramOver => 'больше лимита vram';
+
+  @override
+  String get modelAlreadyInstalled => 'уже есть';
+
+  @override
+  String get modelSearchHint => 'поиск на hugging face';
+
+  @override
+  String get modelSearchSemantics => 'поиск моделей на hugging face';
+
+  @override
+  String get modelSearchButton => 'найти';
+
+  @override
+  String get modelShowMore => 'показать ещё';
+
+  @override
+  String get modelSortDownloads => 'загрузки';
+
+  @override
+  String get modelSortLikes => 'лайки';
+
+  @override
+  String get modelSortModified => 'обновлённые';
+
+  @override
+  String get modelAsrFilter => 'только распознавание речи';
+
+  @override
+  String get modelResultsEmpty => 'ничего не нашлось';
+
+  @override
+  String get modelTreeEmpty => 'файлов .bin нет';
+
+  @override
+  String get modelSubdirBack => 'назад';
+
+  @override
+  String get modelRepoClosed => 'репозиторий закрыт или не найден';
+
+  @override
+  String get modelDirectLinkLabel => 'прямая ссылка на .bin';
+
+  @override
+  String get modelDirectLinkHint => 'https://…/ggml-….bin';
+
+  @override
+  String get modelDownloadButton => 'скачать';
+
+  @override
+  String get modelCancelDownload => 'отменить загрузку';
+
+  @override
+  String get modelDownloadDone => 'модель скачана — выбери её в списке';
+
+  @override
+  String get modelDownloadCancelled => 'загрузка прервана';
+
+  @override
+  String get modelDownloadFailed => 'загрузка не удалась';
+
+  @override
+  String modelDownloadingMb(String mb) {
+    return '$mb МБ';
+  }
 }

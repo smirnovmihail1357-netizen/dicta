@@ -669,6 +669,186 @@ abstract class AppLocalizations {
   /// In ru, this message translates to:
   /// **'модель активна или вне каталога'**
   String get modelDeleteBlocked;
+
+  /// Section title for the verified model catalog
+  ///
+  /// In ru, this message translates to:
+  /// **'каталог проверенных'**
+  String get modelCatalogTitle;
+
+  /// Catalog hint for ggml-tiny (parity with catalog.rs)
+  ///
+  /// In ru, this message translates to:
+  /// **'сверхбыстрая, для теста'**
+  String get modelNoteTiny;
+
+  /// Catalog hint for ggml-base
+  ///
+  /// In ru, this message translates to:
+  /// **'быстрая, простые фразы'**
+  String get modelNoteBase;
+
+  /// Catalog hint for ggml-small
+  ///
+  /// In ru, this message translates to:
+  /// **'баланс скорости и качества'**
+  String get modelNoteSmall;
+
+  /// Catalog hint for ggml-medium
+  ///
+  /// In ru, this message translates to:
+  /// **'хорошее качество'**
+  String get modelNoteMedium;
+
+  /// Catalog hint for ggml-large-v3-turbo
+  ///
+  /// In ru, this message translates to:
+  /// **'лучшее качество при высокой скорости'**
+  String get modelNoteLargeTurbo;
+
+  /// Catalog hint for ggml-large-v3
+  ///
+  /// In ru, this message translates to:
+  /// **'максимум качества, медленнее'**
+  String get modelNoteLarge;
+
+  /// Label of the UI-only VRAM limit slider
+  ///
+  /// In ru, this message translates to:
+  /// **'лимит vram, гб'**
+  String get modelVramLabel;
+
+  /// Marker on catalog files exceeding the VRAM limit
+  ///
+  /// In ru, this message translates to:
+  /// **'больше лимита vram'**
+  String get modelVramOver;
+
+  /// Marker on catalog files already present in settings.models
+  ///
+  /// In ru, this message translates to:
+  /// **'уже есть'**
+  String get modelAlreadyInstalled;
+
+  /// Hint in the HF search field
+  ///
+  /// In ru, this message translates to:
+  /// **'поиск на hugging face'**
+  String get modelSearchHint;
+
+  /// Merged semantics label of the HF search field
+  ///
+  /// In ru, this message translates to:
+  /// **'поиск моделей на hugging face'**
+  String get modelSearchSemantics;
+
+  /// Explicit action that performs one HF fetch
+  ///
+  /// In ru, this message translates to:
+  /// **'найти'**
+  String get modelSearchButton;
+
+  /// Pagination action: next offset, fetched only on click
+  ///
+  /// In ru, this message translates to:
+  /// **'показать ещё'**
+  String get modelShowMore;
+
+  /// HF sort option: downloads
+  ///
+  /// In ru, this message translates to:
+  /// **'загрузки'**
+  String get modelSortDownloads;
+
+  /// HF sort option: likes
+  ///
+  /// In ru, this message translates to:
+  /// **'лайки'**
+  String get modelSortLikes;
+
+  /// HF sort option: lastModified
+  ///
+  /// In ru, this message translates to:
+  /// **'обновлённые'**
+  String get modelSortModified;
+
+  /// ASR-only task filter switch
+  ///
+  /// In ru, this message translates to:
+  /// **'только распознавание речи'**
+  String get modelAsrFilter;
+
+  /// Honest empty state for an empty HF search result
+  ///
+  /// In ru, this message translates to:
+  /// **'ничего не нашлось'**
+  String get modelResultsEmpty;
+
+  /// Honest empty state for a repo tree without .bin files
+  ///
+  /// In ru, this message translates to:
+  /// **'файлов .bin нет'**
+  String get modelTreeEmpty;
+
+  /// Navigate to the parent directory of a repo tree
+  ///
+  /// In ru, this message translates to:
+  /// **'назад'**
+  String get modelSubdirBack;
+
+  /// Honest 401/404 message for HF fetch failures
+  ///
+  /// In ru, this message translates to:
+  /// **'репозиторий закрыт или не найден'**
+  String get modelRepoClosed;
+
+  /// Label of the direct download link field
+  ///
+  /// In ru, this message translates to:
+  /// **'прямая ссылка на .bin'**
+  String get modelDirectLinkLabel;
+
+  /// Hint for the direct download link field
+  ///
+  /// In ru, this message translates to:
+  /// **'https://…/ggml-….bin'**
+  String get modelDirectLinkHint;
+
+  /// Primary download action
+  ///
+  /// In ru, this message translates to:
+  /// **'скачать'**
+  String get modelDownloadButton;
+
+  /// Cancels the in-flight download
+  ///
+  /// In ru, this message translates to:
+  /// **'отменить загрузку'**
+  String get modelCancelDownload;
+
+  /// Snackbar after a successful download (main.rs:400)
+  ///
+  /// In ru, this message translates to:
+  /// **'модель скачана — выбери её в списке'**
+  String get modelDownloadDone;
+
+  /// Snackbar after a deliberate cancel (main.rs:374)
+  ///
+  /// In ru, this message translates to:
+  /// **'загрузка прервана'**
+  String get modelDownloadCancelled;
+
+  /// Snackbar prefix for an honest download failure
+  ///
+  /// In ru, this message translates to:
+  /// **'загрузка не удалась'**
+  String get modelDownloadFailed;
+
+  /// Live megabyte counter when the download size is unknown
+  ///
+  /// In ru, this message translates to:
+  /// **'{mb} МБ'**
+  String modelDownloadingMb(String mb);
 }
 
 class _AppLocalizationsDelegate

@@ -144,7 +144,9 @@ class DownloadManager extends Notifier<DownloadState> {
       return;
     }
     try {
-      await part.rename(dest.path);
+      // A rename is an atomic metadata operation - sync keeps the completion
+      // observable in the widget test's fake-async zone as well.
+      part.renameSync(dest.path);
     } catch (error) {
       state = DownloadFailed(message: 'download failed: ${error.runtimeType}');
       return;

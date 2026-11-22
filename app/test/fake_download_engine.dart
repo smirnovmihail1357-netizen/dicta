@@ -57,13 +57,15 @@ class FakeDownloadEngine implements DownloadEngine {
     // engine, the fake writes the bytes so the manager can rename .part.
     final resume = scenario == FakeDownloadScenario.resume206;
     var received = resume ? fromByte : 0;
-    final sink = part.openWrite(mode: resume ? FileMode.append : FileMode.write);
+    // Sync writes keep the whole fake stream on the microtask queue, so widget
+    // tests (fake-async zone) can observe completion with pump() alone.
+    final file = part.openSync(mode: resume ? FileMode.append : FileMode.write);
     try {
       while (received < totalBytes) {
         final next = received + chunkBytes > totalBytes
             ? totalBytes
             : received + chunkBytes;
-        sink.add(List<int>.filled(next - received, 0));
+        file.writeFromSync(List<int>.filled(next - received, 0));
         yield DownloadProgress(received: next, total: total);
         received = next;
         if (scenario == FakeDownloadScenario.cancelMid) {
@@ -72,12 +74,10 @@ class FakeDownloadEngine implements DownloadEngine {
           if (_cancelled) throw const DownloadCancelledException();
         }
       }
-      await sink.flush();
-      await sink.close();
-    } catch (_) {
+      file.flushSync();
+    } finally {
       // Leave whatever was written for resume/cancel inspection.
-      await sink.close();
-      rethrow;
+      file.closeSync();
     }
   }
 }
