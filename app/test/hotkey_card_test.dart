@@ -5,6 +5,7 @@ import 'dart:io';
 import 'package:dicta_app/core/engine.dart';
 import 'package:dicta_app/features/settings/hotkey_card.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart' show RenderSemanticsAnnotations;
 import 'package:flutter_test/flutter_test.dart';
 
 import 'fake_dicta_engine.dart';
@@ -80,6 +81,19 @@ void main() {
 
     expect(find.text('не удалось прочитать конфиг демона'), findsOneWidget);
     expect(find.text('повторить'), findsOneWidget);
+  });
+
+  testWidgets('config read error is announced to AT (IN-03)', (tester) async {
+    await pumpCard(tester, '${dir.path}/missing/config.toml');
+
+    final errorRegion = find.byKey(const Key('hkConfigError'));
+    expect(errorRegion, findsOneWidget);
+    expect(
+      tester.renderObject<RenderSemanticsAnnotations>(errorRegion)
+          .properties
+          .liveRegion,
+      isTrue,
+    );
   });
 
   testWidgets('card has no editable hotkey field', (tester) async {

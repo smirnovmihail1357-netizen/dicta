@@ -139,9 +139,15 @@ class _ConfigError extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          l10n.hkUnavailable,
-          style: TextStyle(color: Theme.of(context).colorScheme.error),
+        // Fetch/read errors are events AT must hear (canonical error-card
+        // pattern from hf_browser.dart and the settings status region).
+        Semantics(
+          key: const Key('hkConfigError'),
+          liveRegion: true,
+          child: Text(
+            l10n.hkUnavailable,
+            style: TextStyle(color: Theme.of(context).colorScheme.error),
+          ),
         ),
         OutlinedButton(
           onPressed: onRetry,
