@@ -58,7 +58,7 @@ class DaemonEngine implements DictaEngine {
     } on SocketException catch (error) {
       // Error type and socket path only - never log reply payloads (no text).
       throw SocketException(
-        '$_daemonNotResponding $socketPath $_startHint: $error',
+        '$_daemonNotResponding $socketPath $_startHint: ${error.runtimeType}',
       );
     }
     try {

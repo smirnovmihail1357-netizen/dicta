@@ -885,6 +885,150 @@ abstract class AppLocalizations {
   /// In ru, this message translates to:
   /// **'{mb} МБ'**
   String modelDownloadingMb(String mb);
+
+  /// Tray menu item that toggles window visibility
+  ///
+  /// In ru, this message translates to:
+  /// **'показать/скрыть окно'**
+  String get trayShowHide;
+
+  /// Tray menu item that starts recording through DictaControlNotifier
+  ///
+  /// In ru, this message translates to:
+  /// **'начать запись'**
+  String get trayStart;
+
+  /// Tray menu item that stops recording
+  ///
+  /// In ru, this message translates to:
+  /// **'остановить'**
+  String get trayStop;
+
+  /// Tray menu item that cancels recording
+  ///
+  /// In ru, this message translates to:
+  /// **'отмена'**
+  String get trayCancel;
+
+  /// Tray menu item that shows the window and opens the settings tab
+  ///
+  /// In ru, this message translates to:
+  /// **'настройки'**
+  String get traySettings;
+
+  /// Tray menu item that honestly exits the app (the only destroy call-site)
+  ///
+  /// In ru, this message translates to:
+  /// **'выход'**
+  String get trayExit;
+
+  /// Title of the read-only hotkey card in the settings tab
+  ///
+  /// In ru, this message translates to:
+  /// **'глобальный хоткей'**
+  String get hkTitle;
+
+  /// Label of the current evdev hotkey combination value
+  ///
+  /// In ru, this message translates to:
+  /// **'текущая комбинация'**
+  String get hkCurrentLabel;
+
+  /// Honest value when the live daemon config has no hotkey line (default off)
+  ///
+  /// In ru, this message translates to:
+  /// **'не задан (off)'**
+  String get hkNotSet;
+
+  /// Card error state when config.toml cannot be read
+  ///
+  /// In ru, this message translates to:
+  /// **'не удалось прочитать конфиг демона'**
+  String get hkUnavailable;
+
+  /// Warning that editing config.toml requires a daemon restart
+  ///
+  /// In ru, this message translates to:
+  /// **'изменение применится после рестарта демона'**
+  String get hkRestartWarning;
+
+  /// Hint that hotkey editing happens outside the app
+  ///
+  /// In ru, this message translates to:
+  /// **'правка — только в config.toml, вне приложения'**
+  String get hkEditHint;
+
+  /// Hint about the permissions required by the daemon evdev listener
+  ///
+  /// In ru, this message translates to:
+  /// **'evdev-путь требует группы input или udev ACL'**
+  String get hkInputGroupHint;
+
+  /// Static DE reference: KWin adapter install command (text only, never executed)
+  ///
+  /// In ru, this message translates to:
+  /// **'KWin: Alt+V — ./systemd/install.sh && ./adapters/kwin/install.sh'**
+  String get hkDeKwin;
+
+  /// Static DE reference: Hyprland include-based hotkey wiring
+  ///
+  /// In ru, this message translates to:
+  /// **'Hyprland: include конфигурации адаптера'**
+  String get hkDeHyprland;
+
+  /// Static DE reference: Sway include-based hotkey wiring
+  ///
+  /// In ru, this message translates to:
+  /// **'Sway: include конфигурации адаптера'**
+  String get hkDeSway;
+
+  /// Static DE reference: GNOME apply.sh accelerator (text only, never executed)
+  ///
+  /// In ru, this message translates to:
+  /// **'GNOME: apply.sh \'<Ctrl><Alt>v\''**
+  String get hkDeGnome;
+
+  /// Noun title of the model search section
+  ///
+  /// In ru, this message translates to:
+  /// **'поиск моделей'**
+  String get modelSearchTitle;
+
+  /// Localized prefix for a model deletion failure snackbar
+  ///
+  /// In ru, this message translates to:
+  /// **'не удалось удалить модель'**
+  String get errDeleteFailed;
+
+  /// Localized prefix for an own HTTP error with a status code
+  ///
+  /// In ru, this message translates to:
+  /// **'ошибка {code}'**
+  String errHttp(String code);
+
+  /// Button that expands a long history entry to full text
+  ///
+  /// In ru, this message translates to:
+  /// **'показать полностью'**
+  String get histExpand;
+
+  /// Button that collapses an expanded history entry back to three lines
+  ///
+  /// In ru, this message translates to:
+  /// **'свернуть'**
+  String get histCollapse;
+
+  /// Model size in gigabytes
+  ///
+  /// In ru, this message translates to:
+  /// **'{value} ГБ'**
+  String modelSizeGb(String value);
+
+  /// Model size in megabytes
+  ///
+  /// In ru, this message translates to:
+  /// **'{value} МБ'**
+  String modelSizeMb(String value);
 }
 
 class _AppLocalizationsDelegate

@@ -7,6 +7,8 @@ import 'engine.dart';
 import 'hf/download_engine.dart';
 import 'hf/hf_client.dart';
 import 'settings.dart';
+import 'tray.dart';
+import 'window_shell.dart';
 
 /// DaemonEngine holds no disposable resource: every command opens and closes
 /// its own socket, and the retired statusStream broadcast controller was its
@@ -23,6 +25,12 @@ final hfClientProvider = Provider<HfClient>((_) => HttpHfClient());
 /// Download transport seam - overridden by FakeDownloadEngine in tests.
 final downloadEngineProvider =
     Provider<DownloadEngine>((_) => HttpDownloadEngine());
+
+/// Tray plugin seam - overridden by FakeTrayService in tests.
+final trayServiceProvider = Provider<TrayService>((_) => TrayManagerService());
+
+/// Window plugin seam - overridden by FakeWindowShell in tests.
+final windowShellProvider = Provider<WindowShell>((_) => WindowManagerShell());
 
 /// VRAM limit is UI-only state (2..32 GB, default 24). There is no daemon key:
 /// this value is NEVER sent through engine.set (CONTEXT:53).

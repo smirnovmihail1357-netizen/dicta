@@ -417,4 +417,83 @@ class AppLocalizationsRu extends AppLocalizations {
   String modelDownloadingMb(String mb) {
     return '$mb МБ';
   }
+
+  @override
+  String get trayShowHide => 'показать/скрыть окно';
+
+  @override
+  String get trayStart => 'начать запись';
+
+  @override
+  String get trayStop => 'остановить';
+
+  @override
+  String get trayCancel => 'отмена';
+
+  @override
+  String get traySettings => 'настройки';
+
+  @override
+  String get trayExit => 'выход';
+
+  @override
+  String get hkTitle => 'глобальный хоткей';
+
+  @override
+  String get hkCurrentLabel => 'текущая комбинация';
+
+  @override
+  String get hkNotSet => 'не задан (off)';
+
+  @override
+  String get hkUnavailable => 'не удалось прочитать конфиг демона';
+
+  @override
+  String get hkRestartWarning => 'изменение применится после рестарта демона';
+
+  @override
+  String get hkEditHint => 'правка — только в config.toml, вне приложения';
+
+  @override
+  String get hkInputGroupHint => 'evdev-путь требует группы input или udev ACL';
+
+  @override
+  String get hkDeKwin =>
+      'KWin: Alt+V — ./systemd/install.sh && ./adapters/kwin/install.sh';
+
+  @override
+  String get hkDeHyprland => 'Hyprland: include конфигурации адаптера';
+
+  @override
+  String get hkDeSway => 'Sway: include конфигурации адаптера';
+
+  @override
+  String get hkDeGnome => 'GNOME: apply.sh \'<Ctrl><Alt>v\'';
+
+  @override
+  String get modelSearchTitle => 'поиск моделей';
+
+  @override
+  String get errDeleteFailed => 'не удалось удалить модель';
+
+  @override
+  String errHttp(String code) {
+    return 'ошибка $code';
+  }
+
+  @override
+  String get histExpand => 'показать полностью';
+
+  @override
+  String get histCollapse => 'свернуть';
+
+  @override
+  String modelSizeGb(String value) {
+    return '$value ГБ';
+  }
+
+  @override
+  String modelSizeMb(String value) {
+    return '$value МБ';
+  }
 }

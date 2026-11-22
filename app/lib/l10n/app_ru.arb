@@ -545,5 +545,110 @@
     "placeholders": {
       "mb": {"type": "String", "example": "12"}
     }
+  },
+  "trayShowHide": "показать/скрыть окно",
+  "@trayShowHide": {
+    "description": "Tray menu item that toggles window visibility"
+  },
+  "trayStart": "начать запись",
+  "@trayStart": {
+    "description": "Tray menu item that starts recording through DictaControlNotifier"
+  },
+  "trayStop": "остановить",
+  "@trayStop": {
+    "description": "Tray menu item that stops recording"
+  },
+  "trayCancel": "отмена",
+  "@trayCancel": {
+    "description": "Tray menu item that cancels recording"
+  },
+  "traySettings": "настройки",
+  "@traySettings": {
+    "description": "Tray menu item that shows the window and opens the settings tab"
+  },
+  "trayExit": "выход",
+  "@trayExit": {
+    "description": "Tray menu item that honestly exits the app (the only destroy call-site)"
+  },
+  "hkTitle": "глобальный хоткей",
+  "@hkTitle": {
+    "description": "Title of the read-only hotkey card in the settings tab"
+  },
+  "hkCurrentLabel": "текущая комбинация",
+  "@hkCurrentLabel": {
+    "description": "Label of the current evdev hotkey combination value"
+  },
+  "hkNotSet": "не задан (off)",
+  "@hkNotSet": {
+    "description": "Honest value when the live daemon config has no hotkey line (default off)"
+  },
+  "hkUnavailable": "не удалось прочитать конфиг демона",
+  "@hkUnavailable": {
+    "description": "Card error state when config.toml cannot be read"
+  },
+  "hkRestartWarning": "изменение применится после рестарта демона",
+  "@hkRestartWarning": {
+    "description": "Warning that editing config.toml requires a daemon restart"
+  },
+  "hkEditHint": "правка — только в config.toml, вне приложения",
+  "@hkEditHint": {
+    "description": "Hint that hotkey editing happens outside the app"
+  },
+  "hkInputGroupHint": "evdev-путь требует группы input или udev ACL",
+  "@hkInputGroupHint": {
+    "description": "Hint about the permissions required by the daemon evdev listener"
+  },
+  "hkDeKwin": "KWin: Alt+V — ./systemd/install.sh && ./adapters/kwin/install.sh",
+  "@hkDeKwin": {
+    "description": "Static DE reference: KWin adapter install command (text only, never executed)"
+  },
+  "hkDeHyprland": "Hyprland: include конфигурации адаптера",
+  "@hkDeHyprland": {
+    "description": "Static DE reference: Hyprland include-based hotkey wiring"
+  },
+  "hkDeSway": "Sway: include конфигурации адаптера",
+  "@hkDeSway": {
+    "description": "Static DE reference: Sway include-based hotkey wiring"
+  },
+  "hkDeGnome": "GNOME: apply.sh '<Ctrl><Alt>v'",
+  "@hkDeGnome": {
+    "description": "Static DE reference: GNOME apply.sh accelerator (text only, never executed)"
+  },
+  "modelSearchTitle": "поиск моделей",
+  "@modelSearchTitle": {
+    "description": "Noun title of the model search section"
+  },
+  "errDeleteFailed": "не удалось удалить модель",
+  "@errDeleteFailed": {
+    "description": "Localized prefix for a model deletion failure snackbar"
+  },
+  "errHttp": "ошибка {code}",
+  "@errHttp": {
+    "description": "Localized prefix for an own HTTP error with a status code",
+    "placeholders": {
+      "code": {"type": "String", "example": "404"}
+    }
+  },
+  "histExpand": "показать полностью",
+  "@histExpand": {
+    "description": "Button that expands a long history entry to full text"
+  },
+  "histCollapse": "свернуть",
+  "@histCollapse": {
+    "description": "Button that collapses an expanded history entry back to three lines"
+  },
+  "modelSizeGb": "{value} ГБ",
+  "@modelSizeGb": {
+    "description": "Model size in gigabytes",
+    "placeholders": {
+      "value": {"type": "String", "example": "7"}
+    }
+  },
+  "modelSizeMb": "{value} МБ",
+  "@modelSizeMb": {
+    "description": "Model size in megabytes",
+    "placeholders": {
+      "value": {"type": "String", "example": "512"}
+    }
   }
 }
