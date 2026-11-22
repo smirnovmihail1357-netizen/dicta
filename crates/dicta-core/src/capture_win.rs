@@ -10,7 +10,7 @@ use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use anyhow::{Context, Result};
-use cpal::traits::{HostTrait, StreamTrait};
+use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 
 use crate::config::Config;
 
