@@ -4,6 +4,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'daemon_engine.dart';
 import 'engine.dart';
+import 'hf/download_engine.dart';
+import 'hf/hf_client.dart';
 import 'settings.dart';
 
 /// DaemonEngine holds no disposable resource: every command opens and closes
@@ -14,6 +16,25 @@ final engineProvider = Provider<DictaEngine>((ref) =>
 
 final dictaStatusProvider =
     NotifierProvider<DictaStatusNotifier, DictaStatus>(DictaStatusNotifier.new);
+
+/// HF transport seam - overridden by FakeHfClient in widget tests.
+final hfClientProvider = Provider<HfClient>((_) => HttpHfClient());
+
+/// Download transport seam - overridden by FakeDownloadEngine in tests.
+final downloadEngineProvider =
+    Provider<DownloadEngine>((_) => HttpDownloadEngine());
+
+/// VRAM limit is UI-only state (2..32 GB, default 24). There is no daemon key:
+/// this value is NEVER sent through engine.set (CONTEXT:53).
+final vramLimitGbProvider =
+    NotifierProvider<VramLimitNotifier, double>(VramLimitNotifier.new);
+
+class VramLimitNotifier extends Notifier<double> {
+  @override
+  double build() => 24.0;
+
+  void set(double value) => state = value.clamp(2.0, 32.0);
+}
 
 /// Settings are fetched on demand and refreshed explicitly (after set or a
 /// diagnostics recheck) - never polled. The only parser is SettingsReply.fromReply.

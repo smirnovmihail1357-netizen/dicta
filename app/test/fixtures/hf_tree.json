@@ -1,0 +1,10 @@
+[
+  {"type":"directory","path":"sub","size":0},
+  {"type":"file","path":"README.md","size":12},
+  {"type":"file","path":"ggml-tiny.bin","size":32000000},
+  {"type":"file","path":"ggml-large.bin","size":0,"lfs":{"size":1100000000,"sha256":"abc"}},
+  {"type":"file","path":"sub/ggml-nested.bin","size":40000000},
+  {"type":"file","path":"ggml-nolfs.bin"},
+  {"path":"ggml-notyped.bin","size":77},
+  "мусор"
+]
