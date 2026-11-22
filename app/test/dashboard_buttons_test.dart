@@ -3,35 +3,12 @@
 import 'dart:async';
 
 import 'package:dicta_app/core/engine.dart';
-import 'package:dicta_app/core/providers.dart';
 import 'package:dicta_app/features/dashboard/dicta_control.dart';
-import 'package:dicta_app/features/shell/shell.dart';
-import 'package:dicta_app/l10n/generated/app_localizations.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'fake_dicta_engine.dart';
-
-Widget buildButtonsTestApp(
-  FakeDictaEngine fake,
-  void Function(ProviderContainer container) captureContainer,
-) {
-  return ProviderScope(
-    overrides: [engineProvider.overrideWithValue(fake)],
-    child: Builder(
-      builder: (context) {
-        captureContainer(ProviderScope.containerOf(context));
-        return MaterialApp(
-          localizationsDelegates: AppLocalizations.localizationsDelegates,
-          supportedLocales: AppLocalizations.supportedLocales,
-          locale: const Locale('ru'),
-          home: const ShellWidget(),
-        );
-      },
-    ),
-  );
-}
 
 Future<void> tick(WidgetTester tester) async {
   await tester.pump(const Duration(milliseconds: 100));
@@ -46,7 +23,7 @@ void main() {
     final fake = FakeDictaEngine(
       const DictaStatus(connected: true, state: DaemonState.idle),
     );
-    await tester.pumpWidget(buildButtonsTestApp(fake, (_) {}));
+    await tester.pumpWidget(buildFakeApp(fake));
     await tick(tester);
 
     expect(enabled(tester, 'dashStartButton'), isTrue);
@@ -86,7 +63,7 @@ void main() {
     final fake = FakeDictaEngine(
       const DictaStatus(connected: true, state: DaemonState.transcribing),
     );
-    await tester.pumpWidget(buildButtonsTestApp(fake, (_) {}));
+    await tester.pumpWidget(buildFakeApp(fake));
     await tick(tester);
     expect(find.text('распознаю…'), findsOneWidget);
 
@@ -108,7 +85,7 @@ void main() {
       const DictaStatus(connected: true, state: DaemonState.recording),
       stopGate: gate,
     );
-    await tester.pumpWidget(buildButtonsTestApp(fake, (_) {}));
+    await tester.pumpWidget(buildFakeApp(fake));
     await tick(tester);
     expect(enabled(tester, 'dashStopButton'), isTrue);
 
@@ -124,6 +101,48 @@ void main() {
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
+  testWidgets('cancel notice is suppressed, other cancel errors are shown '
+      'under a neutral heading (WR-01/WR-04)', (tester) async {
+    ProviderContainer? container;
+    final noticeFake = FakeDictaEngine(
+      const DictaStatus(connected: true, state: DaemonState.recording),
+      // Byte-identical to crates/dictad/src/main.rs:947.
+      cancelReply: const DictaReply(ok: false, error: 'запись отменена'),
+    );
+    await tester.pumpWidget(buildFakeApp(noticeFake,
+        captureContainer: (c) => container = c));
+    await tick(tester);
+
+    await tester.tap(find.byKey(const Key('dashCancelButton')));
+    await tester.pump();
+    await tester.pump();
+
+    expect(container!.read(dictaControlProvider).lastError, isNull);
+    expect(find.text('запись отменена'), findsNothing);
+    expect(find.text('ошибка команды'), findsNothing);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+
+    final failureFake = FakeDictaEngine(
+      const DictaStatus(connected: true, state: DaemonState.recording),
+      cancelReply: const DictaReply(ok: false, error: 'демон не отвечает'),
+    );
+    await tester.pumpWidget(buildFakeApp(failureFake,
+        captureContainer: (c) => container = c));
+    await tick(tester);
+
+    await tester.tap(find.byKey(const Key('dashCancelButton')));
+    await tester.pump();
+    await tester.pump();
+
+    expect(container!.read(dictaControlProvider).lastError, 'демон не отвечает');
+    expect(find.text('демон не отвечает'), findsOneWidget);
+    expect(find.text('ошибка команды'), findsOneWidget);
+    expect(find.text('ошибка вставки'), findsNothing);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
   testWidgets('stop reply text is captured; start clears it', (tester) async {
     final fake = FakeDictaEngine(
       const DictaStatus(connected: true, state: DaemonState.recording),
@@ -134,7 +153,8 @@ void main() {
       ),
     );
     ProviderContainer? container;
-    await tester.pumpWidget(buildButtonsTestApp(fake, (c) => container = c));
+    await tester.pumpWidget(
+        buildFakeApp(fake, captureContainer: (c) => container = c));
     await tick(tester);
 
     await tester.tap(find.byKey(const Key('dashStopButton')));

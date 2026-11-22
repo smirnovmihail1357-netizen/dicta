@@ -83,7 +83,6 @@ abstract interface class DictaEngine {
   /// Full decoded reply map; SettingsReply.fromReply consumes it (Task 4).
   Future<Map<String, dynamic>> fetchSettings();
   Future<DictaReply> set(String key, String value);
-  Stream<DictaStatus> get statusStream;
 }
 
 Map<String, dynamic> decodeReplyMap(String line) {

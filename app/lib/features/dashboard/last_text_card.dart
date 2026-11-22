@@ -80,7 +80,11 @@ class LastTextCard extends ConsumerWidget {
             if (control.lastError != null && control.lastError!.isNotEmpty) ...[
               const SizedBox(height: 8),
               Text(
-                l10n.dashInjectFailed,
+                // The error text is shared by all commands; only inject gets
+                // the inject-specific heading (phase 2 WR-01).
+                control.lastErrorCommand == DictaCommand.inject
+                    ? l10n.dashInjectFailed
+                    : l10n.dashCommandFailed,
                 style: TextStyle(color: colors.error),
               ),
               // Daemon error text is data: shown verbatim, never invented.

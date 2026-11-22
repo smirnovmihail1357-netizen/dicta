@@ -5,6 +5,12 @@
 import 'dart:async';
 
 import 'package:dicta_app/core/engine.dart';
+import 'package:dicta_app/core/providers.dart';
+import 'package:dicta_app/features/dashboard/dicta_control.dart';
+import 'package:dicta_app/features/shell/shell.dart';
+import 'package:dicta_app/l10n/generated/app_localizations.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 class FakeDictaEngine implements DictaEngine {
   FakeDictaEngine(
@@ -15,6 +21,9 @@ class FakeDictaEngine implements DictaEngine {
     this.stopReply,
     this.injectReply,
     this.setReply,
+    this.cancelReply,
+    this.statusError,
+    this.onSet,
   });
 
   /// Mutable snapshot: tests rewrite it between real poller ticks to script
@@ -37,6 +46,18 @@ class FakeDictaEngine implements DictaEngine {
   /// Scripted set reply (Task 5): defaults to a silent success.
   DictaReply? setReply;
 
+  /// Scripted cancel reply (WR-04): lets tests pin the daemon's cancellation
+  /// notice exactly, including the "suppress honest noise" branch.
+  DictaReply? cancelReply;
+
+  /// When set, status() throws instead of returning a snapshot (WR-04 backoff).
+  Object? statusError;
+
+  /// Called after a set() is recorded: lets a test change fetchSettingsReply
+  /// so the calibration marker can be asserted against a CHANGED snapshot
+  /// (CR-01) rather than the pre-drag value.
+  void Function(String key, String value)? onSet;
+
   /// Every set(key, value) call is recorded here in order.
   final List<({String key, String value})> setCalls = [];
 
@@ -52,6 +73,8 @@ class FakeDictaEngine implements DictaEngine {
   @override
   Future<DictaStatus> status() async {
     statusCount++;
+    final error = statusError;
+    if (error != null) throw error;
     return statusValue;
   }
 
@@ -83,7 +106,8 @@ class FakeDictaEngine implements DictaEngine {
   Future<DictaReply> toggle({String? app}) async => const DictaReply(ok: true);
 
   @override
-  Future<DictaReply> cancel() async => const DictaReply(ok: true);
+  Future<DictaReply> cancel() async =>
+      cancelReply ?? const DictaReply(ok: true);
 
   @override
   Future<Map<String, dynamic>> fetchSettings() async {
@@ -94,9 +118,37 @@ class FakeDictaEngine implements DictaEngine {
   @override
   Future<DictaReply> set(String key, String value) async {
     setCalls.add((key: key, value: value));
+    onSet?.call(key, value);
     return setReply ?? const DictaReply(ok: true);
   }
+}
 
-  @override
-  Stream<DictaStatus> get statusStream => Stream<DictaStatus>.empty();
+/// Single parameterized app scaffold for every widget suite. Scenario suites
+/// override only what they need (container capture, clipboard seam, ...);
+/// wiring the ProviderScope/MaterialApp/ru-locale once keeps interface changes
+/// from drifting across six copies (phase 2 IN-06).
+Widget buildFakeApp(
+  FakeDictaEngine fake, {
+  void Function(String text)? onCopy,
+  void Function(ProviderContainer container)? captureContainer,
+}) {
+  return ProviderScope(
+    // The list type is inferred from ProviderScope.overrides; Riverpod 3.5
+    // does not export the `Override` type name for explicit annotation.
+    overrides: [
+      engineProvider.overrideWithValue(fake),
+      if (onCopy != null) clipboardWriterProvider.overrideWithValue(onCopy),
+    ],
+    child: Builder(
+      builder: (context) {
+        captureContainer?.call(ProviderScope.containerOf(context));
+        return MaterialApp(
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          locale: const Locale('ru'),
+          home: const ShellWidget(),
+        );
+      },
+    ),
+  );
 }

@@ -17,7 +17,8 @@ class DiagnosticsCard extends ConsumerWidget {
     final colors = Theme.of(context).colorScheme;
     final weak = TextStyle(color: colors.onSurfaceVariant);
     final status = ref.watch(dictaStatusProvider);
-    final settings = ref.watch(settingsSnapshotProvider).value;
+    final settingsAsync = ref.watch(settingsSnapshotProvider);
+    final settings = settingsAsync.value;
     final connected = status.connected;
 
     Widget row(IconData icon, Color color, String label) => Padding(
@@ -37,7 +38,18 @@ class DiagnosticsCard extends ConsumerWidget {
     final IconData modelIcon;
     final Color modelColor;
     final String modelLabel;
-    if (!connected || settings == null || settings.model.isEmpty) {
+    if (settingsAsync.isLoading) {
+      // Not-yet-fetched data is not "no model": keep the row neutral while
+      // the settings snapshot is in flight (phase 2 IN-01).
+      modelIcon = Icons.hourglass_top;
+      modelColor = colors.onSurfaceVariant;
+      modelLabel = l10n.diagModelFetching;
+    } else if (settingsAsync.hasError) {
+      // A fetch/parse failure is distinct from a daemon with no model loaded.
+      modelIcon = Icons.error;
+      modelColor = colors.error;
+      modelLabel = l10n.diagModelFetchFailed;
+    } else if (!connected || settings == null || settings.model.isEmpty) {
       modelIcon = Icons.error;
       modelColor = colors.error;
       modelLabel = l10n.diagModelUnavailable;

@@ -244,6 +244,12 @@ abstract class AppLocalizations {
   /// **'ошибка вставки'**
   String get dashInjectFailed;
 
+  /// Neutral label above a failed start/stop/cancel error; inject keeps its own heading
+  ///
+  /// In ru, this message translates to:
+  /// **'ошибка команды'**
+  String get dashCommandFailed;
+
   /// Title of the live level histogram and calibration card
   ///
   /// In ru, this message translates to:
@@ -309,6 +315,18 @@ abstract class AppLocalizations {
   /// In ru, this message translates to:
   /// **'модель: данных нет'**
   String get diagModelUnavailable;
+
+  /// Neutral row while the settings snapshot has not landed yet
+  ///
+  /// In ru, this message translates to:
+  /// **'данные модели загружаются…'**
+  String get diagModelFetching;
+
+  /// Distinct row when the settings fetch or parse failed
+  ///
+  /// In ru, this message translates to:
+  /// **'модель: не удалось получить данные'**
+  String get diagModelFetchFailed;
 
   /// Honest caveat for the model readiness proxy
   ///

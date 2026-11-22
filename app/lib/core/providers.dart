@@ -6,11 +6,11 @@ import 'daemon_engine.dart';
 import 'engine.dart';
 import 'settings.dart';
 
-final engineProvider = Provider<DictaEngine>((ref) {
-  final engine = DaemonEngine(resolveSocketPath());
-  ref.onDispose(engine.dispose);
-  return engine;
-});
+/// DaemonEngine holds no disposable resource: every command opens and closes
+/// its own socket, and the retired statusStream broadcast controller was its
+/// only long-lived state (phase 2 IN-04).
+final engineProvider = Provider<DictaEngine>((ref) =>
+    DaemonEngine(resolveSocketPath()));
 
 final dictaStatusProvider =
     NotifierProvider<DictaStatusNotifier, DictaStatus>(DictaStatusNotifier.new);
@@ -19,7 +19,16 @@ final dictaStatusProvider =
 /// diagnostics recheck) - never polled. The only parser is SettingsReply.fromReply.
 final settingsSnapshotProvider = FutureProvider<SettingsReply>((ref) async {
   final reply = await ref.read(engineProvider).fetchSettings();
-  return SettingsReply.fromReply(reply).settings;
+  final parsed = SettingsReply.fromReply(reply);
+  // IN-02: fromReply returns (settings, error). Never silently discard the
+  // error and hand out all-default settings - promote it to the provider's
+  // AsyncError so diagnostics can render a distinct failure row. Note the
+  // throwing contract: fetchSettings() itself may propagate a raw
+  // SocketException/TimeoutException on a transport/timeout failure.
+  if (parsed.error != null) {
+    throw StateError('settings reply error: ${parsed.error}');
+  }
+  return parsed.settings;
 });
 
 /// Owns the 100 ms poll timer. Riverpod 3 has no legacy notifier/mounted API,

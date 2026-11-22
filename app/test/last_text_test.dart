@@ -3,33 +3,10 @@
 import 'dart:async';
 
 import 'package:dicta_app/core/engine.dart';
-import 'package:dicta_app/core/providers.dart';
-import 'package:dicta_app/features/dashboard/dicta_control.dart';
-import 'package:dicta_app/features/shell/shell.dart';
-import 'package:dicta_app/l10n/generated/app_localizations.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'fake_dicta_engine.dart';
-
-Widget buildLastTextApp(
-  FakeDictaEngine fake,
-  void Function(String text) onCopy,
-) {
-  return ProviderScope(
-    overrides: [
-      engineProvider.overrideWithValue(fake),
-      clipboardWriterProvider.overrideWithValue(onCopy),
-    ],
-    child: MaterialApp(
-      localizationsDelegates: AppLocalizations.localizationsDelegates,
-      supportedLocales: AppLocalizations.supportedLocales,
-      locale: const Locale('ru'),
-      home: const ShellWidget(),
-    ),
-  );
-}
 
 Future<void> tick(WidgetTester tester) async {
   await tester.pump(const Duration(milliseconds: 100));
@@ -51,7 +28,7 @@ void main() {
     final fake = FakeDictaEngine(
       const DictaStatus(connected: true, state: DaemonState.idle),
     );
-    await tester.pumpWidget(buildLastTextApp(fake, (_) {}));
+    await tester.pumpWidget(buildFakeApp(fake, onCopy: (_) {}));
     await tick(tester);
 
     expect(find.text('последний текст'), findsOneWidget);
@@ -94,7 +71,7 @@ void main() {
       ),
     );
     final copied = <String>[];
-    await tester.pumpWidget(buildLastTextApp(fake, copied.add));
+    await tester.pumpWidget(buildFakeApp(fake, onCopy: copied.add));
     await tick(tester);
     await captureTextViaStop(tester);
 
@@ -126,7 +103,7 @@ void main() {
         error: 'вставка не удалась: доступ запрещён',
       ),
     );
-    await tester.pumpWidget(buildLastTextApp(fake, (_) {}));
+    await tester.pumpWidget(buildFakeApp(fake, onCopy: (_) {}));
     await tick(tester);
     await captureTextViaStop(tester);
 
@@ -154,7 +131,7 @@ void main() {
         text: '',
       ),
     );
-    await tester.pumpWidget(buildLastTextApp(fake, (_) {}));
+    await tester.pumpWidget(buildFakeApp(fake, onCopy: (_) {}));
     await tick(tester);
     await captureTextViaStop(tester);
 

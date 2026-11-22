@@ -4,27 +4,11 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:dicta_app/core/engine.dart';
-import 'package:dicta_app/core/providers.dart';
 import 'package:dicta_app/features/dashboard/calibration_card.dart';
-import 'package:dicta_app/features/shell/shell.dart';
-import 'package:dicta_app/l10n/generated/app_localizations.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'fake_dicta_engine.dart';
-
-Widget buildCalibrationApp(FakeDictaEngine fake) {
-  return ProviderScope(
-    overrides: [engineProvider.overrideWithValue(fake)],
-    child: MaterialApp(
-      localizationsDelegates: AppLocalizations.localizationsDelegates,
-      supportedLocales: AppLocalizations.supportedLocales,
-      locale: const Locale('ru'),
-      home: const ShellWidget(),
-    ),
-  );
-}
 
 Future<void> tick(WidgetTester tester) async {
   await tester.pump(const Duration(milliseconds: 100));
@@ -56,7 +40,7 @@ void main() {
       const DictaStatus(connected: true, state: DaemonState.idle),
       fetchSettingsReply: settingsFixture,
     );
-    await tester.pumpWidget(buildCalibrationApp(fake));
+    await tester.pumpWidget(buildFakeApp(fake));
     await tick(tester);
     await tester.ensureVisible(find.byKey(const Key('calibrationSurface')));
     await tester.pump();
@@ -85,13 +69,46 @@ void main() {
       const DictaStatus(connected: true, state: DaemonState.idle),
       fetchSettingsReply: settingsFixture,
     );
-    await tester.pumpWidget(buildCalibrationApp(fake));
+    await tester.pumpWidget(buildFakeApp(fake));
     await tick(tester);
 
     final painter = tester
             .widget<CustomPaint>(find.byKey(const Key('calibrationPainter')))
             .painter as LevelHistogramPainter;
     expect(painter.marker, closeTo(0.35, 1e-6));
+
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
+  testWidgets('marker follows the canonical snapshot AFTER a successful set '
+      '(CR-01: no snap-back to the stale threshold)', (tester) async {
+    late final FakeDictaEngine fake;
+    fake = FakeDictaEngine(
+      const DictaStatus(connected: true, state: DaemonState.idle),
+      fetchSettingsReply: settingsFixture,
+      // The daemon accepted 0.42; the refetch must report the NEW value,
+      // otherwise a synchronous .value read would echo the pre-drag 0.35.
+      onSet: (_, value) {
+        fake.fetchSettingsReply = <String, dynamic>{
+          'settings': <String, dynamic>{'min_level': double.parse(value)},
+        };
+      },
+    );
+    await tester.pumpWidget(buildFakeApp(fake));
+    await tick(tester);
+
+    LevelHistogramPainter painter() => tester
+            .widget<CustomPaint>(find.byKey(const Key('calibrationPainter')))
+            .painter as LevelHistogramPainter;
+    expect(painter().marker, closeTo(0.35, 1e-6));
+
+    await dragMarkerTo(tester, 0.42);
+    // set -> invalidate -> await settings.future completes over microtasks.
+    await tester.pump(const Duration(milliseconds: 100));
+    await tester.pump();
+
+    expect(fake.setCalls.single.value, '0.42');
+    expect(painter().marker, closeTo(0.42, 1e-6));
 
     await tester.pumpWidget(const SizedBox.shrink());
   });
@@ -105,7 +122,7 @@ void main() {
       ),
       fetchSettingsReply: settingsFixture,
     );
-    await tester.pumpWidget(buildCalibrationApp(fake));
+    await tester.pumpWidget(buildFakeApp(fake));
     await tick(tester);
     await dragMarkerTo(tester, 0.42);
 
@@ -120,7 +137,7 @@ void main() {
       const DictaStatus(connected: true, state: DaemonState.idle),
       fetchSettingsReply: settingsFixture,
     );
-    await tester.pumpWidget(buildCalibrationApp(fake));
+    await tester.pumpWidget(buildFakeApp(fake));
     await tick(tester);
     expect(
       find.text('начните запись, чтобы увидеть уровень'),
@@ -160,7 +177,7 @@ void main() {
         error: 'min_level: 1.5 вне диапазона 0..1',
       ),
     );
-    await tester.pumpWidget(buildCalibrationApp(fake));
+    await tester.pumpWidget(buildFakeApp(fake));
     await tick(tester);
     expect(
       find.text('включён авто-стоп — для калибровки нажимай отмена'),

@@ -2,35 +2,12 @@
 // 100 ms ticks. Only the engine seam is overridden; no provider state is
 // injected directly.
 import 'package:dicta_app/core/engine.dart';
-import 'package:dicta_app/core/providers.dart';
 import 'package:dicta_app/features/dashboard/level_history.dart';
-import 'package:dicta_app/features/shell/shell.dart';
-import 'package:dicta_app/l10n/generated/app_localizations.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'fake_dicta_engine.dart';
-
-Widget buildStateTestApp(
-  FakeDictaEngine fake,
-  void Function(ProviderContainer container) captureContainer,
-) {
-  return ProviderScope(
-    overrides: [engineProvider.overrideWithValue(fake)],
-    child: Builder(
-      builder: (context) {
-        captureContainer(ProviderScope.containerOf(context));
-        return MaterialApp(
-          localizationsDelegates: AppLocalizations.localizationsDelegates,
-          supportedLocales: AppLocalizations.supportedLocales,
-          locale: const Locale('ru'),
-          home: const ShellWidget(),
-        );
-      },
-    ),
-  );
-}
 
 Future<void> tick(WidgetTester tester) async {
   await tester.pump(const Duration(milliseconds: 100));
@@ -42,7 +19,7 @@ void main() {
     final fake = FakeDictaEngine(
       const DictaStatus(connected: true, state: DaemonState.idle),
     );
-    await tester.pumpWidget(buildStateTestApp(fake, (_) {}));
+    await tester.pumpWidget(buildFakeApp(fake));
     await tick(tester);
     expect(find.text('состояние: ожидание'), findsOneWidget);
 
@@ -77,7 +54,8 @@ void main() {
       const DictaStatus(connected: true, state: DaemonState.idle),
     );
     ProviderContainer? container;
-    await tester.pumpWidget(buildStateTestApp(fake, (c) => container = c));
+    await tester.pumpWidget(
+        buildFakeApp(fake, captureContainer: (c) => container = c));
     await tick(tester);
     expect(container!.read(levelHistoryProvider), isEmpty);
     final captured = container!;
@@ -114,6 +92,39 @@ void main() {
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
+  testWidgets('a throwing status() disconnects, backs off, then recovers '
+      '(WR-04)', (tester) async {
+    final fake = FakeDictaEngine(
+      const DictaStatus(connected: true, state: DaemonState.idle),
+    );
+    await tester.pumpWidget(buildFakeApp(fake));
+    await tick(tester);
+    expect(find.text('демон недоступен'), findsNothing);
+
+    fake.statusError = StateError('socket gone');
+    await tester.pump(const Duration(milliseconds: 100));
+    await tester.pump();
+    expect(find.text('демон недоступен'), findsOneWidget);
+    final attemptsAtFailure = fake.statusCount;
+    expect(attemptsAtFailure, greaterThan(0));
+
+    // The 200 ms backoff holds the immediately following tick: no retry storm.
+    await tester.pump(const Duration(milliseconds: 50));
+    await tester.pump();
+    expect(fake.statusCount, attemptsAtFailure);
+
+    // Let the backoff elapse, clear the fault, and require a successful retry.
+    await tester.pump(const Duration(milliseconds: 200));
+    await tester.pump();
+    fake.statusError = null;
+    await tester.pump(const Duration(milliseconds: 200));
+    await tester.pump();
+    expect(find.text('демон недоступен'), findsNothing);
+    expect(fake.statusCount, greaterThan(attemptsAtFailure));
+
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
   testWidgets('unknown state string renders the honest idle label',
       (tester) async {
     final fake = FakeDictaEngine(
@@ -121,7 +132,7 @@ void main() {
         '{"state":"paused","level":0.0,"seconds":0.0,"text":null,"error":null}',
       ),
     );
-    await tester.pumpWidget(buildStateTestApp(fake, (_) {}));
+    await tester.pumpWidget(buildFakeApp(fake));
     await tick(tester);
     expect(find.text('состояние: ожидание'), findsOneWidget);
 

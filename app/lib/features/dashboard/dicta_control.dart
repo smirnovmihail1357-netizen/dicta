@@ -13,21 +13,28 @@ const _cancelNotice =
 const _commandFailed =
     '\u043a\u043e\u043c\u0430\u043d\u0434\u0430 \u043d\u0435 \u0432\u044b\u043f\u043e\u043b\u043d\u0435\u043d\u0430';
 
+/// Which command produced [DictaControlState.lastError]. The last-text card
+/// uses it to avoid blaming inject for a failed stop/cancel/start (WR-01).
+enum DictaCommand { start, stop, cancel, inject }
+
 class DictaControlState {
   const DictaControlState({
     this.commandInFlight = false,
     this.lastText,
     this.lastError,
+    this.lastErrorCommand,
   });
 
   final bool commandInFlight;
   final String? lastText;
   final String? lastError;
+  final DictaCommand? lastErrorCommand;
 
   DictaControlState copyWith({
     bool? commandInFlight,
     String? lastText,
     String? lastError,
+    DictaCommand? lastErrorCommand,
     bool clearLastText = false,
     bool clearLastError = false,
   }) {
@@ -35,6 +42,10 @@ class DictaControlState {
       commandInFlight: commandInFlight ?? this.commandInFlight,
       lastText: clearLastText ? null : lastText ?? this.lastText,
       lastError: clearLastError ? null : lastError ?? this.lastError,
+      // Command travels with its error: never leave a stale inject label.
+      lastErrorCommand: clearLastError
+          ? null
+          : lastErrorCommand ?? this.lastErrorCommand,
     );
   }
 }
@@ -53,11 +64,13 @@ class DictaControlNotifier extends Notifier<DictaControlState> {
         clearLastText: true,
         clearLastError: reply.error == null,
         lastError: reply.error,
+        lastErrorCommand: DictaCommand.start,
       );
     } catch (_) {
       state = state.copyWith(
         commandInFlight: false,
         lastError: _commandFailed,
+        lastErrorCommand: DictaCommand.start,
       );
     }
   }
@@ -72,11 +85,13 @@ class DictaControlNotifier extends Notifier<DictaControlState> {
         lastText: snapshot.text,
         clearLastError: snapshot.error == null,
         lastError: snapshot.error,
+        lastErrorCommand: DictaCommand.stop,
       );
     } catch (_) {
       state = state.copyWith(
         commandInFlight: false,
         lastError: _commandFailed,
+        lastErrorCommand: DictaCommand.stop,
       );
     }
   }
@@ -91,11 +106,13 @@ class DictaControlNotifier extends Notifier<DictaControlState> {
         commandInFlight: false,
         clearLastError: reply.error == null || notice,
         lastError: notice ? null : reply.error,
+        lastErrorCommand: DictaCommand.cancel,
       );
     } catch (_) {
       state = state.copyWith(
         commandInFlight: false,
         lastError: _commandFailed,
+        lastErrorCommand: DictaCommand.cancel,
       );
     }
   }
@@ -110,11 +127,13 @@ class DictaControlNotifier extends Notifier<DictaControlState> {
         lastText: snapshot.text,
         clearLastError: snapshot.error == null,
         lastError: snapshot.error,
+        lastErrorCommand: DictaCommand.inject,
       );
     } catch (_) {
       state = state.copyWith(
         commandInFlight: false,
         lastError: _commandFailed,
+        lastErrorCommand: DictaCommand.inject,
       );
     }
   }

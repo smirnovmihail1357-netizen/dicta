@@ -3,26 +3,10 @@
 import 'dart:async';
 
 import 'package:dicta_app/core/engine.dart';
-import 'package:dicta_app/core/providers.dart';
-import 'package:dicta_app/features/shell/shell.dart';
-import 'package:dicta_app/l10n/generated/app_localizations.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'fake_dicta_engine.dart';
-
-Widget buildFakeTestApp(FakeDictaEngine fake) {
-  return ProviderScope(
-    overrides: [engineProvider.overrideWithValue(fake)],
-    child: MaterialApp(
-      localizationsDelegates: AppLocalizations.localizationsDelegates,
-      supportedLocales: AppLocalizations.supportedLocales,
-      locale: const Locale('ru'),
-      home: const ShellWidget(),
-    ),
-  );
-}
 
 void main() {
   test('status() returns the initial snapshot and reflects mutation', () async {
@@ -96,7 +80,7 @@ void main() {
     final fake = FakeDictaEngine(
       const DictaStatus(connected: true, state: DaemonState.idle),
     );
-    await tester.pumpWidget(buildFakeTestApp(fake));
+    await tester.pumpWidget(buildFakeApp(fake));
     await tester.pump(const Duration(milliseconds: 300));
 
     expect(find.text('Дашборд'), findsOneWidget);

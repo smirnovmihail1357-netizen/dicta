@@ -111,6 +111,10 @@
   "@dashInjectFailed": {
     "description": "Label above the daemon's verbatim inject error"
   },
+  "dashCommandFailed": "ошибка команды",
+  "@dashCommandFailed": {
+    "description": "Neutral label above a failed start/stop/cancel error; inject keeps its own heading"
+  },
   "calibrationTitle": "порог тишины",
   "@calibrationTitle": {
     "description": "Title of the live level histogram and calibration card"
@@ -154,6 +158,14 @@
   "diagModelUnavailable": "модель: данных нет",
   "@diagModelUnavailable": {
     "description": "Red row when the daemon is unreachable or reports no model"
+  },
+  "diagModelFetching": "данные модели загружаются…",
+  "@diagModelFetching": {
+    "description": "Neutral row while the settings snapshot has not landed yet"
+  },
+  "diagModelFetchFailed": "модель: не удалось получить данные",
+  "@diagModelFetchFailed": {
+    "description": "Distinct row when the settings fetch or parse failed"
   },
   "diagModelNote": "по данным демона — гарантию даёт живая диктовка",
   "@diagModelNote": {

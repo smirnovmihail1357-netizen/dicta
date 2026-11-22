@@ -100,14 +100,23 @@ class _CalibrationCardState extends ConsumerState<CalibrationCard> {
                     final reply = await ref
                         .read(engineProvider)
                         .set('min_level', value.toStringAsFixed(2));
-                    final refreshed = ref.refresh(settingsSnapshotProvider);
+                    // No ref use after await until the element is known alive.
                     if (!mounted) return;
-                    final freshMin = reply.error == null
-                        ? refreshed.value?.minLevel
-                        : null;
+                    if (reply.error != null) {
+                      // Keep the locally dragged marker on failure: no stale
+                      // snapshot read must overwrite the value we just sent.
+                      setState(() => _error = reply.error);
+                      return;
+                    }
+                    ref.invalidate(settingsSnapshotProvider);
+                    // A FutureProvider's snapshot is the PREVIOUS AsyncData
+                    // right after refresh/invalidate in Riverpod 3.5 - await
+                    // the refetch instead of reading .value synchronously.
+                    final fresh = await ref.read(settingsSnapshotProvider.future);
+                    if (!mounted) return;
                     setState(() {
-                      _error = reply.error;
-                      if (freshMin != null) _marker = freshMin;
+                      _error = null;
+                      _marker = fresh.minLevel; // daemon's canonical {:.2} value
                     });
                   },
                   child: SizedBox(

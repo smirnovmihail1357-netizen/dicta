@@ -4,26 +4,10 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:dicta_app/core/engine.dart';
-import 'package:dicta_app/core/providers.dart';
-import 'package:dicta_app/features/shell/shell.dart';
-import 'package:dicta_app/l10n/generated/app_localizations.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'fake_dicta_engine.dart';
-
-Widget buildDiagnosticsApp(FakeDictaEngine fake) {
-  return ProviderScope(
-    overrides: [engineProvider.overrideWithValue(fake)],
-    child: MaterialApp(
-      localizationsDelegates: AppLocalizations.localizationsDelegates,
-      supportedLocales: AppLocalizations.supportedLocales,
-      locale: const Locale('ru'),
-      home: const ShellWidget(),
-    ),
-  );
-}
 
 Future<void> settle(WidgetTester tester) async {
   await tester.pump(const Duration(milliseconds: 100));
@@ -45,7 +29,7 @@ void main() {
       const DictaStatus(connected: true, state: DaemonState.idle),
       fetchSettingsReply: fixture,
     );
-    await tester.pumpWidget(buildDiagnosticsApp(fake));
+    await tester.pumpWidget(buildFakeApp(fake));
     await settle(tester);
 
     expect(find.text('диагностика'), findsOneWidget);
@@ -75,7 +59,7 @@ void main() {
       const DictaStatus(connected: true, state: DaemonState.idle),
       fetchSettingsReply: reloading,
     );
-    await tester.pumpWidget(buildDiagnosticsApp(fake));
+    await tester.pumpWidget(buildFakeApp(fake));
     await settle(tester);
 
     expect(find.text('модель загружается…'), findsOneWidget);
@@ -92,7 +76,7 @@ void main() {
       const DictaStatus.disconnected(),
       fetchSettingsReply: fixture,
     );
-    await tester.pumpWidget(buildDiagnosticsApp(fake));
+    await tester.pumpWidget(buildFakeApp(fake));
     await settle(tester);
 
     expect(find.text('запусти: systemctl --user start dictad'), findsOneWidget);
@@ -110,7 +94,7 @@ void main() {
       const DictaStatus(connected: true, state: DaemonState.idle),
       fetchSettingsReply: fixture,
     );
-    await tester.pumpWidget(buildDiagnosticsApp(fake));
+    await tester.pumpWidget(buildFakeApp(fake));
     await settle(tester);
 
     await tester.ensureVisible(find.byKey(const Key('diagRecheckButton')));

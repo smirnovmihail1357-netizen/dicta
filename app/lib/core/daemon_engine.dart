@@ -29,23 +29,17 @@ const _startHint =
     '\u2014 \u0437\u0430\u043f\u0443\u0441\u0442\u0438 systemctl --user start dictad';
 const _badReply =
     '\u043d\u0435\u043a\u043e\u0440\u0440\u0435\u043a\u0442\u043d\u044b\u0439 \u043e\u0442\u0432\u0435\u0442 \u0434\u0435\u043c\u043e\u043d\u0430';
+// Distinct from _badReply: a timeout is the daemon being silent, not a
+// protocol syntax error. The budget is reported so a wedged paste (up to the
+// 120 s inject budget) is distinguishable from a fast malformed reply.
+String _timeoutHint(Duration timeout) =>
+    '$_daemonNotResponding (\u0442\u0430\u0439\u043c\u0430\u0443\u0442 ${timeout.inSeconds} \u0441)';
 
 class DaemonEngine implements DictaEngine {
   DaemonEngine([String? socketPath])
       : socketPath = socketPath ?? resolveSocketPath();
 
   final String socketPath;
-  final StreamController<DictaStatus> _statusController =
-      StreamController<DictaStatus>.broadcast();
-
-  @override
-  Stream<DictaStatus> get statusStream => _statusController.stream;
-
-  /// Closes the broadcast controller. Called by engineProvider's ref.onDispose
-  /// so every ProviderScope (including each widget-test scope) releases it.
-  void dispose() {
-    _statusController.close();
-  }
 
   static const _connectTimeout = Duration(seconds: 2);
   static const _statusTimeout = Duration(seconds: 2);
@@ -90,6 +84,8 @@ class DaemonEngine implements DictaEngine {
       // Transport failure: _call already wrapped this with the actionable
       // daemon-not-responding / "systemctl --user start dictad" hint.
       return DictaReply(ok: false, error: error.message);
+    } on TimeoutException {
+      return DictaReply(ok: false, error: _timeoutHint(timeout));
     } catch (_) {
       // JSON/format/EOF failures only — never mask a SocketException again.
       return DictaReply(ok: false, error: _badReply);
@@ -114,6 +110,12 @@ class DaemonEngine implements DictaEngine {
         state: DaemonState.idle,
         error: error.message,
       );
+    } on TimeoutException {
+      return DictaStatus(
+        connected: false,
+        state: DaemonState.idle,
+        error: _timeoutHint(timeout),
+      );
     } catch (_) {
       return DictaStatus(
         connected: false,
@@ -124,13 +126,9 @@ class DaemonEngine implements DictaEngine {
   }
 
   @override
-  Future<DictaStatus> status() async {
-    final status = DictaStatus.fromReplyLine(
-      await _call(buildStatusLine(), timeout: _statusTimeout),
-    );
-    _statusController.add(status);
-    return status;
-  }
+  Future<DictaStatus> status() async => DictaStatus.fromReplyLine(
+        await _call(buildStatusLine(), timeout: _statusTimeout),
+      );
 
   @override
   Future<DictaReply> start({String? app}) =>

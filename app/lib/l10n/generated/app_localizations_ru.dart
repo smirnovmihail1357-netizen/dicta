@@ -92,6 +92,9 @@ class AppLocalizationsRu extends AppLocalizations {
   String get dashInjectFailed => 'ошибка вставки';
 
   @override
+  String get dashCommandFailed => 'ошибка команды';
+
+  @override
   String get calibrationTitle => 'порог тишины';
 
   @override
@@ -124,6 +127,12 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get diagModelUnavailable => 'модель: данных нет';
+
+  @override
+  String get diagModelFetching => 'данные модели загружаются…';
+
+  @override
+  String get diagModelFetchFailed => 'модель: не удалось получить данные';
 
   @override
   String get diagModelNote => 'по данным демона — гарантию даёт живая диктовка';
