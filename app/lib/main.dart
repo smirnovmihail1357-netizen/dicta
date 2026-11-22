@@ -1,3 +1,4 @@
+import 'package:dicta_app/core/providers.dart';
 import 'package:dicta_app/core/theme_ext.dart';
 import 'package:dicta_app/features/shell/shell.dart';
 import 'package:dicta_app/l10n/generated/app_localizations.dart';
@@ -5,6 +6,8 @@ import 'package:dynamic_color/dynamic_color.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:window_manager/legacy.dart';
+
+import 'tray_bootstrap.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -20,7 +23,16 @@ Future<void> main() async {
     await windowManager.focus();
   });
 
-  runApp(const ProviderScope(child: DictaApp()));
+  // Plugin objects are constructed ONLY here in prod-main. Tests never call
+  // main(), and buildFakeApp/buildTestApp override the seams with fakes.
+  final container = ProviderContainer();
+  await TrayController(
+    container,
+    container.read(trayServiceProvider),
+    container.read(windowShellProvider),
+  ).start();
+
+  runApp(UncontrolledProviderScope(container: container, child: const DictaApp()));
 }
 
 class DictaApp extends StatelessWidget {

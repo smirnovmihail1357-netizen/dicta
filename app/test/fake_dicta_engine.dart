@@ -10,6 +10,8 @@ import 'package:dicta_app/core/hf/hf_client.dart';
 import 'package:dicta_app/core/providers.dart';
 import 'package:dicta_app/core/settings.dart';
 import 'package:dicta_app/core/theme_ext.dart';
+import 'package:dicta_app/core/tray.dart';
+import 'package:dicta_app/core/window_shell.dart';
 import 'package:dicta_app/features/dashboard/dicta_control.dart';
 import 'package:dicta_app/features/shell/shell.dart';
 import 'package:dicta_app/l10n/generated/app_localizations.dart';
@@ -86,6 +88,12 @@ class FakeDictaEngine implements DictaEngine {
   /// Number of status() calls (recheck asserts one extra poll).
   int statusCount = 0;
 
+  /// Tray-menu routing counters: the menu must reach these through the
+  /// existing DictaControlNotifier, never through a second command path.
+  int startCalls = 0;
+  int stopCalls = 0;
+  int cancelCalls = 0;
+
   @override
   Future<DictaStatus> status() async {
     statusCount++;
@@ -95,10 +103,14 @@ class FakeDictaEngine implements DictaEngine {
   }
 
   @override
-  Future<DictaReply> start({String? app}) async => const DictaReply(ok: true);
+  Future<DictaReply> start({String? app}) async {
+    startCalls++;
+    return const DictaReply(ok: true);
+  }
 
   @override
   Future<DictaStatus> stop({String? app}) async {
+    stopCalls++;
     final gate = stopGate;
     if (gate != null) await gate.future;
     return stopReply ??
@@ -122,8 +134,10 @@ class FakeDictaEngine implements DictaEngine {
   Future<DictaReply> toggle({String? app}) async => const DictaReply(ok: true);
 
   @override
-  Future<DictaReply> cancel() async =>
-      cancelReply ?? const DictaReply(ok: true);
+  Future<DictaReply> cancel() async {
+    cancelCalls++;
+    return cancelReply ?? const DictaReply(ok: true);
+  }
 
   @override
   Future<Map<String, dynamic>> fetchSettings() async {
@@ -167,6 +181,8 @@ Widget buildFakeApp(
   // must stay network-free because HF fetches happen only on user action).
   HfClient? hfClient,
   DownloadEngine? downloadEngine,
+  TrayService? tray,
+  WindowShell? window,
   // Overridable so a suite can unmount the shell subtree without disposing
   // the surrounding ProviderScope (e.g. to exercise post-await mounted guards).
   Widget home = const ShellWidget(),
@@ -180,6 +196,8 @@ Widget buildFakeApp(
       if (hfClient != null) hfClientProvider.overrideWithValue(hfClient),
       if (downloadEngine != null)
         downloadEngineProvider.overrideWithValue(downloadEngine),
+      if (tray != null) trayServiceProvider.overrideWithValue(tray),
+      if (window != null) windowShellProvider.overrideWithValue(window),
     ],
     child: Builder(
       builder: (context) {
