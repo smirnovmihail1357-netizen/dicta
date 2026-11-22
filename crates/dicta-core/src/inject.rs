@@ -11,6 +11,10 @@ use std::time::{Duration, Instant};
 
 use anyhow::{Context, Result};
 
+// Парсер переехал в платформо-независимый модуль; путь `dicta_core::inject::Combo`
+// остаётся рабочим для существующих вызывающих (dictactl, dictad).
+pub use crate::combo::Combo;
+
 const UINPUT_IOCTL_BASE: u64 = b'U' as u64;
 
 const fn iow(nr: u64, size: u64) -> u64 {
@@ -63,47 +67,6 @@ struct InputEvent {
     kind: u16,
     code: u16,
     value: i32,
-}
-
-/// Комбинация клавиш, например Ctrl+V.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct Combo {
-    pub ctrl: bool,
-    pub shift: bool,
-    pub alt: bool,
-    pub key: u16,
-}
-
-impl Combo {
-    pub fn parse(s: &str) -> Result<Self> {
-        let mut combo = Combo {
-            ctrl: false,
-            shift: false,
-            alt: false,
-            key: 0,
-        };
-        for part in s
-            .to_lowercase()
-            .split('+')
-            .map(str::trim)
-            .filter(|p| !p.is_empty())
-        {
-            match part {
-                "ctrl" | "control" => combo.ctrl = true,
-                "shift" => combo.shift = true,
-                "alt" => combo.alt = true,
-                "v" => combo.key = KEY_V,
-                "c" => combo.key = KEY_C,
-                "insert" | "ins" => combo.key = KEY_INSERT,
-                "enter" | "return" => combo.key = KEY_ENTER,
-                other => anyhow::bail!("неизвестная клавиша {other:?} в combos"),
-            }
-        }
-        if combo.key == 0 {
-            anyhow::bail!("в комбинации {s:?} нет основной клавиши");
-        }
-        Ok(combo)
-    }
 }
 
 pub struct Keyboard {

@@ -1,6 +1,7 @@
 pub mod atspi;
 pub mod audio;
 pub mod capture;
+pub mod combo;
 pub mod config;
 pub mod filter;
 pub mod focus;
@@ -10,6 +11,6 @@ pub mod stt;
 
 pub use audio::{load_wav, normalized_rms, resample_to_16k, silence_streak_ms, speech_level};
 pub use capture::Recorder;
+pub use combo::Combo;
 pub use config::Config;
-pub use inject::Combo;
 pub use stt::Engine;
