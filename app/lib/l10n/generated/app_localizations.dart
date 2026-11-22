@@ -243,6 +243,30 @@ abstract class AppLocalizations {
   /// In ru, this message translates to:
   /// **'ошибка вставки'**
   String get dashInjectFailed;
+
+  /// Title of the live level histogram and calibration card
+  ///
+  /// In ru, this message translates to:
+  /// **'порог тишины'**
+  String get calibrationTitle;
+
+  /// Shown while the level history ring buffer is empty
+  ///
+  /// In ru, this message translates to:
+  /// **'начните запись, чтобы увидеть уровень'**
+  String get calibrationEmptyHint;
+
+  /// Explains the one-command-per-gesture calibration contract
+  ///
+  /// In ru, this message translates to:
+  /// **'отпусти ползунок — порог применится'**
+  String get calibrationApplyHint;
+
+  /// Warns that silence may stop recording before calibration finishes
+  ///
+  /// In ru, this message translates to:
+  /// **'включён авто-стоп — для калибровки нажимай отмена'**
+  String get calibrationAutoStopHint;
 }
 
 class _AppLocalizationsDelegate

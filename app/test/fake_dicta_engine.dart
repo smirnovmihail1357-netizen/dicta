@@ -14,6 +14,7 @@ class FakeDictaEngine implements DictaEngine {
     this.fetchSettingsReply,
     this.stopReply,
     this.injectReply,
+    this.setReply,
   });
 
   /// Mutable snapshot: tests rewrite it between real poller ticks to script
@@ -32,6 +33,9 @@ class FakeDictaEngine implements DictaEngine {
   /// Scripted action replies (Task 2): default snapshots carry no text.
   DictaStatus? stopReply;
   DictaStatus? injectReply;
+
+  /// Scripted set reply (Task 5): defaults to a silent success.
+  DictaReply? setReply;
 
   /// Every set(key, value) call is recorded here in order.
   final List<({String key, String value})> setCalls = [];
@@ -84,7 +88,7 @@ class FakeDictaEngine implements DictaEngine {
   @override
   Future<DictaReply> set(String key, String value) async {
     setCalls.add((key: key, value: value));
-    return const DictaReply(ok: true);
+    return setReply ?? const DictaReply(ok: true);
   }
 
   @override

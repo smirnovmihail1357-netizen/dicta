@@ -110,5 +110,21 @@
   "dashInjectFailed": "ошибка вставки",
   "@dashInjectFailed": {
     "description": "Label above the daemon's verbatim inject error"
+  },
+  "calibrationTitle": "порог тишины",
+  "@calibrationTitle": {
+    "description": "Title of the live level histogram and calibration card"
+  },
+  "calibrationEmptyHint": "начните запись, чтобы увидеть уровень",
+  "@calibrationEmptyHint": {
+    "description": "Shown while the level history ring buffer is empty"
+  },
+  "calibrationApplyHint": "отпусти ползунок — порог применится",
+  "@calibrationApplyHint": {
+    "description": "Explains the one-command-per-gesture calibration contract"
+  },
+  "calibrationAutoStopHint": "включён авто-стоп — для калибровки нажимай отмена",
+  "@calibrationAutoStopHint": {
+    "description": "Warns that silence may stop recording before calibration finishes"
   }
 }

@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'daemon_engine.dart';
 import 'engine.dart';
+import 'settings.dart';
 
 final engineProvider = Provider<DictaEngine>((ref) {
   final engine = DaemonEngine(resolveSocketPath());
@@ -13,6 +14,13 @@ final engineProvider = Provider<DictaEngine>((ref) {
 
 final dictaStatusProvider =
     NotifierProvider<DictaStatusNotifier, DictaStatus>(DictaStatusNotifier.new);
+
+/// Settings are fetched on demand and refreshed explicitly (after set or a
+/// diagnostics recheck) - never polled. The only parser is SettingsReply.fromReply.
+final settingsSnapshotProvider = FutureProvider<SettingsReply>((ref) async {
+  final reply = await ref.read(engineProvider).fetchSettings();
+  return SettingsReply.fromReply(reply).settings;
+});
 
 /// Owns the 100 ms poll timer. Riverpod 3 has no legacy notifier/mounted API,
 /// so reentrancy is guarded by a plain bool and the timer by ref.onDispose.

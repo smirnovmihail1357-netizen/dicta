@@ -90,4 +90,17 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get dashInjectFailed => 'ошибка вставки';
+
+  @override
+  String get calibrationTitle => 'порог тишины';
+
+  @override
+  String get calibrationEmptyHint => 'начните запись, чтобы увидеть уровень';
+
+  @override
+  String get calibrationApplyHint => 'отпусти ползунок — порог применится';
+
+  @override
+  String get calibrationAutoStopHint =>
+      'включён авто-стоп — для калибровки нажимай отмена';
 }
