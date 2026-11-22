@@ -11,7 +11,7 @@ use std::sync::{Arc, Mutex};
 use std::thread;
 
 use anyhow::{Context, Result};
-use interprocess::os::windows::named_pipe::{pipe_mode, PipeListenerOptions};
+use interprocess::os::windows::named_pipe::{pipe_mode, PipeListenerOptions, PipeStream};
 use interprocess::os::windows::security_descriptor::SecurityDescriptor;
 use interprocess::TryClone;
 use widestring::U16CString;
@@ -32,6 +32,16 @@ pub fn resolve_pipe_name() -> String {
         .map(|v| v.to_string_lossy().into_owned())
         .filter(|s| !s.is_empty())
         .unwrap_or_else(|| dicta_core::config::DEFAULT_PIPE_NAME.to_string())
+}
+
+/// Паритет unix-пути (main.rs:161-171): если к пайпу уже можно подключиться,
+/// другой dictad уже слушает. Именованные пайпы multi-instance — без пробы
+/// клиенты попадали бы в произвольный инстанс с гонками состояния/watchdog.
+fn pipe_already_listening(pipe_name: &str) -> bool {
+    let Ok(path) = U16CString::from_str(pipe_name) else {
+        return false;
+    };
+    PipeStream::<pipe_mode::Bytes, pipe_mode::Bytes>::connect_by_path(path.as_ucstr()).is_ok()
 }
 
 /// Строка SDDL: SYSTEM + владелец-пользователь, больше никого.
@@ -96,6 +106,10 @@ pub fn serve(
     // Полное имя: interprocess НЕ добавляет `\\.\pipe\` сам (PITFALL 7).
     let path_wide = U16CString::from_str(pipe_name)
         .map_err(|e| anyhow::anyhow!("имя пайпа содержит NUL: {e}"))?;
+    // Второй инстанс не должен молча сосуществовать с первым (паритет unix).
+    if pipe_already_listening(pipe_name) {
+        anyhow::bail!("на {pipe_name} уже кто-то слушает — сначала останови старый dictad");
+    }
     let listener = PipeListenerOptions::new()
         .path(path_wide.as_ucstr())
         .security_descriptor(Some(descriptor))
@@ -152,5 +166,20 @@ mod tests {
         assert!(!sddl.contains("WD"), "{sddl}");
         assert!(!sddl.contains("S-1-15-2"), "{sddl}");
         assert!(!sddl.contains("AU"), "{sddl}");
+    }
+
+    #[test]
+    fn occupied_pipe_is_detected_before_bind() {
+        let name = format!(r"\\.\pipe\dicta-probe-{}", std::process::id());
+        // Пока никто не слушает — проба тиха.
+        assert!(!pipe_already_listening(&name));
+        let wide = U16CString::from_str(&name).expect("pipe name");
+        let listener = PipeListenerOptions::new()
+            .path(wide.as_ucstr())
+            .create_duplex::<pipe_mode::Bytes>()
+            .expect("test listener");
+        // Появился слушатель — проба обязана это увидеть: второй dictad упадёт.
+        assert!(pipe_already_listening(&name));
+        drop(listener);
     }
 }
