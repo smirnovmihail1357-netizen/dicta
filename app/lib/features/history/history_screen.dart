@@ -116,7 +116,10 @@ class HistoryScreen extends ConsumerWidget {
                                       ),
                                 ),
                                 const SizedBox(height: 8),
-                                SelectableText(entry.text),
+                                _HistoryEntryText(
+                                  text: entry.text,
+                                  id: entry.id,
+                                ),
                                 const SizedBox(height: 12),
                                 Row(
                                   children: [
@@ -252,6 +255,47 @@ class HistoryScreen extends ConsumerWidget {
                       },
                     ),
         ),
+      ],
+    );
+  }
+}
+
+/// Long dictations collapse to three lines; the full text stays selectable
+/// (HIST-03 copying works in both modes). A plain stateful toggle — no
+/// ExpansionTile (No Analog in this codebase).
+class _HistoryEntryText extends StatefulWidget {
+  const _HistoryEntryText({required this.text, required this.id});
+
+  final String text;
+  final int id;
+
+  @override
+  State<_HistoryEntryText> createState() => _HistoryEntryTextState();
+}
+
+class _HistoryEntryTextState extends State<_HistoryEntryText> {
+  bool _expanded = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
+    final long = widget.text.length > 160;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // SelectableText in BOTH modes so copying stays alive (HIST-03).
+        // It has no overflow parameter; maxLines clamps the collapsed view.
+        SelectableText(
+          widget.text,
+          maxLines: long && !_expanded ? 3 : null,
+        ),
+        if (long)
+          TextButton(
+            key: Key('histExpandButton-${widget.id}'),
+            onPressed: () => setState(() => _expanded = !_expanded),
+            child: Text(_expanded ? l10n.histCollapse : l10n.histExpand),
+          ),
       ],
     );
   }

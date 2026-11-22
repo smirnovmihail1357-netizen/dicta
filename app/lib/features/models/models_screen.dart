@@ -126,7 +126,16 @@ class ModelsScreen extends ConsumerWidget {
       final failure = await deleteModel(path);
       if (!context.mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(failure ?? l10n.modelDeleted)),
+        SnackBar(
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              if (failure != null) Text(l10n.errDeleteFailed),
+              Text(failure ?? l10n.modelDeleted),
+            ],
+          ),
+        ),
       );
       // No daemon reply carries the new list: a refetch is mandatory here.
       try {
@@ -201,7 +210,18 @@ class ModelsScreen extends ConsumerWidget {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Text(name),
+                            Text(
+                              name,
+                              style: isActive
+                                  ? Theme.of(context)
+                                      .textTheme
+                                      .titleMedium
+                                      ?.copyWith(
+                                          color: Theme.of(context)
+                                              .colorScheme
+                                              .primary)
+                                  : null,
+                            ),
                             if (isActive)
                               Text(
                                 l10n.modelActive,

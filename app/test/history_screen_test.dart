@@ -452,4 +452,40 @@ void main() {
 
     await tester.pumpWidget(const SizedBox.shrink());
   });
+
+  testWidgets('long entries collapse to 3 lines and expand on tap',
+      (tester) async {
+    final longText = 'длинная запись ' * 20; // > 160 characters
+    final fake = FakeDictaEngine(
+      const DictaStatus(connected: true, state: DaemonState.recording),
+      stopReply: DictaStatus(
+        connected: true,
+        state: DaemonState.idle,
+        text: longText,
+      ),
+    );
+    await tester.pumpWidget(buildFakeApp(fake, onCopy: (_) {}));
+    await tick(tester);
+    await captureTextViaStop(tester);
+    await goToHistory(tester);
+
+    final button = find.byKey(const Key('histExpandButton-1'));
+    expect(button, findsOneWidget);
+    expect(find.text('показать полностью'), findsOneWidget);
+    SelectableText body() =>
+        tester.widget<SelectableText>(find.byType(SelectableText).first);
+    expect(body().maxLines, 3);
+
+    await tester.tap(button);
+    await tester.pump();
+    expect(find.text('свернуть'), findsOneWidget);
+    expect(body().maxLines, isNull);
+
+    await tester.tap(button);
+    await tester.pump();
+    expect(find.text('показать полностью'), findsOneWidget);
+    expect(body().maxLines, 3);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
 }

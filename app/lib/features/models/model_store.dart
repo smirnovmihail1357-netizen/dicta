@@ -33,6 +33,8 @@ Future<String?> deleteModel(String path) async {
     await File(path).delete();
     return null;
   } on FileSystemException catch (error) {
-    return 'delete failed: ${error.message}';
+    // The OS detail is DATA; the localized headline is added by the caller
+    // (04-UI-REVIEW p.125). No dictation payload ever reaches this string.
+    return error.message;
   }
 }

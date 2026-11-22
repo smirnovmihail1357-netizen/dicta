@@ -40,6 +40,10 @@ class _HfBrowserState extends ConsumerState<HfBrowser> {
   /// state is always cleared in finally (success, HTTP error, or catch-all).
   bool _fetchInFlight = false;
 
+  /// Live VRAM readout during a drag: local pending value, committed to the
+  /// UI-only notifier once on release (IN-05, one gesture = one update).
+  double? _pendingVram;
+
   void _snack(String message) {
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
@@ -88,7 +92,7 @@ class _HfBrowserState extends ConsumerState<HfBrowser> {
       setState(() {
         _fetchError = error.statusCode == 401
             ? AppLocalizations.of(context)!.modelRepoClosed
-            : 'HTTP ${error.statusCode}';
+            : AppLocalizations.of(context)!.errHttp(error.statusCode.toString());
       });
     } catch (_) {
       // TimeoutException / SocketException / DNS at the 30 s transport seam
@@ -121,7 +125,7 @@ class _HfBrowserState extends ConsumerState<HfBrowser> {
       setState(() {
         _fetchError = error.statusCode == 401
             ? AppLocalizations.of(context)!.modelRepoClosed
-            : 'HTTP ${error.statusCode}';
+            : AppLocalizations.of(context)!.errHttp(error.statusCode.toString());
       });
     } catch (_) {
       // Same honest catch-all as _search: a timeout/socket error while opening
@@ -143,9 +147,9 @@ class _HfBrowserState extends ConsumerState<HfBrowser> {
 
   String _sizeLabel(int bytes, AppLocalizations l10n) {
     if (bytes >= 1000000000) {
-      return '${(bytes / 1000000000).toStringAsFixed(1)} GB';
+      return l10n.modelSizeGb((bytes / 1000000000).toStringAsFixed(1));
     }
-    return '${(bytes / 1000000).toStringAsFixed(0)} MB';
+    return l10n.modelSizeMb((bytes / 1000000).toStringAsFixed(0));
   }
 
   String _noteFor(int index, AppLocalizations l10n) => switch (index) {
@@ -163,7 +167,8 @@ class _HfBrowserState extends ConsumerState<HfBrowser> {
     final colors = Theme.of(context).colorScheme;
     final settings = ref.watch(settingsSnapshotProvider).value;
     final installed = settings?.models ?? const <String>[];
-    final vram = ref.watch(vramLimitGbProvider);
+    final storedVram = ref.watch(vramLimitGbProvider);
+    final vram = _pendingVram ?? storedVram;
     final download = ref.watch(downloadManagerProvider);
     final busy = download is DownloadActive;
 
@@ -229,11 +234,13 @@ class _HfBrowserState extends ConsumerState<HfBrowser> {
                     value: vram,
                     label: vram.toInt().toString(),
                     // UI-only: never an engine.set (there is no daemon key).
-                    // Slider requires onChanged; keep it a no-op so the notifier
-                    // is written once per gesture, on release (IN-05).
-                    onChanged: (_) {},
-                    onChangeEnd: (value) =>
-                        ref.read(vramLimitGbProvider.notifier).set(value),
+                    // Live readout during the drag, one notifier write on release.
+                    onChanged: (value) =>
+                        setState(() => _pendingVram = value),
+                    onChangeEnd: (value) {
+                      ref.read(vramLimitGbProvider.notifier).set(value);
+                      setState(() => _pendingVram = null);
+                    },
                   ),
                 ),
                 Text('${vram.toInt()}', style: AppTextStyles.mutedOf(context)),
@@ -287,7 +294,7 @@ class _HfBrowserState extends ConsumerState<HfBrowser> {
         }),
         const SizedBox(height: 20),
         Text(
-          l10n.modelSearchHint,
+          l10n.modelSearchTitle,
           style: Theme.of(context).textTheme.titleMedium,
         ),
         Padding(
@@ -354,10 +361,14 @@ class _HfBrowserState extends ConsumerState<HfBrowser> {
         ),
         if (_fetchError != null) ...[
           const SizedBox(height: 8),
-          Text(
-            _fetchError!,
-            key: const Key('modelFetchError'),
-            style: TextStyle(color: colors.error),
+          // AT must hear a failed search/tree fetch, not just see red text.
+          Semantics(
+            liveRegion: true,
+            child: Text(
+              _fetchError!,
+              key: const Key('modelFetchError'),
+              style: TextStyle(color: colors.error),
+            ),
           ),
         ],
         if (_repos.isNotEmpty) ...[
@@ -505,12 +516,17 @@ class _HfBrowserState extends ConsumerState<HfBrowser> {
                 else
                   const LinearProgressIndicator(minHeight: 8),
                 const SizedBox(height: 4),
-                Text(
-                  l10n.modelDownloadingMb(
-                    (download.received / 1000000).toStringAsFixed(0),
-                  ),
-                  style: AppTextStyles.mutedOf(context).copyWith(
-                    fontFeatures: const [FontFeature.tabularFigures()],
+                // The surrounding panel is a liveRegion; the per-chunk MB
+                // counter must NOT be announced each tick (04-UI-REVIEW p.90).
+                Semantics(
+                  excludeSemantics: true,
+                  child: Text(
+                    l10n.modelDownloadingMb(
+                      (download.received / 1000000).toStringAsFixed(0),
+                    ),
+                    style: AppTextStyles.mutedOf(context).copyWith(
+                      fontFeatures: const [FontFeature.tabularFigures()],
+                    ),
                   ),
                 ),
                 Align(

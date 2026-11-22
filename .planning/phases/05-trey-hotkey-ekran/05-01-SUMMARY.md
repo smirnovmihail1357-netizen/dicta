@@ -80,9 +80,38 @@ through the menu; no process left behind.
 - **Icon colour on recording:** not switched in this tracer slice — state-to-icon
   wiring is Task 3 (planned expansion). Recorded as expected, not a defect.
 
+## UI legacy closure (Task 5)
+
+Svereno s zhivym kodom pered pravkoy. Uzhe zakryto 04-REVIEW-FIX i NE dublirovanos:
+MergeSemantics na 10 slayderakh / 3 segmentakh / VRAM-stroke (settings_screen.dart,
+hf_browser.dart), catch-all ne-HTTP v _search/_openTree, in-flight disabled+spinner
+na seteulykh knopkakh, top-3 №2 (otkaz ENGINE pri vybore modeli pokazyvaetsya
+snackbarom).
+
+Realizovano seychas (ostatok):
+- sobstvennye oshibki lokalizovany: `errHttp` (2 call-sayta), `errDeleteFailed`
+  + verbatim OS-detail vtoroy strokoy; ediny snackbar-skeleton «zagolovok + telo».
+- zagolovok poiska — `modelSearchTitle` (suschestvitelnoe); `modelSearchHint`
+  ostalsya tolko hintText. Aktivnaya model — titleMedium + primary.
+- fetch-oshibka v `Semantics(liveRegion: true)`; MB-schetchik progressa —
+  `Semantics(excludeSemantics: true)` vnutri liveRegion-paneli.
+- dlinnye zapisi istorii (>160 simv.) svorachivayutsya do 3 strok
+  (`histExpandButton-<id>` / `histCollapse`); `SelectableText` sohranyon v obokh
+  rezhimakh (HIST-03).
+- GB/MB literaly → `modelSizeGb` / `modelSizeMb`; mezhgruppepovoy ritm 20.
+- VRAM-readout zhivoy vo vremya drag cherez local pending (odin set na zhest).
+
 ## Deviations from Plan
 
-None so far.
+**1. [Rule 1 - Bug] HK- kartochka: async loading/error gated by `hasError`**
+- Found during: Task 4
+- Issue: Riverpod 3 keeps the previous error attached to `AsyncLoading`, so
+  `when(error:)` never fired for an unreadable config and the card stayed blank.
+- Fix: render `_ConfigError` when `config.hasError`; nested-future disposal race
+  removed by reading the daemon settings reply directly from `engineProvider`
+  (same snapshot source, primary config_path / fallback resolver semantics kept).
+- Files: `app/lib/features/settings/hotkey_card.dart`
+- Verification: `hotkey_card_test.dart` — unreadable path shows hkUnavailable + retry.
 
 ## UAT list (for /gsd-verify-work 05, filled at final gate)
 

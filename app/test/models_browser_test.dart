@@ -450,7 +450,7 @@ void main() {
       await tester.pump();
 
       expect(
-        find.text(code == 401 ? 'репозиторий закрыт или не найден' : 'HTTP 404'),
+        find.text(code == 401 ? 'репозиторий закрыт или не найден' : 'ошибка 404'),
         findsOneWidget,
       );
       await tester.pumpWidget(const SizedBox.shrink());

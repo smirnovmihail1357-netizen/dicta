@@ -161,6 +161,43 @@ void main() {
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
+  testWidgets('delete failure shows localized headline plus honest detail',
+      (tester) async {
+    final dir = Directory.systemTemp.createTempSync('dicta-models-');
+    final activePath = '${dir.path}/ggml-active.bin';
+    final missingPath = '${dir.path}/ggml-gone.bin';
+    File(activePath).writeAsStringSync('active');
+    // missingPath intentionally does not exist -> FileSystemException
+
+    final base = readFixture();
+    final settings = Map<String, dynamic>.from(base['settings'] as Map);
+    settings['model'] = activePath;
+    settings['models'] = [activePath, missingPath];
+    final fake = FakeDictaEngine(
+      const DictaStatus(connected: true, state: DaemonState.idle),
+      fetchSettingsReply: <String, dynamic>{...base, 'settings': settings},
+    );
+
+    await tester.pumpWidget(buildFakeApp(fake));
+    await tick(tester);
+    await openModels(tester);
+
+    await tester.tap(find.byKey(const Key('modelDeleteButton-gone')));
+    await tester.pump();
+    await tester.tap(
+      find.descendant(of: find.byType(AlertDialog), matching: find.text('удалить')),
+    );
+    await tester.runAsync(
+      () => Future<void>.delayed(const Duration(milliseconds: 10)),
+    );
+    await tester.pump();
+
+    expect(find.text('не удалось удалить модель'), findsOneWidget);
+
+    dir.deleteSync(recursive: true);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
   testWidgets('empty model list states the honest empty state', (tester) async {
     final base = readFixture();
     final settings = Map<String, dynamic>.from(base['settings'] as Map);

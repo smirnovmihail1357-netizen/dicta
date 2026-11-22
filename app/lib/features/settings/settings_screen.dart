@@ -153,7 +153,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   Widget _group(String title, List<Widget> children) => Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          const SizedBox(height: 12),
+          // Inter-group rhythm 20 (04-UI-REVIEW p.126); inside the group 12/8.
+          const SizedBox(height: 20),
           Text(title, style: Theme.of(context).textTheme.titleMedium),
           const SizedBox(height: 8),
           ...children,
